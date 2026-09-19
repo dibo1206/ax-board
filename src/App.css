@@ -1,0 +1,144 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --border: #dfe3e8;
+  --text: #1f2328;
+  --muted: #5b6672;
+  --accent: #2f6feb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15181d;
+    --surface: #1e2229;
+    --border: #2e343d;
+    --text: #e8eaed;
+    --muted: #a3acb8;
+    --accent: #6aa0ff;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Malgun Gothic', sans-serif;
+}
+
+.app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 16px 64px;
+}
+
+header h1 {
+  margin: 0 0 8px;
+  font-size: 1.8rem;
+}
+
+header p {
+  margin: 0 0 24px;
+  color: var(--muted);
+}
+
+.card-form {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.card-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.card-form input,
+.card-form textarea {
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  resize: vertical;
+}
+
+.card-form button {
+  justify-self: start;
+  padding: 10px 20px;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.card-list {
+  margin-top: 32px;
+}
+
+.card-list h2 {
+  font-size: 1.1rem;
+  color: var(--muted);
+}
+
+.card-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.card {
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.card-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.card-head button {
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.task {
+  margin: 8px 0 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.idea {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.empty {
+  color: var(--muted);
+}
