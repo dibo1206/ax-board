@@ -18,6 +18,8 @@ This is a client-only React + Vite single-page app with no backend and no router
 
 - **State lives in `src/App.jsx`**: a single `ideas` array in `useState`, initialized synchronously from `localStorage` (key `ax-board-ideas`) via `loadIdeas()`, and persisted back to `localStorage` on every change via a `useEffect`. `loadIdeas()` swallows JSON parse errors and falls back to `[]`, so corrupted storage never crashes the app.
 - **Idea shape**: `{ id, title, task, idea, createdAt }`, where `id` is `crypto.randomUUID()` and `createdAt` is an ISO string set at creation time. `task` and `idea` are optional; only `title` is required.
+- **Search**: `App.jsx` also holds a `query` string in state and derives `filteredIdeas` by a case-insensitive substring match across `title`/`task`/`idea` (client-side only, no debounce needed at this scale). The full `ideas` array is still what gets persisted; filtering never touches storage.
+- **Sort**: `App.jsx` holds a `sortOrder` string (`'newest' | 'oldest' | 'title'`) and derives `sortedIdeas` by sorting a copy of `filteredIdeas` (search and sort compose — sort runs on the already-filtered list). `title` order uses `localeCompare(..., 'ko')`; the others compare `createdAt`.
 - **Components** (`src/components/`):
   - `IdeaForm.jsx` — controlled inputs for title/task/idea, validates and trims `title` before calling the `onAdd` prop, then resets its own fields. Has no knowledge of storage or the ideas array.
   - `IdeaCard.jsx` — pure display of one idea plus a delete button that calls the `onDelete(id)` prop. Formats `createdAt` with `toLocaleString('ko-KR', ...)`.

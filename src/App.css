@@ -75,6 +75,38 @@
   background: var(--accent-hover);
 }
 
+.toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.search-input,
+.sort-select {
+  font: inherit;
+  color: inherit;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.sort-select {
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.search-input:focus,
+.sort-select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .idea-list {
   display: flex;
   flex-direction: column;
