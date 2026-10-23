@@ -57,3 +57,27 @@ h1 { margin: 0 0 8px; font-size: 1.6rem; }
 .button { display: inline-block; padding: 10px 16px; border-radius: 10px; background: var(--accent); color: #fff; text-decoration: none; font-weight: 700; }
 .button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); font-weight: 400; }
 .link { padding: 0; font: inherit; color: var(--accent); background: none; border: none; cursor: pointer; }
+
+/* ---------- 2단계: 관리자 화면 ---------- */
+.success { color: var(--accent); font-weight: 700; }
+.admin-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.admin-head h2 { margin: 0; }
+.table { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 0.9rem; }
+.table th, .table td { padding: 8px 6px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.table tr.dim { opacity: 0.6; }
+.row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.row-actions button { padding: 4px 10px; font: inherit; font-size: 0.85rem; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.form { display: flex; flex-direction: column; gap: 10px; }
+.form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; }
+.form input, .form select { padding: 8px 10px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+.form .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.form label.check { flex-direction: row; align-items: center; gap: 6px; }
+.preview { padding: 10px 12px; border-radius: 8px; background: var(--bg); border: 1px dashed var(--border); font-size: 0.85rem; }
+.preview p { margin: 4px 0; }
+.tags { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.tag-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 4px 0; }
+.thumb { width: 100%; max-width: 160px; border-radius: 8px; object-fit: cover; aspect-ratio: 1; }
+.hero { width: 100%; max-height: 320px; object-fit: cover; border-radius: 12px; }
+button.button { border: none; cursor: pointer; font: inherit; font-weight: 700; }
+button.button.ghost { border: 1px solid var(--border); font-weight: 400; }
+button:disabled { opacity: 0.6; cursor: wait; }

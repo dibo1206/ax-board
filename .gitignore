@@ -8,3 +8,6 @@ dist/
 .env.local
 *.key
 *.pem
+
+# 관리자가 올린 상품 사진 (운영 데이터)
+uploads/

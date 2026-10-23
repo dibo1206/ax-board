@@ -1,7 +1,10 @@
 // 농가 판매 자사몰 백엔드. 화면($PORT) → 이 서버($PORT + 100) → PostgreSQL
-// 지금은 0~1단계: 데이터 읽기 API만 있다. 관리자 등록·문의·AI 상담은 다음 단계에서 붙인다.
+// 1단계: 데이터 읽기 API / 2단계: 관리자 로그인·상품 등록·수정·사진. 문의·AI 상담은 다음 단계에서 붙인다.
 import 'dotenv/config'
+import { fileURLToPath } from 'node:url'
 import express from 'express'
+import { adminRouter, UPLOAD_DIR } from './admin.js'
+import { currentAdmin, login, logout } from './auth.js'
 import { initDb, pool } from './db.js'
 
 if (!process.env.PORT) {
@@ -60,7 +63,19 @@ app.get('/api/tags', async (req, res) => {
   res.json(rows)
 })
 
+// ---------- 관리자 (2단계) ----------
+app.post('/api/admin/login', login)
+app.post('/api/admin/logout', logout)
+app.get('/api/admin/me', (req, res) => {
+  const admin = currentAdmin(req)
+  if (!admin) return res.status(401).json({ error: '관리자 로그인이 필요해요.' })
+  res.json({ loginId: admin.loginId })
+})
+app.use('/api/admin', adminRouter)
+app.use('/uploads', express.static(fileURLToPath(UPLOAD_DIR)))
+
 app.use((error, req, res, _next) => {
+  if (error.type === 'entity.too.large') return res.status(413).json({ error: '파일이 너무 커요. 사진은 2MB 이하만 올릴 수 있어요.' })
   console.error(`[server] ${req.method} ${req.path} · ${error.message}`)
   res.status(500).json({ error: '서버에서 문제가 생겼어요. 잠시 후 다시 시도해 주세요.' })
 })

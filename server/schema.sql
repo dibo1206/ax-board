@@ -63,6 +63,9 @@ CREATE TABLE IF NOT EXISTS products (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 2단계: 상품 사진 경로
+ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
+
 -- 상품 Q&A
 CREATE TABLE IF NOT EXISTS questions (
   id SERIAL PRIMARY KEY,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import './App.css'
+import Admin from './admin/Admin.jsx'
 
 // 1단계 데이터 확인용 화면. 실제 디자인은 시안이 나오면 3단계에서 새로 만든다.
 async function api(path) {
@@ -28,6 +29,7 @@ function ProductDetail({ code, onBack }) {
   return (
     <article className="detail">
       <button type="button" className="link" onClick={onBack}>← 목록</button>
+      {product.image_url && <img className="hero" src={product.image_url} alt={product.name} />}
       <h2>{product.name}</h2>
       <p className="price">{won(product.price)} <span className="muted">/ {product.unit}</span></p>
       {product.sold_out && <p className="badge soldout">품절</p>}
@@ -92,6 +94,21 @@ function ProductDetail({ code, onBack }) {
 }
 
 function App() {
+  if (window.location.pathname.startsWith('/admin')) {
+    return (
+      <div className="app">
+        <header>
+          <h1>농가 판매 자사몰 · 관리자</h1>
+          <p className="notice">개발 중 · 2단계 관리자 화면입니다. <a href="/">소비자 화면으로</a></p>
+        </header>
+        <Admin />
+      </div>
+    )
+  }
+  return <Storefront />
+}
+
+function Storefront() {
   const [products, setProducts] = useState([])
   const [category, setCategory] = useState('전체')
   const [selected, setSelected] = useState(null)
@@ -106,7 +123,7 @@ function App() {
     <div className="app">
       <header>
         <h1>농가 판매 자사몰</h1>
-        <p className="notice">개발 중 · 1단계 데이터 확인 화면입니다. 모든 데이터는 [예시]이고, 디자인은 시안이 나오면 바꿉니다.</p>
+        <p className="notice">개발 중 · 데이터 확인 화면입니다. 모든 데이터는 [예시]이고, 디자인은 시안이 나오면 바꿉니다. <a href="/admin">관리자</a></p>
       </header>
 
       {error && <p className="error">{error}</p>}
@@ -124,6 +141,7 @@ function App() {
             {products.map((p) => (
               <li key={p.product_code}>
                 <button type="button" className={`card${p.sold_out ? ' dim' : ''}`} onClick={() => setSelected(p.product_code)}>
+                  {p.image_url && <img className="thumb" src={p.image_url} alt="" />}
                   <span className="cat">{p.category}</span>
                   <strong>{p.name}</strong>
                   <span>{p.sold_out ? '품절' : won(p.price)}</span>
