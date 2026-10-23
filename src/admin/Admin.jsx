@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from './api.js'
+import { Inbox } from './Inbox.jsx'
 import { ProductForm } from './ProductForm.jsx'
 
-// 관리자 화면: 로그인 → 상품 목록 → 등록·수정. 모든 요청은 /api/admin (로그인 쿠키 필요)
+// 관리자 화면: 로그인 → [상품 관리 | 문의함]. 모든 요청은 /api/admin (로그인 쿠키 필요)
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
 
 function Login({ onLogin }) {
@@ -38,6 +39,8 @@ function Admin() {
   const [editing, setEditing] = useState(null) // null: 목록, 'new': 새 상품, 객체: 수정
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [tab, setTab] = useState('products')
+  const [counts, setCounts] = useState(null)
 
   useEffect(() => {
     adminApi('/me').then(setMe).catch(() => setMe(null))
@@ -45,8 +48,8 @@ function Admin() {
 
   useEffect(() => {
     if (!me) return
-    Promise.all([adminApi('/products'), adminApi('/options')])
-      .then(([list, opts]) => { setProducts(list); setOptions(opts) })
+    Promise.all([adminApi('/products'), adminApi('/options'), adminApi('/inquiries/summary')])
+      .then(([list, opts, summary]) => { setProducts(list); setOptions(opts); setCounts(summary) })
       .catch((e) => (e.status === 401 ? setMe(null) : setError(e.message)))
   }, [me])
 
@@ -73,17 +76,26 @@ function Admin() {
   if (me === undefined) return <p className="muted">확인 중…</p>
   if (!me) return <Login onLogin={setMe} />
 
+  const waiting = counts ? counts.unanswered + counts.new_b2b : 0
+
   return (
     <section>
       <div className="admin-head">
-        <h2>상품 관리</h2>
+        <nav className="tabs">
+          <button type="button" className={tab === 'products' ? 'on' : ''} onClick={() => setTab('products')}>상품 관리</button>
+          <button type="button" className={tab === 'inbox' ? 'on' : ''} onClick={() => { setTab('inbox'); setEditing(null); setMessage('') }}>
+            문의함{waiting > 0 && ` (${waiting})`}
+          </button>
+        </nav>
         <span className="muted">{me.loginId} 로그인 중</span>
         <button type="button" className="link" onClick={logout}>로그아웃</button>
       </div>
-      {message && <p className="success">{message}</p>}
+      {tab === 'products' && message && <p className="success">{message}</p>}
       {error && <p className="error">{error}</p>}
 
-      {editing && options ? (
+      {tab === 'inbox' ? (
+        <Inbox onCount={setCounts} />
+      ) : editing && options ? (
         <ProductForm
           product={editing === 'new' ? null : editing}
           options={options}

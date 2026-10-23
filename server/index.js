@@ -1,11 +1,12 @@
 // 농가 판매 자사몰 백엔드. 화면($PORT) → 이 서버($PORT + 100) → PostgreSQL
-// 1단계: 데이터 읽기 API / 2단계: 관리자 로그인·상품 등록·수정·사진. 문의·AI 상담은 다음 단계에서 붙인다.
+// 1단계: 데이터 읽기 / 2단계: 관리자 상품 관리 / 4단계: 상품 Q&A·기업 구매 문의. AI 상담은 5단계에서 붙인다.
 import 'dotenv/config'
 import { fileURLToPath } from 'node:url'
 import express from 'express'
 import { adminRouter, UPLOAD_DIR } from './admin.js'
 import { currentAdmin, login, logout } from './auth.js'
 import { initDb, pool } from './db.js'
+import { adminInquiryRouter, maskName, publicInquiryRouter } from './inquiry.js'
 
 if (!process.env.PORT) {
   console.error('[server] PORT 환경변수가 없어요. 실습서버 내 계정 터미널에서 실행해 주세요. (echo $PORT 로 확인)')
@@ -13,6 +14,8 @@ if (!process.env.PORT) {
 }
 const PORT = Number(process.env.PORT) + 100
 const app = express()
+// 손님 IP(글 남기기 횟수 제한용)는 앞단 프록시가 붙인 값만 믿는다. 개발: Vite 1단, 배포 시 프록시 수에 맞게 TRUST_PROXY_HOPS
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 1))
 app.use(express.json({ limit: '100kb' }))
 
 // 상품 + 품목·농가 정보를 함께 읽는다. 품절은 재고 0으로 계산한다.
@@ -51,11 +54,16 @@ app.get('/api/products/:code', async (req, res) => {
     pool.query('SELECT * FROM items WHERE item_code = $1', [product.item_code]),
     pool.query('SELECT * FROM sellers WHERE seller_code = $1', [product.seller_code]),
     pool.query(
-      'SELECT id, author, question, answer, created_at FROM questions WHERE product_code = $1 ORDER BY created_at DESC',
+      'SELECT id, author, question, answer, created_at, answered_at FROM questions WHERE product_code = $1 AND NOT hidden ORDER BY created_at DESC',
       [product.product_code],
     ),
   ])
-  res.json({ ...product, item: item.rows[0], seller: seller.rows[0], questions: questions.rows })
+  res.json({
+    ...product,
+    item: item.rows[0],
+    seller: seller.rows[0],
+    questions: questions.rows.map((q) => ({ ...q, author: maskName(q.author) })),
+  })
 })
 
 app.get('/api/tags', async (req, res) => {
@@ -71,7 +79,9 @@ app.get('/api/admin/me', (req, res) => {
   if (!admin) return res.status(401).json({ error: '관리자 로그인이 필요해요.' })
   res.json({ loginId: admin.loginId })
 })
+app.use('/api/admin/inquiries', adminInquiryRouter)
 app.use('/api/admin', adminRouter)
+app.use('/api', publicInquiryRouter)
 app.use('/uploads', express.static(fileURLToPath(UPLOAD_DIR)))
 
 app.use((error, req, res, _next) => {

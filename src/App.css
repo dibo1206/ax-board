@@ -81,3 +81,11 @@ h1 { margin: 0 0 8px; font-size: 1.6rem; }
 button.button { border: none; cursor: pointer; font: inherit; font-weight: 700; }
 button.button.ghost { border: 1px solid var(--border); font-weight: 400; }
 button:disabled { opacity: 0.6; cursor: wait; }
+
+/* ---------- 4단계: 문의 ---------- */
+.form textarea { padding: 8px 10px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; resize: vertical; }
+.form label.check { flex-wrap: wrap; }
+.inbox { list-style: none; margin: 0; padding: 0; }
+.box.dim { opacity: 0.6; }
+.admin-head .tabs { margin-bottom: 0; }
+.table select { padding: 4px 6px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }

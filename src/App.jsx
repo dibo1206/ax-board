@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import Admin from './admin/Admin.jsx'
+import { B2bForm, QuestionForm } from './Inquiry.jsx'
 
 // 1단계 데이터 확인용 화면. 실제 디자인은 시안이 나오면 3단계에서 새로 만든다.
 async function api(path) {
@@ -16,6 +17,9 @@ const CATEGORIES = ['전체', '과일', '채소', '가공품']
 function ProductDetail({ code, onBack }) {
   const [product, setProduct] = useState(null)
   const [error, setError] = useState('')
+  const [showB2b, setShowB2b] = useState(false)
+  const [sentMessage, setSentMessage] = useState('')
+  const qnaRef = useRef(null)
 
   useEffect(() => {
     api(`/products/${code}`).then(setProduct).catch((e) => setError(e.message))
@@ -73,17 +77,29 @@ function ProductDetail({ code, onBack }) {
         {product.external_url ? (
           <a className="button" href={product.external_url} target="_blank" rel="noreferrer">구매하기</a>
         ) : (
-          <span className="button ghost">문의하기 (판매 링크 없음)</span>
+          <button type="button" className="button" onClick={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })}>문의하기</button>
         )}
-        {product.b2b_available && <span className="button ghost">기업 구매 문의 (4단계)</span>}
+        {product.b2b_available && (
+          <button type="button" className="button ghost" onClick={() => setShowB2b(true)}>기업 구매 문의</button>
+        )}
       </div>
+      {!product.external_url && <p className="muted">온라인 판매 링크가 아직 없는 상품이에요. 아래에 질문을 남기시면 구매 방법을 안내해 드려요.</p>}
+      {showB2b && <B2bForm product={product} onClose={() => setShowB2b(false)} />}
 
-      <section className="box">
+      <section className="box" ref={qnaRef}>
         <h3>Q&A {product.questions.length}개</h3>
+        <QuestionForm
+          productCode={product.product_code}
+          onSent={(q) => {
+            setProduct((prev) => ({ ...prev, questions: [q, ...prev.questions] }))
+            setSentMessage('질문이 올라갔어요. 답변이 달리면 여기에 보여요.')
+          }}
+        />
+        {sentMessage && <p className="success">{sentMessage}</p>}
         <ul>
           {product.questions.map((q) => (
             <li key={q.id}>
-              <strong>Q.</strong> {q.question}<br />
+              <strong>Q.</strong> {q.question} <span className="muted">· {q.author}</span><br />
               {q.answer ? <><strong>A.</strong> {q.answer}</> : <span className="muted">답변을 기다리는 중</span>}
             </li>
           ))}
@@ -99,7 +115,7 @@ function App() {
       <div className="app">
         <header>
           <h1>농가 판매 자사몰 · 관리자</h1>
-          <p className="notice">개발 중 · 2단계 관리자 화면입니다. <a href="/">소비자 화면으로</a></p>
+          <p className="notice">개발 중 · 관리자 화면입니다. <a href="/">소비자 화면으로</a></p>
         </header>
         <Admin />
       </div>

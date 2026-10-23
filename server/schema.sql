@@ -91,6 +91,11 @@ CREATE TABLE IF NOT EXISTS b2b_inquiries (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 4단계: 질문 연락처(관리자만 봄)·숨김, 기업 문의 개인정보 동의 시각
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS contact TEXT;
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS hidden BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE b2b_inquiries ADD COLUMN IF NOT EXISTS privacy_agreed_at TIMESTAMPTZ;
+
 -- AI 상담 기록 (못 답한 질문을 모아 FAQ를 보강하는 데 쓴다)
 CREATE TABLE IF NOT EXISTS chat_logs (
   id SERIAL PRIMARY KEY,

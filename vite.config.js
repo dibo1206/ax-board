@@ -10,7 +10,7 @@ export default defineConfig({
     port,
     strictPort: true,
     proxy: {
-      '/api': { target: `http://127.0.0.1:${port + 100}`, changeOrigin: true },
+      '/api': { target: `http://127.0.0.1:${port + 100}`, changeOrigin: true, xfwd: true },
       '/uploads': { target: `http://127.0.0.1:${port + 100}`, changeOrigin: true },
     },
   },
