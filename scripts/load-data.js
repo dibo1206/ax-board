@@ -5,6 +5,7 @@
 import 'dotenv/config'
 import { readFile, writeFile } from 'node:fs/promises'
 import { initDb, pool } from '../server/db.js'
+import { parseCsv } from './csv.js'
 
 const DATA = new URL('../data/', import.meta.url)
 const REPORT = new URL('../docs/data_report.md', import.meta.url)
@@ -32,30 +33,6 @@ const COLUMNS = {
 }
 // 효능을 주장하는 표현은 쓰지 않는다 (식품 표시·광고 규정)
 const FORBIDDEN = ['면역력', '다이어트', '치료', '예방', '해독', '항암', '혈압', '혈당']
-
-// ---------- CSV 읽기 (따옴표 안의 쉼표·줄바꿈 처리) ----------
-function parseCsv(text) {
-  const rows = []
-  let row = []
-  let cell = ''
-  let quoted = false
-  const src = text.replace(/^﻿/, '')
-  for (let i = 0; i < src.length; i += 1) {
-    const ch = src[i]
-    if (quoted) {
-      if (ch === '"' && src[i + 1] === '"') { cell += '"'; i += 1 }
-      else if (ch === '"') quoted = false
-      else cell += ch
-    } else if (ch === '"') quoted = true
-    else if (ch === ',') { row.push(cell); cell = '' }
-    else if (ch === '\n' || ch === '\r') {
-      if (ch === '\r' && src[i + 1] === '\n') i += 1
-      row.push(cell); rows.push(row); row = []; cell = ''
-    } else cell += ch
-  }
-  if (cell || row.length) { row.push(cell); rows.push(row) }
-  return rows.filter((r) => r.some((c) => c.trim() !== ''))
-}
 
 async function readSheet(file, issues) {
   const text = await readFile(new URL(file, DATA), 'utf8')

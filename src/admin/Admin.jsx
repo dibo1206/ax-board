@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from './api.js'
+import { ChatLogs } from './ChatLogs.jsx'
 import { Inbox } from './Inbox.jsx'
 import { ProductForm } from './ProductForm.jsx'
 
-// 관리자 화면: 로그인 → [상품 관리 | 문의함]. 모든 요청은 /api/admin (로그인 쿠키 필요)
+// 관리자 화면: 로그인 → [상품 관리 | 문의함 | 상담 기록]. 모든 요청은 /api/admin (로그인 쿠키 필요)
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
 
 function Login({ onLogin }) {
@@ -86,6 +87,7 @@ function Admin() {
           <button type="button" className={tab === 'inbox' ? 'on' : ''} onClick={() => { setTab('inbox'); setEditing(null); setMessage('') }}>
             문의함{waiting > 0 && ` (${waiting})`}
           </button>
+          <button type="button" className={tab === 'chat' ? 'on' : ''} onClick={() => { setTab('chat'); setEditing(null); setMessage('') }}>상담 기록</button>
         </nav>
         <span className="muted">{me.loginId} 로그인 중</span>
         <button type="button" className="link" onClick={logout}>로그아웃</button>
@@ -95,6 +97,8 @@ function Admin() {
 
       {tab === 'inbox' ? (
         <Inbox onCount={setCounts} />
+      ) : tab === 'chat' ? (
+        <ChatLogs />
       ) : editing && options ? (
         <ProductForm
           product={editing === 'new' ? null : editing}

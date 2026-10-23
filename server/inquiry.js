@@ -3,28 +3,15 @@
 import express from 'express'
 import { requireAdmin } from './auth.js'
 import { pool } from './db.js'
+import { createLimiter } from './limit.js'
 import { FORBIDDEN } from './validate.js'
 
 const text = (v) => (typeof v === 'string' ? v.trim() : '')
 const isPhone = (v) => /^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(v)
 const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
 
-// 같은 곳(IP)에서 10분에 5번까지만 글을 남길 수 있다 (서버 메모리 기준)
-const LIMIT = 5
-const WINDOW_MS = 10 * 60_000
-const recent = new Map()
-function tooMany(req) {
-  const key = req.ip
-  const now = Date.now()
-  const times = (recent.get(key) ?? []).filter((t) => now - t < WINDOW_MS)
-  if (times.length >= LIMIT) return true
-  times.push(now)
-  recent.set(key, times)
-  if (recent.size > 5000) {
-    for (const [k, v] of recent) if (now - v[v.length - 1] >= WINDOW_MS) recent.delete(k)
-  }
-  return false
-}
+// 같은 곳(IP)에서 10분에 5번까지만 글을 남길 수 있다
+const tooMany = createLimiter({ limit: 5, windowMs: 10 * 60_000 })
 
 // 공개 화면에는 이름 첫 글자만 보여 준다: 김고객 → 김**, [예시] 김고객 → [예시] 김**
 export function maskName(name) {

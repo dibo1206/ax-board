@@ -89,3 +89,20 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .box.dim { opacity: 0.6; }
 .admin-head .tabs { margin-bottom: 0; }
 .table select { padding: 4px 6px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+
+/* ---------- 5단계: AI 상담 ---------- */
+.chat-open { position: fixed; right: 16px; bottom: 16px; padding: 12px 18px; border: none; border-radius: 999px; background: var(--accent); color: #fff; font: inherit; font-weight: 700; box-shadow: 0 4px 14px rgb(0 0 0 / 0.2); cursor: pointer; }
+.chat { position: fixed; right: 16px; bottom: 16px; width: min(380px, calc(100vw - 32px)); height: min(560px, calc(100vh - 32px)); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 8px 28px rgb(0 0 0 / 0.25); overflow: hidden; }
+.chat header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.chat-log { flex: 1; list-style: none; margin: 0; padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.bubble { max-width: 88%; padding: 8px 12px; border-radius: 12px; background: var(--bg); font-size: 0.92rem; }
+.bubble p { margin: 0; white-space: pre-wrap; }
+.bubble.user { align-self: flex-end; background: var(--accent); color: #fff; }
+.bubble.failed { border: 1px solid #c62828; }
+.bubble .button { margin-top: 6px; padding: 6px 10px; font-size: 0.85rem; }
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; font-size: 0.8rem; }
+.chips button { padding: 3px 8px; font: inherit; color: var(--accent); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; }
+.chips.starters { padding: 0 12px 8px; }
+.chat form { display: flex; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--border); }
+.chat form input { flex: 1; min-width: 0; padding: 8px 10px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+.chat-note { margin: 0; padding: 0 12px 8px; font-size: 0.75rem; }

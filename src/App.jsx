@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import Admin from './admin/Admin.jsx'
+import { Chat } from './Chat.jsx'
 import { B2bForm, QuestionForm } from './Inquiry.jsx'
 
 // 1단계 데이터 확인용 화면. 실제 디자인은 시안이 나오면 3단계에서 새로 만든다.
@@ -14,16 +15,21 @@ async function api(path) {
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
 const CATEGORIES = ['전체', '과일', '채소', '가공품']
 
-function ProductDetail({ code, onBack }) {
+// focus: AI 상담에서 넘어오면 'b2b'(기업 문의 폼 열기) 또는 'qna'(Q&A로 내리기)
+function ProductDetail({ code, focus, onBack }) {
   const [product, setProduct] = useState(null)
   const [error, setError] = useState('')
-  const [showB2b, setShowB2b] = useState(false)
+  const [showB2b, setShowB2b] = useState(focus === 'b2b')
   const [sentMessage, setSentMessage] = useState('')
   const qnaRef = useRef(null)
 
   useEffect(() => {
     api(`/products/${code}`).then(setProduct).catch((e) => setError(e.message))
   }, [code])
+
+  useEffect(() => {
+    if (product && focus === 'qna') qnaRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [product, focus])
 
   if (error) return <p className="error">{error}</p>
   if (!product) return <p className="muted">불러오는 중…</p>
@@ -127,13 +133,18 @@ function App() {
 function Storefront() {
   const [products, setProducts] = useState([])
   const [category, setCategory] = useState('전체')
-  const [selected, setSelected] = useState(null)
+  const [selected, setSelected] = useState(null) // { code, focus, n }
   const [error, setError] = useState('')
 
   useEffect(() => {
     const query = category === '전체' ? '' : `?category=${encodeURIComponent(category)}`
     api(`/products${query}`).then(setProducts).catch((e) => setError(e.message))
   }, [category])
+
+  const open = (code, focus = null) => {
+    setSelected((prev) => ({ code, focus, n: (prev?.n ?? 0) + 1 }))
+    window.scrollTo({ top: 0 })
+  }
 
   return (
     <div className="app">
@@ -145,7 +156,7 @@ function Storefront() {
       {error && <p className="error">{error}</p>}
 
       {selected ? (
-        <ProductDetail code={selected} onBack={() => setSelected(null)} />
+        <ProductDetail key={`${selected.code}-${selected.n}`} code={selected.code} focus={selected.focus} onBack={() => setSelected(null)} />
       ) : (
         <>
           <nav className="tabs">
@@ -156,7 +167,7 @@ function Storefront() {
           <ul className="grid">
             {products.map((p) => (
               <li key={p.product_code}>
-                <button type="button" className={`card${p.sold_out ? ' dim' : ''}`} onClick={() => setSelected(p.product_code)}>
+                <button type="button" className={`card${p.sold_out ? ' dim' : ''}`} onClick={() => open(p.product_code)}>
                   {p.image_url && <img className="thumb" src={p.image_url} alt="" />}
                   <span className="cat">{p.category}</span>
                   <strong>{p.name}</strong>
@@ -169,6 +180,7 @@ function Storefront() {
           </ul>
         </>
       )}
+      <Chat productCode={selected?.code ?? null} onOpenProduct={open} />
     </div>
   )
 }

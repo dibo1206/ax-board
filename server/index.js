@@ -1,10 +1,11 @@
 // 농가 판매 자사몰 백엔드. 화면($PORT) → 이 서버($PORT + 100) → PostgreSQL
-// 1단계: 데이터 읽기 / 2단계: 관리자 상품 관리 / 4단계: 상품 Q&A·기업 구매 문의. AI 상담은 5단계에서 붙인다.
+// 1단계: 데이터 읽기 / 2단계: 관리자 상품 관리 / 4단계: 상품 Q&A·기업 구매 문의 / 5단계: AI 상담
 import 'dotenv/config'
 import { fileURLToPath } from 'node:url'
 import express from 'express'
 import { adminRouter, UPLOAD_DIR } from './admin.js'
 import { currentAdmin, login, logout } from './auth.js'
+import { adminChatRouter, chatRouter } from './chat.js'
 import { initDb, pool } from './db.js'
 import { adminInquiryRouter, maskName, publicInquiryRouter } from './inquiry.js'
 
@@ -80,8 +81,10 @@ app.get('/api/admin/me', (req, res) => {
   res.json({ loginId: admin.loginId })
 })
 app.use('/api/admin/inquiries', adminInquiryRouter)
+app.use('/api/admin/chat-logs', adminChatRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api', publicInquiryRouter)
+app.use('/api', chatRouter)
 app.use('/uploads', express.static(fileURLToPath(UPLOAD_DIR)))
 
 app.use((error, req, res, _next) => {
