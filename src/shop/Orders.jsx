@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getPolicy, ORDER_STATUS, post, readCart, takePending, when, won, writeCart } from './shared.js'
 
 // 주문 결과(성공·실패) · 비회원 주문 조회 · 약관 페이지
@@ -25,26 +25,53 @@ function OrderDetail({ order }) {
 export function OrderSuccess() {
   const [order, setOrder] = useState(null)
   const [error, setError] = useState('')
+  const [retry, setRetry] = useState('') // 결과를 아직 모름 (끊김·지연): 다시 확인 버튼
+  const [checking, setChecking] = useState(true)
   const started = useRef(false)
+  const pending = useRef(null)
+
+  // 같은 승인 요청을 여러 번 보내도 서버와 결제사가 한 번만 처리하니, 끊기면 그냥 다시 보내면 된다
+  const confirm = useCallback(async () => {
+    const params = new URLSearchParams(window.location.search)
+    const orderId = params.get('orderId') ?? ''
+    setChecking(true)
+    setRetry('')
+    try {
+      const o = await post(`/orders/${encodeURIComponent(orderId)}/confirm`, { paymentKey: params.get('paymentKey'), amount: Number(params.get('amount')) }, 45_000)
+      setOrder(o)
+      // 장바구니에서 주문했으면 주문한 상품을 장바구니에서 뺀다
+      if (pending.current?.orderNo === orderId && pending.current.fromCart) {
+        const bought = new Set(o.items.map((i) => i.product_code))
+        writeCart(readCart().filter((i) => !bought.has(i.productCode)))
+      }
+    } catch (e) {
+      if (e.pending || e.network || e.status === 503 || e.status === 504) setRetry(e.message)
+      else setError(e.message)
+    } finally {
+      setChecking(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (started.current) return
-    started.current = true // 승인 요청은 한 번만 (서버도 중복 승인을 막는다)
-    const params = new URLSearchParams(window.location.search)
-    const orderId = params.get('orderId') ?? ''
-    const pending = takePending()
-    post(`/orders/${encodeURIComponent(orderId)}/confirm`, { paymentKey: params.get('paymentKey'), amount: Number(params.get('amount')) })
-      .then((o) => {
-        setOrder(o)
-        // 장바구니에서 주문했으면 주문한 상품을 장바구니에서 뺀다
-        if (pending?.orderNo === orderId && pending.fromCart) {
-          const bought = new Set(o.items.map((i) => i.product_code))
-          writeCart(readCart().filter((i) => !bought.has(i.productCode)))
-        }
-      })
-      .catch((e) => setError(e.message))
-  }, [])
+    started.current = true
+    pending.current = takePending()
+    confirm()
+  }, [confirm])
 
+  if (retry) {
+    return (
+      <section className="box">
+        <h2>결제를 확인하고 있어요</h2>
+        <p className="warn">{retry}</p>
+        <p className="muted">주문번호 {new URLSearchParams(window.location.search).get('orderId')} · 결제가 승인됐다면 [주문 조회]에서도 확인할 수 있어요.</p>
+        <div className="actions">
+          <button type="button" className="button" onClick={confirm} disabled={checking}>{checking ? '확인 중…' : '다시 확인'}</button>
+          <a className="button ghost" href="/order/lookup">주문 조회</a>
+        </div>
+      </section>
+    )
+  }
   if (error) {
     return (
       <section className="box">

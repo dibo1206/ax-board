@@ -1,18 +1,22 @@
 // 쇼핑 화면 공통: API 호출, 장바구니(브라우저에 저장), 외부 스크립트 불러오기, 주문 상태 이름
+import { netFetch } from '../net.js'
+
 export const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
 
 export async function get(path) {
-  const response = await fetch(`/api${path}`)
+  const response = await netFetch(`/api${path}`)
   const data = await response.json().catch(() => ({}))
   if (!response.ok) throw Object.assign(new Error(data.error || `요청이 실패했어요 (${response.status})`), { status: response.status })
   return data
 }
 
-export async function post(path, body) {
-  const response = await fetch(`/api${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+export async function post(path, body, timeoutMs) {
+  const response = await netFetch(`/api${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, timeoutMs)
   if (response.status === 204) return null
   const data = await response.json().catch(() => ({}))
-  if (!response.ok) throw Object.assign(new Error(data.error || `요청이 실패했어요 (${response.status})`), { status: response.status, errors: data.errors })
+  if (!response.ok) {
+    throw Object.assign(new Error(data.error || `요청이 실패했어요 (${response.status})`), { status: response.status, errors: data.errors, pending: data.pending === true })
+  }
   return data
 }
 

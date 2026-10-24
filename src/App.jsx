@@ -10,10 +10,11 @@ import { Checkout } from './shop/Checkout.jsx'
 import { OrderFail, OrderLookup, OrderSuccess, Policy } from './shop/Orders.jsx'
 import { addToCart } from './shop/shared.js'
 import { ShopLayout } from './shop/ShopLayout.jsx'
+import { netFetch } from './net.js'
 
 // 1단계 데이터 확인용 화면. 실제 디자인은 시안이 나오면 3단계에서 새로 만든다.
 async function api(path) {
-  const response = await fetch(`/api${path}`)
+  const response = await netFetch(`/api${path}`)
   const data = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(data.error || `요청이 실패했어요 (${response.status})`)
   return data

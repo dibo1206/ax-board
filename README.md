@@ -26,6 +26,7 @@ npm run load-data          # data/*.csv 검사 후 DB에 넣기 (검사만: npm 
 npm run create-admin -- farm_admin   # 관리자 계정 만들기 (비밀번호는 실행하면 물어봄, 10자 이상)
 npm run create-admin -- sunny_farm --seller farm_sunny   # 판매자(농가) 계정 — /seller 에서 로그인
 npm run admin-2fa -- farm_admin  # 2단계 인증(인증 앱) 등록 — 해제: -- 아이디 --off
+npm run test-resilience    # 결제 통신 끊김·서버 재시작·DB 끊김을 일부러 만들어 돈과 주문이 어긋나지 않는지 확인
 npm run eval-chat          # AI 상담 테스트 질문(data/chatbot_tests.csv) 돌리기 → docs/chat_eval.md (번호 고르기: -- 1-5,8)
 npm run server             # 터미널 1 — 백엔드 ($PORT + 100)
 npm run dev                # 터미널 2 — 화면 ($PORT)
@@ -130,5 +131,6 @@ farm-mall/
 - `.env`에 `TOSS_CLIENT_KEY`(test_gck_…), `TOSS_SECRET_KEY`(test_gsk_…) — 토스페이먼츠 개발자센터 → API 키 → 결제위젯 연동 키
 - 키가 없으면 **개발용 테스트 결제**(결제창 없이 승인, 실제 돈 안 나감)로 동작하고, 운영(`NODE_ENV=production`)에서는 키 없이 주문을 받지 않는다
 - 테스트 키·테스트 결제 주문은 `is_test`로 표시된다. 실결제는 기업이 토스페이먼츠와 계약한 뒤 live 키로 바꾼다
+- 통신이 끊기면 "실패"로 단정하지 않고 토스 결제 조회로 실제 상태를 확인한다. 30분 정리 때도 만료 전에 조회해서, 승인됐는데 기록 못 한 주문을 되살린다 (`docs/api_security.md` 4번)
 - 지금은 카드·간편결제·계좌이체만 받는다 (가상계좌는 입금 확인 기능이 없어 승인되면 자동 취소). 토스 개발자센터 결제 UI 설정에서 가상계좌를 꺼 두면 좋다
 

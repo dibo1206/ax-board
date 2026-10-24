@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "create-admin": "node scripts/create-admin.js",
     "admin-2fa": "node scripts/admin-2fa.js",
+    "test-resilience": "node scripts/resilience-test.js",
     "eval-chat": "node scripts/eval-chat.js"
   },
   "dependencies": {

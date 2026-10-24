@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { netFetch } from './net.js'
 
 // 5단계: 화면 오른쪽 아래 AI 상담 창. 보고 있는 상품 코드를 함께 보내서 "이거 얼마예요?"에도 답한다
 const STARTERS = ['배즙 30포 얼마예요?', '고구마 냉장고에 넣어도 돼요?', '매실청으로 음료 만드는 비율 알려 주세요']
@@ -23,7 +24,7 @@ export function Chat({ productCode, onOpenProduct }) {
     setInput('')
     setSending(true)
     try {
-      const response = await fetch('/api/chat', {
+      const response = await netFetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: question, history, productCode }),

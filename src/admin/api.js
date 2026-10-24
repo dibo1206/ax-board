@@ -1,8 +1,9 @@
 // 관리자·판매자 API 호출. 실패하면 서버가 준 사람 말 메시지(와 항목별 오류 목록)를 담아 던진다
+import { netFetch } from '../net.js'
 function makeApi(base) {
   return async function call(path, options = {}) {
     const isJson = options.body !== undefined && !(options.body instanceof Blob)
-    const response = await fetch(`${base}${path}`, {
+    const response = await netFetch(`${base}${path}`, {
       ...options,
       headers: isJson ? { 'Content-Type': 'application/json' } : options.headers,
       body: isJson ? JSON.stringify(options.body) : options.body,

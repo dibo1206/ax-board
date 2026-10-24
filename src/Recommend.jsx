@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
+import { netFetch } from './net.js'
 
 // 6단계: 이번 주 추천 배너 · 질문형 추천 · 함께 보면 좋은 상품
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
 
 async function get(path) {
-  const response = await fetch(`/api${path}`)
+  const response = await netFetch(`/api${path}`)
   const data = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(data.error || '추천을 불러오지 못했어요.')
   return data

@@ -1,8 +1,9 @@
 import { useState } from 'react'
+import { netFetch } from './net.js'
 
 // 4단계: 손님이 남기는 상품 질문과 기업(B2B) 구매 문의 폼
 async function post(path, body) {
-  const response = await fetch(`/api${path}`, {
+  const response = await netFetch(`/api${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

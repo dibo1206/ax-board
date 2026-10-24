@@ -7,7 +7,7 @@ import express from 'express'
 import { requireAdmin, requireSeller } from './auth.js'
 import { pool } from './db.js'
 import { createLimiter } from './limit.js'
-import { cancelPayment, clientKey, confirmPayment, isTestPayment, paymentMode } from './payments.js'
+import { cancelPayment, checkApproved, clientKey, confirmPayment, isTestPayment, lookupPayment, paymentMode } from './payments.js'
 import { POLICIES, SHIPPING, SHOP, shippingFee } from './policy.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
 
@@ -48,21 +48,67 @@ async function inTransaction(work) {
   }
 }
 
-// 결제하지 않고 30분이 지난 주문 → 만료, 재고 복구
+// 토스에 물어본 실제 결제 상태(found)로 결제 전 주문을 맞춘다. 돌려주는 값: 'paid' | 'closed'(실패·만료 처리) | 'wait'(아직 모름)
+// 승인 응답을 못 받은 채 끊겼거나 서버가 중간에 죽었어도, 토스에서 승인된 주문은 여기서 결제 완료로 되살린다.
+// closeAs 'failed'(승인 요청 직후): 결제가 아직 안 보이거나 진행 중이면 곧 승인될 수 있으니 닫지 않고 기다린다.
+// closeAs 'expired'(30분 정리): 그때까지 승인되지 않은 결제는 토스에서도 끝난 것이라 닫는다.
+const STILL_OPEN = ['READY', 'IN_PROGRESS']
+
+async function settleWithToss(client, order, found, closeAs) {
+  if (found) {
+    try {
+      const paid = checkApproved(found, { orderId: order.order_no, amount: order.total_amount })
+      await client.query(
+        `UPDATE orders SET status = 'paid', payment_key = $2, payment_method = $3, paid_at = $4, updated_at = now() WHERE id = $1`,
+        [order.id, paid.paymentKey, paid.method, paid.approvedAt],
+      )
+      console.log(`[order] 결제 확인됨 ${order.order_no} (승인 응답 없이 조회로 확인)`)
+      return 'paid'
+    } catch (error) {
+      if (closeAs === 'failed' && STILL_OPEN.includes(found.status)) return 'wait'
+      // 승인은 됐는데 금액이 다르거나 지원하지 않는 결제 → 돈이 묶이지 않게 취소
+      if (['DONE', 'WAITING_FOR_DEPOSIT'].includes(found.status)) {
+        await cancelPayment({ paymentKey: found.paymentKey, orderId: order.order_no, reason: '주문 확인 실패로 자동 취소' })
+          .catch((e) => console.error(`[order] ${order.order_no} 자동 취소 실패 — 직접 확인 필요 · ${e.message}`))
+      }
+      console.warn(`[order] ${order.order_no} 조회 결과로 닫음 · ${found.status} ${error.code ?? ''}`)
+    }
+  } else if (closeAs === 'failed') {
+    return 'wait'
+  }
+  await restoreStock(client, order.id)
+  await client.query(`UPDATE orders SET status = $2, fail_reason = COALESCE(fail_reason, $3), updated_at = now() WHERE id = $1`,
+    [order.id, closeAs, found ? `결제 상태 ${found.status}` : '결제 없음'])
+  return 'closed'
+}
+
+// 결제하지 않고 30분이 지난 주문 → 토스에 실제로 결제됐는지 물어보고, 결제가 없으면 만료·재고 복구
+// 토스에 물어볼 수 없으면(통신 장애) 이번에는 건너뛰고 다음 정리 때 다시 본다 — 결제된 주문을 잘못 만료시키지 않기 위해
 export async function expirePending() {
   const { rows } = await pool.query(
-    `SELECT id FROM orders WHERE status = 'pending' AND created_at < now() - make_interval(mins => $1)`,
+    `SELECT id, order_no, created_at FROM orders WHERE status = 'pending' AND created_at < now() - make_interval(mins => $1)`,
     [PENDING_MINUTES],
   )
-  for (const { id } of rows) {
-    await inTransaction(async (client) => {
-      const locked = await client.query("SELECT id FROM orders WHERE id = $1 AND status = 'pending' FOR UPDATE", [id])
-      if (!locked.rowCount) return
-      await restoreStock(client, id)
-      await client.query("UPDATE orders SET status = 'expired', updated_at = now() WHERE id = $1", [id])
+  let closed = 0
+  let revived = 0
+  for (const row of rows) {
+    let found = null
+    try {
+      found = await lookupPayment(row.order_no)
+    } catch (error) {
+      const hours = (Date.now() - new Date(row.created_at)) / 3_600_000
+      console.warn(`[order] ${row.order_no} 결제 조회 실패, 다음에 다시 확인 · ${error.code ?? error.message}${hours > 24 ? ' — 하루 넘게 확인 못 함, 직접 확인 필요' : ''}`)
+      continue
+    }
+    const result = await inTransaction(async (client) => {
+      const locked = await client.query("SELECT * FROM orders WHERE id = $1 AND status = 'pending' FOR UPDATE", [row.id])
+      if (!locked.rowCount) return 'gone'
+      return settleWithToss(client, locked.rows[0], found, 'expired')
     })
+    if (result === 'paid') revived += 1
+    if (result === 'closed') closed += 1
   }
-  if (rows.length) console.log(`[order] 결제 안 된 주문 ${rows.length}건 만료, 재고 복구`)
+  if (closed || revived) console.log(`[order] 결제 안 된 주문 정리: 만료 ${closed}건, 결제 확인으로 되살림 ${revived}건`)
 }
 
 export function startOrderSweeper() {
@@ -223,6 +269,21 @@ publicOrderRouter.post('/orders/:orderNo/confirm', async (req, res) => {
       console.log(`[order] 결제 완료 ${order.order_no} · ${amount}원 · ${paid.method}`)
       return { status: 200 }
     } catch (error) {
+      if (error.uncertain) {
+        // 통신이 끊기거나 결제사가 일시 오류: 승인됐는지 모른다 → 실패로 처리하지 않고 결제 조회로 확인
+        console.warn(`[order] ${order.order_no} 승인 결과를 모름 (${error.code ?? error.message}) → 결제 조회`)
+        let found
+        try {
+          found = await lookupPayment(order.order_no)
+        } catch {
+          // 조회도 안 되면 주문은 결제 전으로 두고 손님에게 다시 확인하라고 한다 (30분 정리 때 다시 조회)
+          return { status: 202, pending: true, error: '결제 확인이 늦어지고 있어요. 잠시 후 [다시 확인]을 눌러 주세요. 돈이 두 번 나가지는 않아요.' }
+        }
+        const result = await settleWithToss(client, order, found, 'failed')
+        if (result === 'paid') return { status: 200 }
+        if (result === 'wait') return { status: 202, pending: true, error: '결제 확인이 늦어지고 있어요. 잠시 후 [다시 확인]을 눌러 주세요. 돈이 두 번 나가지는 않아요.' }
+        return { status: 402, error: '결제가 승인되지 않았어요. 돈은 나가지 않았어요. 다시 주문해 주세요.' }
+      }
       // 승인은 됐는데 정보가 다르거나 지원하지 않는 상태면 바로 취소해서 돈이 묶이지 않게 한다
       if (error.payment?.paymentKey) {
         await cancelPayment({ paymentKey: error.payment.paymentKey, orderId: order.order_no, reason: '주문 확인 실패로 자동 취소' })
@@ -234,7 +295,7 @@ publicOrderRouter.post('/orders/:orderNo/confirm', async (req, res) => {
       return { status: 402, error: error.code === 'UNSUPPORTED_STATUS' ? error.message : `결제를 완료하지 못했어요. ${error.message}` }
     }
   })
-  if (result.error) return res.status(result.status).json({ error: result.error })
+  if (result.error) return res.status(result.status).json({ error: result.error, pending: result.pending === true })
   res.json(publicOrder(await loadOrder(req.params.orderNo)))
 })
 
