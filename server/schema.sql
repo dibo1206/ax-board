@@ -189,3 +189,21 @@ CREATE TABLE IF NOT EXISTS order_items (
 );
 CREATE INDEX IF NOT EXISTS order_items_order_idx ON order_items (order_id);
 CREATE INDEX IF NOT EXISTS order_items_seller_idx ON order_items (seller_code);
+
+-- 관리자 페이지 보호: 2단계 인증 비밀값(암호화해서 저장), 같은 코드를 두 번 못 쓰게 마지막으로 쓴 시간칸
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS totp_secret_enc TEXT;
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS totp_last_counter BIGINT NOT NULL DEFAULT 0;
+
+-- 관리자·판매자 접속 기록 (개인정보 안전성 확보조치: 계정·일시·IP·한 일을 1년 이상 보관). 요청 내용(본문)은 남기지 않는다
+CREATE TABLE IF NOT EXISTS access_logs (
+  id BIGSERIAL PRIMARY KEY,
+  login_id TEXT,
+  role TEXT,
+  action TEXT NOT NULL,
+  method TEXT,
+  path TEXT,
+  status INT,
+  ip TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS access_logs_created_idx ON access_logs (created_at DESC);

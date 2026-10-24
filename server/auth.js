@@ -1,6 +1,8 @@
 // 관리자 로그인. 비밀번호는 scrypt 해시로만 저장하고, 로그인 상태는 서명한 쿠키로 확인한다.
 import { createHmac, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
+import { writeAccessLog } from './accessLog.js'
+import { decrypt, verifyTotp } from './crypto.js'
 import { pool } from './db.js'
 
 const scrypt = promisify(scryptCb)
@@ -78,26 +80,65 @@ function addFail(map, key) {
   }
 }
 
+// 관리자 접속 허용 IP: .env 의 ADMIN_ALLOWED_IPS (쉼표로 여러 개, "203.0.113." 처럼 끝이 점이면 그 대역 전체). 비우면 제한 없음
+export function adminIpAllowed(ip) {
+  const list = (process.env.ADMIN_ALLOWED_IPS ?? '').split(',').map((v) => v.trim()).filter(Boolean)
+  if (!list.length) return true
+  const plain = (ip ?? '').replace(/^::ffff:/, '')
+  return list.some((rule) => (rule.endsWith('.') ? plain.startsWith(rule) : plain === rule))
+}
+
+// REQUIRE_2FA=1 이면 2단계 인증을 등록하지 않은 계정은 로그인할 수 없다 (운영에서 켜기)
+const twoFactorRequired = () => process.env.REQUIRE_2FA === '1'
+
 export async function login(req, res) {
   const loginId = typeof req.body.loginId === 'string' ? req.body.loginId.trim().slice(0, 40) : ''
   const password = typeof req.body.password === 'string' ? req.body.password.slice(0, 200) : ''
+  const otp = typeof req.body.otp === 'string' ? req.body.otp.replace(/\s/g, '') : ''
+  const log = (action, extra = {}) => writeAccessLog({ loginId, action, ip: req.ip, ...extra })
   if (locked(ipFails, req.ip, MAX_IP_FAILS) || locked(fails, loginId, MAX_FAILS)) {
+    log('login_locked')
     return res.status(429).json({ error: `로그인을 여러 번 틀렸어요. ${LOCK_MINUTES}분 뒤에 다시 시도해 주세요.` })
   }
-  const { rows } = await pool.query('SELECT id, login_id, password_hash, role, seller_code FROM admins WHERE login_id = $1', [loginId])
+  const { rows } = await pool.query(
+    'SELECT id, login_id, password_hash, role, seller_code, totp_secret_enc, totp_last_counter FROM admins WHERE login_id = $1',
+    [loginId],
+  )
   const ok = rows.length === 1 && (await verifyPassword(password, rows[0].password_hash))
   if (!ok) {
     addFail(fails, loginId)
     addFail(ipFails, req.ip)
+    log('login_fail')
     return res.status(401).json({ error: '아이디 또는 비밀번호가 맞지 않아요.' })
   }
+  const { id, login_id: account, role, seller_code: sellerCode, totp_secret_enc: sealed, totp_last_counter: lastCounter } = rows[0]
+  if (role === 'admin' && !adminIpAllowed(req.ip)) {
+    log('login_blocked_ip', { role })
+    return res.status(403).json({ error: '허용된 곳에서만 관리자 로그인이 돼요.' })
+  }
+  if (sealed) {
+    if (!otp) return res.status(401).json({ error: '인증 앱에 나온 6자리 코드를 넣어 주세요.', needOtp: true })
+    const counter = verifyTotp(decrypt(sealed), otp, Number(lastCounter))
+    if (counter === null) {
+      addFail(fails, loginId)
+      addFail(ipFails, req.ip)
+      log('otp_fail', { role })
+      return res.status(401).json({ error: '인증 코드가 맞지 않아요. 새 코드로 다시 넣어 주세요.', needOtp: true })
+    }
+    await pool.query('UPDATE admins SET totp_last_counter = $1 WHERE id = $2', [counter, id]) // 같은 코드를 다시 못 쓰게
+  } else if (twoFactorRequired()) {
+    log('login_no_2fa', { role })
+    return res.status(403).json({ error: '2단계 인증을 먼저 등록해 주세요. (서버에서 npm run admin-2fa -- 아이디)' })
+  }
   fails.delete(loginId)
-  const { id, login_id: account, role, seller_code: sellerCode } = rows[0]
-  setSessionCookie(res, sign({ id, loginId: account, role, sellerCode, exp: Date.now() + SESSION_HOURS * 3_600_000 }), SESSION_HOURS * 3600)
-  res.json({ loginId: account, role, sellerCode })
+  setSessionCookie(res, sign({ id, loginId: account, role, sellerCode, mfa: Boolean(sealed), exp: Date.now() + SESSION_HOURS * 3_600_000 }), SESSION_HOURS * 3600)
+  log('login_ok', { role })
+  res.json({ loginId: account, role, sellerCode, mfa: Boolean(sealed) })
 }
 
 export function logout(req, res) {
+  const account = currentAdmin(req)
+  if (account) writeAccessLog({ loginId: account.loginId, role: account.role, action: 'logout', ip: req.ip })
   setSessionCookie(res, '', 0)
   res.status(204).end()
 }
@@ -116,6 +157,7 @@ export function requireAdmin(req, res, next) {
   const admin = currentAdmin(req)
   if (!admin) return res.status(401).json({ error: '관리자 로그인이 필요해요.' })
   if (admin.role === 'seller') return res.status(403).json({ error: '관리자만 쓸 수 있어요. 판매자 화면(/seller)을 이용해 주세요.' })
+  if (!adminIpAllowed(req.ip)) return res.status(403).json({ error: '허용된 곳에서만 관리자 화면을 쓸 수 있어요.' })
   req.admin = admin
   next()
 }

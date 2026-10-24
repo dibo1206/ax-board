@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { adminApi } from './api.js'
 import { ChatLogs } from './ChatLogs.jsx'
 import { Inbox } from './Inbox.jsx'
+import { AccessLogs } from './AccessLogs.jsx'
 import { Orders } from './Orders.jsx'
 import { ProductForm } from './ProductForm.jsx'
 
@@ -18,14 +19,19 @@ export function StatusLabel({ product }) {
 export function Login({ onLogin, title = '관리자 로그인' }) {
   const [loginId, setLoginId] = useState('')
   const [password, setPassword] = useState('')
+  const [otp, setOtp] = useState('')
+  const [needOtp, setNeedOtp] = useState(false)
   const [error, setError] = useState('')
 
   async function submit(event) {
     event.preventDefault()
     try {
-      const me = await adminApi('/login', { method: 'POST', body: { loginId, password } })
+      const me = await adminApi('/login', { method: 'POST', body: { loginId, password, otp } })
       onLogin(me)
     } catch (e) {
+      // 2단계 인증을 등록한 계정이면 인증 앱 코드 칸을 보여 준다
+      if (e.needOtp) setNeedOtp(true)
+      setOtp('')
       setError(e.message)
     }
   }
@@ -35,6 +41,9 @@ export function Login({ onLogin, title = '관리자 로그인' }) {
       <h2>{title}</h2>
       <label>아이디<input value={loginId} onChange={(e) => setLoginId(e.target.value)} autoComplete="username" /></label>
       <label>비밀번호<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></label>
+      {needOtp && (
+        <label>인증 앱 코드 (6자리)<input value={otp} onChange={(e) => setOtp(e.target.value)} inputMode="numeric" autoComplete="one-time-code" maxLength={7} autoFocus /></label>
+      )}
       {error && <p className="error">{error}</p>}
       <button type="submit" className="button">로그인</button>
     </form>
@@ -122,8 +131,10 @@ function Admin() {
           </button>
           <button type="button" className={tab === 'orders' ? 'on' : ''} onClick={() => { setTab('orders'); setEditing(null); setMessage('') }}>주문{newOrders > 0 && ` (${newOrders})`}</button>
           <button type="button" className={tab === 'chat' ? 'on' : ''} onClick={() => { setTab('chat'); setEditing(null); setMessage('') }}>상담 기록</button>
+          <button type="button" className={tab === 'access' ? 'on' : ''} onClick={() => { setTab('access'); setEditing(null); setMessage('') }}>접속 기록</button>
         </nav>
         <span className="muted">{me.loginId} 로그인 중</span>
+        {!me.mfa && <span className="badge soldout" title="서버에서 npm run admin-2fa -- 아이디">2단계 인증 미등록</span>}
         <button type="button" className="link" onClick={logout}>로그아웃</button>
       </div>
       {tab === 'products' && message && <p className="success">{message}</p>}
@@ -133,6 +144,8 @@ function Admin() {
         <Inbox onCount={setCounts} />
       ) : tab === 'orders' ? (
         <Orders onCount={setCounts} />
+      ) : tab === 'access' ? (
+        <AccessLogs />
       ) : tab === 'chat' ? (
         <ChatLogs />
       ) : editing && options ? (

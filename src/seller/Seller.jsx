@@ -224,6 +224,7 @@ export default function Seller() {
           <button type="button" className={tab === 'profile' ? 'on' : ''} onClick={() => go('profile')}>농가 소개</button>
         </nav>
         <span className="muted">{me.seller.name} · {me.loginId}</span>
+        {!me.mfa && <span className="badge soldout" title="회사 담당자에게 2단계 인증 등록을 요청하세요">2단계 인증 미등록</span>}
         <button type="button" className="link" onClick={logout}>로그아웃</button>
       </div>
       {message && <p className="success">{message}</p>}

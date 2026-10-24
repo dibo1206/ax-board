@@ -4,6 +4,7 @@ import 'dotenv/config'
 import { timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import express from 'express'
+import { accessLogger, adminAccessLogRouter } from './accessLog.js'
 import { adminRouter, UPLOAD_DIR } from './admin.js'
 import { currentAdmin, login, logout } from './auth.js'
 import { adminChatRouter, chatRouter } from './chat.js'
@@ -97,16 +98,19 @@ app.get('/api/tags', async (req, res) => {
 })
 
 // ---------- 관리자 (2단계) ----------
+// 관리자·판매자 화면에서 한 일은 모두 접속 기록에 남긴다
+app.use(['/api/admin', '/api/seller'], accessLogger)
 app.post('/api/admin/login', login)
 app.post('/api/admin/logout', logout)
 app.get('/api/admin/me', (req, res) => {
   const admin = currentAdmin(req)
   if (!admin) return res.status(401).json({ error: '관리자 로그인이 필요해요.' })
-  res.json({ loginId: admin.loginId, role: admin.role ?? 'admin', sellerCode: admin.sellerCode ?? null })
+  res.json({ loginId: admin.loginId, role: admin.role ?? 'admin', sellerCode: admin.sellerCode ?? null, mfa: Boolean(admin.mfa) })
 })
 app.use('/api/admin/inquiries', adminInquiryRouter)
 app.use('/api/admin/chat-logs', adminChatRouter)
 app.use('/api/admin/orders', adminOrderRouter)
+app.use('/api/admin/access-logs', adminAccessLogRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/seller/orders', sellerOrderRouter)
 app.use('/api/seller', sellerRouter)

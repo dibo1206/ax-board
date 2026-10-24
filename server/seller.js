@@ -29,7 +29,7 @@ function nextStatus(requested, current) {
 
 sellerRouter.get('/me', async (req, res) => {
   const { rows } = await pool.query('SELECT seller_code, name, region, intro, story FROM sellers WHERE seller_code = $1', [mine(req)])
-  res.json({ loginId: req.seller.loginId, role: 'seller', seller: rows[0] })
+  res.json({ loginId: req.seller.loginId, role: 'seller', seller: rows[0], mfa: Boolean(req.seller.mfa) })
 })
 
 sellerRouter.patch('/profile', async (req, res) => {

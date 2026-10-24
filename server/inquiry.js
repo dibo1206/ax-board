@@ -4,6 +4,7 @@ import express from 'express'
 import { requireAdmin } from './auth.js'
 import { pool } from './db.js'
 import { createLimiter } from './limit.js'
+import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
 import { FORBIDDEN } from './validate.js'
 
 const text = (v) => (typeof v === 'string' ? v.trim() : '')
@@ -31,6 +32,8 @@ publicInquiryRouter.post('/products/:code/questions', async (req, res) => {
   if (question.length < 5 || question.length > 500) errors.push('질문은 5~500자로 적어 주세요.')
   if (contact && !isPhone(contact) && !isEmail(contact)) errors.push('연락처는 전화번호나 이메일 형식으로 적어 주세요.')
   if (contact && !req.body.privacyAgreed) errors.push('연락처를 남기려면 개인정보 수집에 동의해 주세요.')
+  const sensitive = findSensitive(author, question)
+  if (sensitive) errors.push(SENSITIVE_MESSAGE(sensitive))
   if (errors.length) return res.status(400).json({ error: errors.join(' '), errors })
   if (tooMany(req)) return res.status(429).json({ error: '짧은 시간에 글을 너무 많이 남겼어요. 잠시 후 다시 시도해 주세요.' })
 
@@ -63,6 +66,8 @@ publicInquiryRouter.post('/b2b-inquiries', async (req, res) => {
   if (body.quantity && (!/^\d+$/.test(body.quantity) || Number(body.quantity) === 0)) errors.push('수량은 1 이상의 숫자로 적어 주세요.')
   if (body.message.length > 1000) errors.push('요청사항은 1000자 안으로 적어 주세요.')
   if (!req.body.privacyAgreed) errors.push('연락을 위한 개인정보 수집에 동의해 주세요.')
+  const sensitive = findSensitive(body.company, body.contactName, body.message)
+  if (sensitive) errors.push(SENSITIVE_MESSAGE(sensitive))
   if (body.productCode) {
     const product = await pool.query("SELECT 1 FROM products WHERE product_code = $1 AND status = 'active'", [body.productCode])
     if (!product.rowCount) errors.push('문의한 상품을 찾지 못했어요.')

@@ -25,6 +25,7 @@ chmod 600 .env
 npm run load-data          # data/*.csv 검사 후 DB에 넣기 (검사만: npm run load-data -- --check)
 npm run create-admin -- farm_admin   # 관리자 계정 만들기 (비밀번호는 실행하면 물어봄, 10자 이상)
 npm run create-admin -- sunny_farm --seller farm_sunny   # 판매자(농가) 계정 — /seller 에서 로그인
+npm run admin-2fa -- farm_admin  # 2단계 인증(인증 앱) 등록 — 해제: -- 아이디 --off
 npm run eval-chat          # AI 상담 테스트 질문(data/chatbot_tests.csv) 돌리기 → docs/chat_eval.md (번호 고르기: -- 1-5,8)
 npm run server             # 터미널 1 — 백엔드 ($PORT + 100)
 npm run dev                # 터미널 2 — 화면 ($PORT)
@@ -55,7 +56,9 @@ farm-mall/
 │   ├── chat_rules.md AI 상담 규칙 — 식품팀·기획팀이 고쳐도 됨 (저장하면 바로 반영)
 │   ├── ai.js        OpenRouter 호출 (무료 모델 차례로 시도)
 │   ├── limit.js     같은 IP 요청 횟수 제한
-│   ├── privacy.js   전화번호·이메일 가리기 (AI로 보내기·기록 전)
+│   ├── privacy.js   전화번호·이메일 가리기 (AI로 보내기·기록 전), 주민등록번호·카드번호 입력 막기
+│   ├── crypto.js    저장 암호화(AES-256-GCM, DATA_KEY), 2단계 인증 코드(TOTP)
+│   ├── accessLog.js 관리자·판매자 접속 기록
 │   ├── auth.js      로그인 (관리자·판매자 계정, scrypt 비밀번호 해시, 서명 쿠키 8시간, 5번 틀리면 10분 잠금)
 │   ├── validate.js  상품 입력 검사 (데이터 불러오기와 같은 규칙)
 │   ├── db.js        PostgreSQL 연결 (farm 스키마)
@@ -106,6 +109,8 @@ farm-mall/
 
 - `.env`에 `PROXY_SECRET`을 꼭 넣는다. 백엔드는 화면 서버(Vite)가 이 값을 붙인 요청만 받는다 (같은 서버 다른 사용자의 직접 접속 막기)
 - 개발 서버는 `server/`, `scripts/`, `data/`, `docs/`, `.env` 등을 주소로 보여 주지 않는다 (`vite.config.js`)
+- 관리자 보호: 2단계 인증(`npm run admin-2fa`), 관리자 IP 제한(`ADMIN_ALLOWED_IPS`), 접속 기록(관리자 [접속 기록]). 운영에서는 `REQUIRE_2FA=1`
+- `.env`의 `DATA_KEY`는 2단계 인증 키를 암호화하는 키라 바꾸면 2단계 인증을 다시 등록해야 한다
 - 점검표와 배포할 때 할 일: `docs/api_security.md`
 
 ## 주문·결제 (7단계)

@@ -149,3 +149,6 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .policy p { line-height: 1.6; }
 #payment-method, #payment-agreement { margin: 8px 0; }
 @media (max-width: 560px) { .cart li { grid-template-columns: 1fr auto; } }
+
+/* ---------- 관리자 보안 ---------- */
+.warn-row td { color: #c62828; }
