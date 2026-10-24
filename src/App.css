@@ -115,3 +115,7 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .quiz-row { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
 .quiz .chips button.on, .chips button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .quiz .chips { margin-top: 0; font-size: 0.85rem; }
+
+/* ---------- 판매자 화면 ---------- */
+.badge.pending { border-color: #9a6700; color: #9a6700; }
+.form textarea { min-height: 3em; }

@@ -32,8 +32,12 @@ function ItemPreview({ item }) {
   )
 }
 
-export function ProductForm({ product, options, onCancel, onSaved }) {
+// mode: 'admin'(회사 관리자) 또는 'seller'(농가 판매자). 판매자는 농가를 고르지 않고, 새 상품은 검토 요청으로 올린다
+const SAVED = { draft: '임시 저장했어요 (소비자 화면에는 안 보여요)', pending: '검토를 요청했어요. 회사 관리자가 승인하면 판매돼요', active: '저장했어요' }
+
+export function ProductForm({ product, options, onCancel, onSaved, api = adminApi, mode = 'admin' }) {
   const isNew = !product
+  const seller = mode === 'seller'
   const [form, setForm] = useState(() => toForm(product))
   const [errors, setErrors] = useState([])
   const [image, setImage] = useState(null)
@@ -52,16 +56,16 @@ export function ProductForm({ product, options, onCancel, onSaved }) {
     try {
       const body = { ...form, status }
       const saved = isNew
-        ? await adminApi('/products', { method: 'POST', body })
-        : await adminApi(`/products/${product.product_code}`, { method: 'PATCH', body })
+        ? await api('/products', { method: 'POST', body })
+        : await api(`/products/${product.product_code}`, { method: 'PATCH', body })
       if (image) {
-        await adminApi(`/products/${saved.product_code}/image`, {
+        await api(`/products/${saved.product_code}/image`, {
           method: 'POST',
           headers: { 'Content-Type': image.type },
           body: image,
         })
       }
-      onSaved(saved, status === 'draft' ? '임시 저장했어요 (소비자 화면에는 안 보여요)' : '저장했어요')
+      onSaved(saved, SAVED[saved.status] ?? '저장했어요')
     } catch (e) {
       setErrors(e.errors ?? [e.message])
     } finally {
@@ -74,6 +78,8 @@ export function ProductForm({ product, options, onCancel, onSaved }) {
   return (
     <div className="box form">
       <h3>{isNew ? '새 상품 등록' : `상품 수정 · ${product.product_code}`}</h3>
+      {product?.status === 'pending' && <p className="warn">검토 대기 중인 상품이에요. {seller ? '회사 관리자가 승인하면 판매돼요.' : '확인 후 [저장하고 판매]를 누르면 승인돼요.'}</p>}
+      {product?.review_note && <p className="warn">반려 사유: {product.review_note}</p>}
 
       <label>품목*
         <select value={form.item_code} onChange={set('item_code')}>
@@ -83,12 +89,14 @@ export function ProductForm({ product, options, onCancel, onSaved }) {
       </label>
       <ItemPreview item={item} />
 
-      <label>판매 농가*
-        <select value={form.seller_code} onChange={set('seller_code')}>
-          <option value="">골라 주세요</option>
-          {options.sellers.map((s) => <option key={s.seller_code} value={s.seller_code}>{s.name} · {s.region}</option>)}
-        </select>
-      </label>
+      {!seller && (
+        <label>판매 농가*
+          <select value={form.seller_code} onChange={set('seller_code')}>
+            <option value="">골라 주세요</option>
+            {options.sellers.map((s) => <option key={s.seller_code} value={s.seller_code}>{s.name} · {s.region}</option>)}
+          </select>
+        </label>
+      )}
 
       {isNew && (
         <label>상품 코드* <span className="muted">(영문 소문자·숫자·밑줄, 한 번 정하면 바꾸지 않아요)</span>
@@ -142,7 +150,13 @@ export function ProductForm({ product, options, onCancel, onSaved }) {
       <div className="actions">
         <button type="button" className="button ghost" onClick={onCancel} disabled={saving}>취소</button>
         <button type="button" className="button ghost" onClick={() => save('draft')} disabled={saving}>임시 저장</button>
-        <button type="button" className="button" onClick={() => save('active')} disabled={saving}>{saving ? '저장 중…' : '저장하고 판매'}</button>
+        {seller ? (
+          <button type="button" className="button" onClick={() => save(product?.status === 'active' ? 'active' : 'pending')} disabled={saving}>
+            {saving ? '저장 중…' : product?.status === 'active' ? '저장 (바로 반영)' : '검토 요청'}
+          </button>
+        ) : (
+          <button type="button" className="button" onClick={() => save('active')} disabled={saving}>{saving ? '저장 중…' : product?.status === 'pending' ? '승인하고 판매' : '저장하고 판매'}</button>
+        )}
       </div>
     </div>
   )

@@ -115,3 +115,14 @@ CREATE TABLE IF NOT EXISTS admins (
   password_hash TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- 판매자 화면: 계정은 관리자(admin)와 농가 판매자(seller) 두 종류. 판매자는 자기 농가(seller_code) 것만 다룬다
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'admin';
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS seller_code TEXT REFERENCES sellers(seller_code);
+ALTER TABLE admins DROP CONSTRAINT IF EXISTS admins_role_check;
+ALTER TABLE admins ADD CONSTRAINT admins_role_check
+  CHECK ((role = 'admin' AND seller_code IS NULL) OR (role = 'seller' AND seller_code IS NOT NULL));
+-- 판매자가 올린 새 상품은 '검토 대기(pending)' → 관리자 승인 시 판매(active). 반려하면 사유를 남긴다
+ALTER TABLE products DROP CONSTRAINT IF EXISTS products_status_check;
+ALTER TABLE products ADD CONSTRAINT products_status_check CHECK (status IN ('draft', 'pending', 'active'));
+ALTER TABLE products ADD COLUMN IF NOT EXISTS review_note TEXT;

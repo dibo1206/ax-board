@@ -25,7 +25,8 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
     external_url: text(input.external_url),
     b2b_available: Boolean(input.b2b_available),
     tags: Array.isArray(input.tags) ? input.tags.map(text).filter(Boolean) : [],
-    status: input.status === 'draft' ? 'draft' : 'active',
+    status: ['draft', 'pending'].includes(input.status) ? input.status : 'active',
+    review_note: text(input.review_note) || null,
   }
 
   if (isNew && !isCode(p.product_code)) errors.push('상품 코드는 영문 소문자·숫자·밑줄만 쓸 수 있어요.')
@@ -51,6 +52,7 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
   const all = `${p.name} ${p.summary}`
   const bad = FORBIDDEN.filter((w) => all.includes(w))
   if (bad.length) errors.push(`효능 표현은 쓰지 않아요: ${bad.join(', ')}`)
+  if (p.review_note && p.review_note.length > 300) errors.push('반려 사유는 300자 안으로 적어 주세요.')
 
   if (errors.length) return { errors }
   const orNull = (v) => (v === '' ? null : v)

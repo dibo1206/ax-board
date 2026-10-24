@@ -64,15 +64,16 @@ export async function login(req, res) {
   if (record && record.count >= MAX_FAILS && Date.now() - record.at < LOCK_MINUTES * 60_000) {
     return res.status(429).json({ error: `로그인을 여러 번 틀렸어요. ${LOCK_MINUTES}분 뒤에 다시 시도해 주세요.` })
   }
-  const { rows } = await pool.query('SELECT id, login_id, password_hash FROM admins WHERE login_id = $1', [loginId])
+  const { rows } = await pool.query('SELECT id, login_id, password_hash, role, seller_code FROM admins WHERE login_id = $1', [loginId])
   const ok = rows.length === 1 && (await verifyPassword(password, rows[0].password_hash))
   if (!ok) {
     fails.set(loginId, { count: (record?.count ?? 0) + 1, at: Date.now() })
     return res.status(401).json({ error: '아이디 또는 비밀번호가 맞지 않아요.' })
   }
   fails.delete(loginId)
-  setSessionCookie(res, sign({ id: rows[0].id, loginId: rows[0].login_id, exp: Date.now() + SESSION_HOURS * 3_600_000 }), SESSION_HOURS * 3600)
-  res.json({ loginId: rows[0].login_id })
+  const { id, login_id: account, role, seller_code: sellerCode } = rows[0]
+  setSessionCookie(res, sign({ id, loginId: account, role, sellerCode, exp: Date.now() + SESSION_HOURS * 3_600_000 }), SESSION_HOURS * 3600)
+  res.json({ loginId: account, role, sellerCode })
 }
 
 export function logout(req, res) {
@@ -88,10 +89,21 @@ export function currentAdmin(req) {
   }
 }
 
-// 관리자 API 앞에 붙이는 문지기. 로그인하지 않았으면 401
+// 관리자 API 앞에 붙이는 문지기. 로그인하지 않았으면 401, 판매자 계정이면 403
+// (판매자 기능 전에 만든 로그인 쿠키에는 role이 없는데, 그때는 관리자 계정만 있었다)
 export function requireAdmin(req, res, next) {
   const admin = currentAdmin(req)
   if (!admin) return res.status(401).json({ error: '관리자 로그인이 필요해요.' })
+  if (admin.role === 'seller') return res.status(403).json({ error: '관리자만 쓸 수 있어요. 판매자 화면(/seller)을 이용해 주세요.' })
   req.admin = admin
+  next()
+}
+
+// 판매자 API 앞에 붙이는 문지기. 판매자 계정만 통과하고, req.seller.sellerCode로 자기 농가만 다룬다
+export function requireSeller(req, res, next) {
+  const account = currentAdmin(req)
+  if (!account) return res.status(401).json({ error: '판매자 로그인이 필요해요.' })
+  if (account.role !== 'seller' || !account.sellerCode) return res.status(403).json({ error: '판매자 계정만 쓸 수 있어요. 관리자는 관리자 화면(/admin)을 이용해 주세요.' })
+  req.seller = account
   next()
 }

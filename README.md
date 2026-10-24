@@ -12,6 +12,7 @@ B2B·B2C를 함께 하는 브랜드 자사몰. 상품을 등록하면 AI 상담�
 - [x] 4단계: 구매 연결과 문의 (구매 링크·문의하기, 상품 Q&A, 기업 구매 문의, 관리자 문의함)
 - [x] 5단계: AI 상담 (상품 데이터 기반 답변, 담당자 넘김, 답 검사, 상담 기록, 테스트 스크립트)
 - [x] 6단계: 추천 (이번 주 추천, 질문형 추천, 함께 보면 좋은 상품, AI 상담에서 추천)
+- [x] 판매자(농가) 화면: 내 상품 등록·수정(새 상품은 관리자 승인 후 판매), 상품 문의 답변, 농가 소개 (샵인샵 준비)
 - [ ] 7단계: (도전) 자체 주문 / 8단계: 배포·인수인계
 
 ## 실행
@@ -22,6 +23,7 @@ cp .env.sample .env        # 처음 한 번. DATABASE_URL, SESSION_SECRET 채우
 chmod 600 .env
 npm run load-data          # data/*.csv 검사 후 DB에 넣기 (검사만: npm run load-data -- --check)
 npm run create-admin -- farm_admin   # 관리자 계정 만들기 (비밀번호는 실행하면 물어봄, 10자 이상)
+npm run create-admin -- sunny_farm --seller farm_sunny   # 판매자(농가) 계정 — /seller 에서 로그인
 npm run eval-chat          # AI 상담 테스트 질문(data/chatbot_tests.csv) 돌리기 → docs/chat_eval.md (번호 고르기: -- 1-5,8)
 npm run server             # 터미널 1 — 백엔드 ($PORT + 100)
 npm run dev                # 터미널 2 — 화면 ($PORT)
@@ -41,18 +43,19 @@ farm-mall/
 │   └── csv.js       CSV 읽기 (데이터 불러오기·테스트가 같이 씀)
 ├── server/
 │   ├── index.js     Express 백엔드 (/api/products, /api/products/:code, /api/tags, /api/admin/*, 문의 API)
-│   ├── admin.js     관리자 API (로그인 필요): 상품 목록·등록·수정·사진
+│   ├── admin.js     관리자 API (로그인 필요): 상품 목록·등록·수정·사진·승인
+│   ├── seller.js    판매자 API (/api/seller): 내 농가 상품·질문·소개만
 │   ├── inquiry.js   상품 Q&A·기업 구매 문의 (손님: 글 남기기 / 관리자: 문의함·답변·처리 상태)
 │   ├── chat.js      AI 상담 (/api/chat, 관리자 상담 기록)
 │   ├── recommend.js 추천 (/api/recommend, /api/featured, /api/products/:code/related)
 │   ├── chat_rules.md AI 상담 규칙 — 식품팀·기획팀이 고쳐도 됨 (저장하면 바로 반영)
 │   ├── ai.js        OpenRouter 호출 (무료 모델 차례로 시도)
 │   ├── limit.js     같은 IP 요청 횟수 제한
-│   ├── auth.js      관리자 로그인 (scrypt 비밀번호 해시, 서명 쿠키 8시간, 5번 틀리면 10분 잠금)
+│   ├── auth.js      로그인 (관리자·판매자 계정, scrypt 비밀번호 해시, 서명 쿠키 8시간, 5번 틀리면 10분 잠금)
 │   ├── validate.js  상품 입력 검사 (데이터 불러오기와 같은 규칙)
 │   ├── db.js        PostgreSQL 연결 (farm 스키마)
 │   └── schema.sql   테이블 구조
-├── src/             화면 (소비자: 데이터 확인용 + 질문·기업 문의 폼 + AI 상담 창 / 관리자: /admin 상품 관리·문의함·상담 기록)
+├── src/             화면 (소비자: 데이터 확인용 + 질문·기업 문의 폼 + AI 상담 창 / 관리자: /admin 상품 관리·문의함·상담 기록 / 판매자: /seller)
 ├── uploads/         관리자가 올린 상품 사진 (커밋 안 함)
 └── docs/            PRD, 데이터 안내, 검사 결과
 ```
@@ -84,3 +87,11 @@ farm-mall/
 - 이번 주 추천: 조건 없이 제철·당도 측정 상품 3개 / 함께 보면 좋은 상품: 같은 품목 → 태그가 2개 이상 겹치는 상품
 - 질문형 추천: 태그 묶음마다 질문 하나. 태그를 새로 추가하면 선택지에 자동으로 나온다
 - AI 상담: "부모님 선물로 달달한 거 추천해 주세요"처럼 물으면 말에서 조건을 찾아 추천. 조건을 못 찾을 때만 AI가 태그를 최대 2개 고르고, 상품은 항상 위 규칙이 고른다 (AI가 상품을 지어낼 수 없음)
+
+## 판매자(농가) 화면
+
+- 화면 세 개: `/` 손님 · `/admin` 회사 관리자 · `/seller` 농가 판매자. 로그인 주소는 같고 계정 종류(role)로 들어갈 화면이 정해진다
+- 판매자는 자기 농가(`seller_code`) 상품·질문·소개만 보고 고친다. 다른 농가 것은 없는 것처럼 404, 관리자 API는 403
+- 새 상품: 판매자가 [검토 요청] → 관리자 [상품 관리]에 '검토 대기'로 맨 위에 → [승인]하면 판매, [반려]하면 사유가 판매자에게 보인다
+- 이미 판매 중인 상품의 가격·재고 수정은 바로 반영된다 (서버 로그에 누가 바꿨는지 남는다)
+- 손님 연락처(질문·기업 문의)는 회사 관리자만 본다

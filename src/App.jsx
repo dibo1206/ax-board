@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import Admin from './admin/Admin.jsx'
+import Seller from './seller/Seller.jsx'
 import { Chat } from './Chat.jsx'
 import { B2bForm, QuestionForm } from './Inquiry.jsx'
 import { Featured, Quiz, Related } from './Recommend.jsx'
@@ -118,6 +119,17 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
 }
 
 function App() {
+  if (window.location.pathname.startsWith('/seller')) {
+    return (
+      <div className="app">
+        <header>
+          <h1>농가 판매 자사몰 · 판매자</h1>
+          <p className="notice">개발 중 · 농가 판매자 화면입니다. 내 농가 상품만 보여요. <a href="/">소비자 화면으로</a></p>
+        </header>
+        <Seller />
+      </div>
+    )
+  }
   if (window.location.pathname.startsWith('/admin')) {
     return (
       <div className="app">
@@ -152,7 +164,7 @@ function Storefront() {
     <div className="app">
       <header>
         <h1>농가 판매 자사몰</h1>
-        <p className="notice">개발 중 · 데이터 확인 화면입니다. 모든 데이터는 [예시]이고, 디자인은 시안이 나오면 바꿉니다. <a href="/admin">관리자</a></p>
+        <p className="notice">개발 중 · 데이터 확인 화면입니다. 모든 데이터는 [예시]이고, 디자인은 시안이 나오면 바꿉니다. <a href="/admin">관리자</a> · <a href="/seller">판매자</a></p>
       </header>
 
       {error && <p className="error">{error}</p>}

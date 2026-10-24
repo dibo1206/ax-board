@@ -91,7 +91,8 @@ adminInquiryRouter.param('id', (req, res, next, id) => {
 adminInquiryRouter.get('/summary', async (req, res) => {
   const { rows } = await pool.query(`SELECT
     (SELECT count(*) FROM questions WHERE answer IS NULL AND NOT hidden)::int AS unanswered,
-    (SELECT count(*) FROM b2b_inquiries WHERE status = '접수')::int AS new_b2b`)
+    (SELECT count(*) FROM b2b_inquiries WHERE status = '접수')::int AS new_b2b,
+    (SELECT count(*) FROM products WHERE status = 'pending')::int AS pending_products`)
   res.json(rows[0])
 })
 

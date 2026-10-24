@@ -5,13 +5,14 @@ import { adminApi } from './api.js'
 const when = (t) => (t ? new Date(t).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '')
 const STATUSES = ['접수', '확인', '완료']
 
-function QuestionRow({ q, onSaved, onError }) {
+// request(body): 저장 요청. canHide: 숨기기 버튼 (판매자 화면은 없음)
+export function QuestionRow({ q, onSaved, onError, request, canHide = true }) {
   const [answer, setAnswer] = useState(q.answer ?? '')
   const [open, setOpen] = useState(!q.answer)
 
   async function save(body, text) {
     try {
-      onSaved(await adminApi(`/inquiries/questions/${q.id}`, { method: 'PATCH', body }), text)
+      onSaved(await request(body), text)
       setOpen(false)
     } catch (e) {
       onError(e.message)
@@ -35,9 +36,11 @@ function QuestionRow({ q, onSaved, onError }) {
       )}
       <div className="row-actions">
         {!open && <button type="button" onClick={() => setOpen(true)}>답변 고치기</button>}
-        <button type="button" onClick={() => save({ hidden: !q.hidden }, q.hidden ? '다시 보이게 했어요' : '소비자 화면에서 숨겼어요')}>
-          {q.hidden ? '다시 보이기' : '숨기기'}
-        </button>
+        {canHide && (
+          <button type="button" onClick={() => save({ hidden: !q.hidden }, q.hidden ? '다시 보이게 했어요' : '소비자 화면에서 숨겼어요')}>
+            {q.hidden ? '다시 보이기' : '숨기기'}
+          </button>
+        )}
       </div>
     </li>
   )
@@ -109,7 +112,7 @@ export function Inbox({ onCount }) {
       <h3>상품 Q&A · 답변 기다리는 질문 {waiting.length}개</h3>
       <ul className="inbox">
         {questions.map((q) => (
-          <QuestionRow key={q.id} q={q} onError={setError} onSaved={(row, text) => { setQuestions((list) => replace(list, row)); done(text) }} />
+          <QuestionRow key={q.id} q={q} onError={setError} request={(body) => adminApi(`/inquiries/questions/${q.id}`, { method: 'PATCH', body })} onSaved={(row, text) => { setQuestions((list) => replace(list, row)); done(text) }} />
         ))}
       </ul>
     </section>
