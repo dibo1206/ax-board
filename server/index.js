@@ -1,5 +1,5 @@
 // 농가 판매 자사몰 백엔드. 화면($PORT) → 이 서버($PORT + 100) → PostgreSQL
-// 1단계: 데이터 읽기 / 2단계: 관리자 상품 관리 / 4단계: 상품 Q&A·기업 구매 문의 / 5단계: AI 상담
+// 1단계: 데이터 읽기 / 2단계: 관리자 상품 관리 / 4단계: 상품 Q&A·기업 구매 문의 / 5단계: AI 상담 / 6단계: 추천
 import 'dotenv/config'
 import { fileURLToPath } from 'node:url'
 import express from 'express'
@@ -8,6 +8,7 @@ import { currentAdmin, login, logout } from './auth.js'
 import { adminChatRouter, chatRouter } from './chat.js'
 import { initDb, pool } from './db.js'
 import { adminInquiryRouter, maskName, publicInquiryRouter } from './inquiry.js'
+import { recommendRouter } from './recommend.js'
 
 if (!process.env.PORT) {
   console.error('[server] PORT 환경변수가 없어요. 실습서버 내 계정 터미널에서 실행해 주세요. (echo $PORT 로 확인)')
@@ -85,6 +86,7 @@ app.use('/api/admin/chat-logs', adminChatRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api', publicInquiryRouter)
 app.use('/api', chatRouter)
+app.use('/api', recommendRouter)
 app.use('/uploads', express.static(fileURLToPath(UPLOAD_DIR)))
 
 app.use((error, req, res, _next) => {

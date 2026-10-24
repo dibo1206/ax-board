@@ -8,6 +8,7 @@ import { complete, describeAiError, keyLoaded } from './ai.js'
 import { requireAdmin } from './auth.js'
 import { pool } from './db.js'
 import { createLimiter } from './limit.js'
+import { describeRecommendation, loadActive, readWish, recommend } from './recommend.js'
 import { FORBIDDEN } from './validate.js'
 
 const RULES_FILE = new URL('./chat_rules.md', import.meta.url)
@@ -172,7 +173,49 @@ const FACTS = [
   },
 ]
 // 설명이 필요한 말이 섞이면 AI에게 넘긴다
-const NEEDS_EXPLAIN = /보관|레시피|만들|개봉|먹어도|드셔도|마셔도|냉장|상온|싹|활용|비율|어떻게|왜|추천|비교|차이/
+const NEEDS_EXPLAIN = /보관|레시피|만들|개봉|먹어도|드셔도|마셔도|냉장|상온|싹|활용|비율|어떻게|왜|비교|차이/
+
+// ---------- 2-2. 추천 질문 (6단계) ----------
+// 말에서 조건(태그·예산)을 찾고, 못 찾으면 AI에게 태그만 고르게 한다. 상품은 항상 DB 규칙(recommend.js)이 고른다
+const WANTS_RECOMMEND = /추천|골라|뭐가 좋|뭘 사|뭐 사|뭐 살까/
+
+async function pickTagsWithAi(message, tagLabel) {
+  const { model, text } = await complete([
+    { role: 'system', content: '손님 말을 읽고 아래 태그 목록에서 손님이 원하는 것을 최대 2개 고른다. 손님 말에서 분명히 드러나는 것만 고르고 짐작해서 더하지 않는다. 설명 없이 JSON {"tags": ["태그 코드"]} 하나만 출력한다. 맞는 것이 없으면 {"tags": []}.' },
+    { role: 'user', content: `[태그 목록]\n${Object.entries(tagLabel).map(([code, label]) => `- ${code}: ${label}`).join('\n')}\n\n[손님 말]\n${message}` },
+  ])
+  const parsed = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1))
+  const tags = Array.isArray(parsed.tags) ? parsed.tags.filter((t) => t in tagLabel).slice(0, 2) : []
+  return { model, tags }
+}
+
+async function answerRecommend(message) {
+  const data = await loadActive()
+  let wish = readWish(message)
+  let model = 'rule:recommend'
+  if (!wish.want.length && !wish.budget && keyLoaded()) { // 예산만 말해도 그걸로 고른다
+    try {
+      const picked = await pickTagsWithAi(message, data.tagLabel)
+      if (picked.tags.length) {
+        wish = { ...wish, want: picked.tags }
+        model = `ai-tags:${picked.model}`
+      }
+    } catch (error) {
+      console.log(`[chat] 추천 조건 AI 실패 · ${error.status ?? ''} ${error.message}`)
+    }
+  }
+  const base = { handoff: false, action: null, model, blocked: false }
+  if (!wish.want.length && !wish.budget) {
+    return { ...base, answer: '어떤 용도(선물·집에서·카페), 어떤 맛(달콤·새콤·담백)을 원하시는지 알려 주시면 골라 드릴게요. 상품 목록 위의 [추천 받기]에서 골라도 돼요.', sources: [], productCode: null }
+  }
+  const items = recommend(data, wish)
+  return {
+    ...base,
+    answer: describeRecommendation(items, wish, data.tagLabel),
+    sources: items.map((x) => ({ code: x.product_code, name: x.name })),
+    productCode: items[0]?.product_code ?? null,
+  }
+}
 
 function answerFact(message, catalog, ctx) {
   if (NEEDS_EXPLAIN.test(message)) return null
@@ -296,6 +339,8 @@ export async function answerChat({ message, history = [], productCode = null }) 
       blocked: false,
     }
   }
+  if (WANTS_RECOMMEND.test(message)) return answerRecommend(message)
+
   const fact = answerFact(message, catalog, ctx)
   if (fact) return { ...fact, handoff: false, action: null, model: 'rule:fact', blocked: false }
 

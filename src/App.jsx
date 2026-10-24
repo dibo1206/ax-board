@@ -3,6 +3,7 @@ import './App.css'
 import Admin from './admin/Admin.jsx'
 import { Chat } from './Chat.jsx'
 import { B2bForm, QuestionForm } from './Inquiry.jsx'
+import { Featured, Quiz, Related } from './Recommend.jsx'
 
 // 1단계 데이터 확인용 화면. 실제 디자인은 시안이 나오면 3단계에서 새로 만든다.
 async function api(path) {
@@ -16,7 +17,7 @@ const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
 const CATEGORIES = ['전체', '과일', '채소', '가공품']
 
 // focus: AI 상담에서 넘어오면 'b2b'(기업 문의 폼 열기) 또는 'qna'(Q&A로 내리기)
-function ProductDetail({ code, focus, onBack }) {
+function ProductDetail({ code, focus, onBack, onOpen }) {
   const [product, setProduct] = useState(null)
   const [error, setError] = useState('')
   const [showB2b, setShowB2b] = useState(focus === 'b2b')
@@ -111,6 +112,7 @@ function ProductDetail({ code, focus, onBack }) {
           ))}
         </ul>
       </section>
+      <Related code={product.product_code} onOpen={onOpen} />
     </article>
   )
 }
@@ -156,9 +158,11 @@ function Storefront() {
       {error && <p className="error">{error}</p>}
 
       {selected ? (
-        <ProductDetail key={`${selected.code}-${selected.n}`} code={selected.code} focus={selected.focus} onBack={() => setSelected(null)} />
+        <ProductDetail key={`${selected.code}-${selected.n}`} code={selected.code} focus={selected.focus} onBack={() => setSelected(null)} onOpen={open} />
       ) : (
         <>
+          <Featured onOpen={open} />
+          <Quiz onOpen={open} />
           <nav className="tabs">
             {CATEGORIES.map((c) => (
               <button key={c} type="button" className={c === category ? 'on' : ''} onClick={() => setCategory(c)}>{c}</button>
