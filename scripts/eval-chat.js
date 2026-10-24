@@ -34,7 +34,7 @@ for (const t of picked) {
   const started = Date.now()
   let r
   try {
-    r = await answerChat({ message: t.question })
+    r = await answerChat({ message: t.question }, { useCache: false }) // 저장된 답 말고 매번 새로 물어 모델을 잰다
   } catch (error) {
     r = { error: `${error.status ?? ''} ${error.message}`, answer: '', sources: [], handoff: false, model: '' }
   }

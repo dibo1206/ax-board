@@ -1,6 +1,7 @@
 // 농가 판매 자사몰 백엔드. 화면($PORT) → 이 서버($PORT + 100) → PostgreSQL
 // 1단계: 데이터 읽기 / 2단계: 관리자 상품 관리 / 4단계: 상품 Q&A·기업 구매 문의 / 5단계: AI 상담 / 6단계: 추천 / 판매자(농가) 화면
 import 'dotenv/config'
+import { timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import express from 'express'
 import { adminRouter, UPLOAD_DIR } from './admin.js'
@@ -19,6 +20,26 @@ const PORT = Number(process.env.PORT) + 100
 const app = express()
 // 손님 IP(글 남기기 횟수 제한용)는 앞단 프록시가 붙인 값만 믿는다. 개발: Vite 1단, 배포 시 프록시 수에 맞게 TRUST_PROXY_HOPS
 app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 1))
+app.disable('x-powered-by')
+
+// 기본 보안 헤더: 파일 종류를 바꿔 해석하지 않기, 다른 사이트의 틀(iframe) 안에 넣지 않기
+app.use((req, res, next) => {
+  res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin' })
+  next()
+})
+
+// 공유 서버라 같은 서버의 다른 사용자도 이 포트(127.0.0.1)에 직접 접속할 수 있다.
+// 화면 서버(Vite·웹 서버)만 아는 PROXY_SECRET을 붙인 요청만 받아서, 직접 접속해 IP를 속이거나 AI 한도를 쓰는 걸 막는다.
+const PROXY_SECRET = process.env.PROXY_SECRET ?? ''
+if (!PROXY_SECRET) console.warn('[server] PROXY_SECRET이 없어서 누구나 이 포트로 직접 요청할 수 있어요. .env에 넣어 주세요.')
+app.use((req, res, next) => {
+  if (!PROXY_SECRET) return next()
+  const got = Buffer.from(req.get('x-proxy-secret') ?? '')
+  const want = Buffer.from(PROXY_SECRET)
+  if (got.length === want.length && timingSafeEqual(got, want)) return next()
+  res.status(403).json({ error: '허용되지 않은 접근이에요.' })
+})
+
 app.use(express.json({ limit: '100kb' }))
 
 // 상품 + 품목·농가 정보를 함께 읽는다. 품절은 재고 0으로 계산한다.
@@ -89,7 +110,10 @@ app.use('/api/seller', sellerRouter)
 app.use('/api', publicInquiryRouter)
 app.use('/api', chatRouter)
 app.use('/api', recommendRouter)
-app.use('/uploads', express.static(fileURLToPath(UPLOAD_DIR)))
+// 올린 사진은 그림으로만 쓰이게: 사진 주소를 직접 열어도 스크립트가 돌지 않는다
+app.use('/uploads', express.static(fileURLToPath(UPLOAD_DIR), {
+  setHeaders: (res) => res.set('Content-Security-Policy', "default-src 'none'; img-src 'self'; sandbox"),
+}))
 
 app.use((error, req, res, _next) => {
   if (error.type === 'entity.too.large') return res.status(413).json({ error: '파일이 너무 커요. 사진은 2MB 이하만 올릴 수 있어요.' })

@@ -52,6 +52,7 @@ export function Chat({ productCode, onOpenProduct }) {
         {messages.map((m, i) => (
           <li key={i} className={`bubble ${m.role}${m.failed ? ' failed' : ''}`}>
             <p>{m.content}</p>
+            {m.masked && <p className="muted chat-masked">연락처는 가리고 처리했어요. 답변 알림이 필요하면 상품 Q&A의 연락처 칸을 써 주세요.</p>}
             {m.sources?.length > 0 && (
               <div className="chips">
                 <span className="muted">근거</span>
@@ -79,7 +80,7 @@ export function Chat({ productCode, onOpenProduct }) {
         <input value={input} onChange={(e) => setInput(e.target.value)} maxLength={300} placeholder="궁금한 점을 적어 주세요" aria-label="질문" />
         <button type="submit" className="button" disabled={sending || input.trim().length < 2}>보내기</button>
       </form>
-      <p className="chat-note muted">AI 답변은 등록된 상품 정보 기준이에요. 건강·환불 문제는 담당자가 답해요.</p>
+      <p className="chat-note muted">AI 답변은 등록된 상품 정보 기준이에요. 건강·환불 문제는 담당자가 답해요. 연락처 같은 개인정보는 적지 말아 주세요.</p>
     </section>
   )
 }

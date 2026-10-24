@@ -32,6 +32,10 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
   if (isNew && !isCode(p.product_code)) errors.push('상품 코드는 영문 소문자·숫자·밑줄만 쓸 수 있어요.')
   if (!p.name) errors.push('상품 이름을 적어 주세요.')
   if (!p.unit) errors.push('판매 단위를 적어 주세요. (예: 5kg 1박스)')
+  // 상품 글은 AI 상담 자료로도 들어가므로 길이를 제한한다 (긴 지시문을 숨겨 넣는 것 방지)
+  for (const [key, label, max] of [['name', '상품 이름', 60], ['unit', '판매 단위', 30], ['summary', '한 줄 소개', 200], ['external_url', '판매 링크', 300]]) {
+    if (p[key].length > max) errors.push(`${label}은(는) ${max}자 안으로 적어 주세요.`)
+  }
   if (!itemCodes.has(p.item_code)) errors.push('품목을 골라 주세요.')
   if (!sellerCodes.has(p.seller_code)) errors.push('판매 농가를 골라 주세요.')
   if (!/^\d+$/.test(p.price) || Number(p.price) === 0) errors.push('가격은 0보다 큰 숫자(원)만 적어 주세요.')

@@ -94,12 +94,22 @@ adminRouter.patch('/products/:code', async (req, res) => {
   res.json(row)
 })
 
+// 형식마다 파일 맨 앞에 오는 고정된 바이트
+function looksLike(type, b) {
+  if (type === 'image/jpeg') return b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff
+  if (type === 'image/png') return b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  if (type === 'image/webp') return b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP'
+  return false
+}
+
 // 상품 사진 올리기: jpg·png·webp, 2MB 이하. 파일 이름은 서버가 정한다
 export const rawImage = express.raw({ type: Object.keys(IMAGE_TYPES), limit: MAX_IMAGE_BYTES })
 
 export async function storeImage(req, res) {
-  const ext = IMAGE_TYPES[req.headers['content-type']]
-  if (!ext || !Buffer.isBuffer(req.body) || req.body.length === 0) {
+  const type = req.headers['content-type']
+  const ext = IMAGE_TYPES[type]
+  // 이름표(Content-Type)만 믿지 않고 파일 앞부분이 진짜 그 사진 형식인지 확인한다
+  if (!ext || !Buffer.isBuffer(req.body) || req.body.length === 0 || !looksLike(type, req.body)) {
     return res.status(400).json({ error: '사진은 jpg, png, webp 파일만 올릴 수 있어요. (2MB 이하)' })
   }
   const current = await pool.query('SELECT 1 FROM products WHERE product_code = $1', [req.params.code])

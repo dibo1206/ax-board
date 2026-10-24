@@ -126,3 +126,17 @@ ALTER TABLE admins ADD CONSTRAINT admins_role_check
 ALTER TABLE products DROP CONSTRAINT IF EXISTS products_status_check;
 ALTER TABLE products ADD CONSTRAINT products_status_check CHECK (status IN ('draft', 'pending', 'active'));
 ALTER TABLE products ADD COLUMN IF NOT EXISTS review_note TEXT;
+
+-- API 아끼기: 하루 전체 AI 호출 수(상한 확인용)와 같은 질문의 답 저장
+CREATE TABLE IF NOT EXISTS ai_usage (
+  day DATE PRIMARY KEY,
+  calls INT NOT NULL DEFAULT 0
+);
+-- key = 질문 + AI에게 준 자료의 해시. 상품 정보가 바뀌면 자료가 달라져 key도 달라진다
+CREATE TABLE IF NOT EXISTS chat_cache (
+  key TEXT PRIMARY KEY,
+  reply JSONB NOT NULL,
+  model TEXT,
+  hits INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -1,5 +1,6 @@
 // OpenRouter 호출. 키는 .env 의 OPENROUTER_API_KEY 에서만 읽고, 코드·로그·응답에 키 값을 쓰지 않는다.
 import OpenAI from 'openai'
+import { pool } from './db.js'
 
 // 무료 등급 키라서 무료 모델만 쓴다. 무료 모델은 자주 붐비니(429) 앞에서부터 차례로 시도한다.
 // JSON 모드를 지원하는 모델만 고른다 (2026-10-23 확인). 바꾸려면 .env 에 CHAT_MODEL=모델ID,모델ID
@@ -22,11 +23,35 @@ export function keyLoaded() {
   return Boolean(process.env.OPENROUTER_API_KEY)
 }
 
+// 하루 전체 AI 호출 상한 (모든 손님 합계). 무료 키는 하루 약 50회라 테스트할 몫을 남겨 둔다
+export const dailyLimit = () => Number(process.env.AI_DAILY_LIMIT || 40)
+const TODAY = "(now() AT TIME ZONE 'Asia/Seoul')::date"
+
+export async function usageToday() {
+  const { rows } = await pool.query(`SELECT calls FROM ai_usage WHERE day = ${TODAY}`)
+  return rows[0]?.calls ?? 0
+}
+
+// 한 번 부를 때마다 센다 (OpenRouter는 실패한 요청도 횟수에 넣는다). 상한에 닿았으면 false
+async function takeCall() {
+  const { rows } = await pool.query(
+    `INSERT INTO ai_usage (day, calls) VALUES (${TODAY}, 1)
+     ON CONFLICT (day) DO UPDATE SET calls = ai_usage.calls + 1 WHERE ai_usage.calls < $1
+     RETURNING calls`,
+    [dailyLimit()],
+  )
+  return rows.length > 0
+}
+
 // skip: 방금 답이 규칙에 걸린 모델은 다시 쓰지 않고 다음 모델로 (같은 실수를 되풀이하는 경우가 많다)
-export async function complete(messages, { skip = [] } = {}) {
+// maxTries: 이번에 시도할 모델 수. 질문 하나가 호출을 많이 쓰지 않게 부르는 쪽에서 정한다
+export async function complete(messages, { skip = [], maxTries = MODELS.length } = {}) {
   let lastError
   const models = MODELS.filter((m) => !skip.some((s) => s.startsWith(m)))
-  for (const model of models.length ? models : MODELS) {
+  for (const model of (models.length ? models : MODELS).slice(0, maxTries)) {
+    if (!(await takeCall())) {
+      throw Object.assign(new Error(`오늘 AI 호출 상한(${dailyLimit()}회)에 닿았어요`), { code: 'DAILY_LIMIT' })
+    }
     try {
       const completion = await getClient().chat.completions.create({
         model,

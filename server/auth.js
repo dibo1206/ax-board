@@ -54,20 +54,41 @@ function setSessionCookie(res, value, maxAgeSeconds) {
   res.setHeader('Set-Cookie', `${COOKIE}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${secure}`)
 }
 
-// 같은 아이디로 5번 틀리면 10분 동안 막는다 (서버 메모리 기준)
+// 같은 아이디로 5번 틀리면 10분 동안 막는다. 아이디를 바꿔 가며 시도하는 것도 막으려고 같은 IP는 20번까지 (서버 메모리 기준)
 const fails = new Map()
+const ipFails = new Map()
+const MAX_IP_FAILS = 20
+
+function locked(map, key, max) {
+  const record = map.get(key)
+  if (!record) return false
+  if (Date.now() - record.at >= LOCK_MINUTES * 60_000) {
+    map.delete(key)
+    return false
+  }
+  return record.count >= max
+}
+
+function addFail(map, key) {
+  const record = map.get(key)
+  const fresh = !record || Date.now() - record.at >= LOCK_MINUTES * 60_000
+  map.set(key, { count: fresh ? 1 : record.count + 1, at: fresh ? Date.now() : record.at })
+  if (map.size > 5000) { // 아이디를 무작위로 바꿔 메모리를 채우는 공격 대비: 시간이 지난 기록부터 지운다
+    for (const [k, v] of map) if (Date.now() - v.at >= LOCK_MINUTES * 60_000) map.delete(k)
+  }
+}
 
 export async function login(req, res) {
-  const loginId = typeof req.body.loginId === 'string' ? req.body.loginId.trim() : ''
-  const password = typeof req.body.password === 'string' ? req.body.password : ''
-  const record = fails.get(loginId)
-  if (record && record.count >= MAX_FAILS && Date.now() - record.at < LOCK_MINUTES * 60_000) {
+  const loginId = typeof req.body.loginId === 'string' ? req.body.loginId.trim().slice(0, 40) : ''
+  const password = typeof req.body.password === 'string' ? req.body.password.slice(0, 200) : ''
+  if (locked(ipFails, req.ip, MAX_IP_FAILS) || locked(fails, loginId, MAX_FAILS)) {
     return res.status(429).json({ error: `로그인을 여러 번 틀렸어요. ${LOCK_MINUTES}분 뒤에 다시 시도해 주세요.` })
   }
   const { rows } = await pool.query('SELECT id, login_id, password_hash, role, seller_code FROM admins WHERE login_id = $1', [loginId])
   const ok = rows.length === 1 && (await verifyPassword(password, rows[0].password_hash))
   if (!ok) {
-    fails.set(loginId, { count: (record?.count ?? 0) + 1, at: Date.now() })
+    addFail(fails, loginId)
+    addFail(ipFails, req.ip)
     return res.status(401).json({ error: '아이디 또는 비밀번호가 맞지 않아요.' })
   }
   fails.delete(loginId)
