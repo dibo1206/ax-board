@@ -140,3 +140,52 @@ CREATE TABLE IF NOT EXISTS chat_cache (
   hits INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- 7단계: 자체 주문·결제 (토스페이먼츠). 금액은 서버가 DB 가격으로 계산하고, 결제 승인 때 다시 확인한다
+-- 상태: pending(결제 전, 재고 잡아 둠) → paid → preparing → shipping → delivered
+--       pending → failed / expired(30분 지나면 재고 돌려놓음), paid·preparing → cancelled(결제 취소·재고 복구)
+CREATE TABLE IF NOT EXISTS orders (
+  id SERIAL PRIMARY KEY,
+  order_no TEXT UNIQUE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'paid', 'preparing', 'shipping', 'delivered', 'cancelled', 'failed', 'expired')),
+  buyer_name TEXT NOT NULL,
+  buyer_phone TEXT NOT NULL,
+  receiver_name TEXT NOT NULL,
+  receiver_phone TEXT NOT NULL,
+  zipcode TEXT NOT NULL,
+  address1 TEXT NOT NULL,
+  address2 TEXT,
+  memo TEXT,
+  items_amount INT NOT NULL CHECK (items_amount > 0),
+  shipping_fee INT NOT NULL CHECK (shipping_fee >= 0),
+  total_amount INT NOT NULL CHECK (total_amount > 0),
+  payment_key TEXT,
+  payment_method TEXT,
+  paid_at TIMESTAMPTZ,
+  courier TEXT,
+  tracking_no TEXT,
+  cancel_reason TEXT,
+  cancelled_at TIMESTAMPTZ,
+  fail_reason TEXT,
+  is_test BOOLEAN NOT NULL DEFAULT false,
+  agreed_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS orders_status_idx ON orders (status, created_at);
+
+-- 주문 당시의 상품 이름·가격을 그대로 남긴다 (나중에 상품 가격이 바뀌어도 주문 내역은 그대로)
+CREATE TABLE IF NOT EXISTS order_items (
+  id SERIAL PRIMARY KEY,
+  order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  product_code TEXT NOT NULL REFERENCES products(product_code),
+  seller_code TEXT NOT NULL REFERENCES sellers(seller_code),
+  name TEXT NOT NULL,
+  unit TEXT NOT NULL,
+  price INT NOT NULL CHECK (price > 0),
+  quantity INT NOT NULL CHECK (quantity BETWEEN 1 AND 99),
+  subtotal INT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS order_items_order_idx ON order_items (order_id);
+CREATE INDEX IF NOT EXISTS order_items_seller_idx ON order_items (seller_code);

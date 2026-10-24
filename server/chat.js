@@ -11,6 +11,7 @@ import { pool } from './db.js'
 import { createLimiter } from './limit.js'
 import { maskPersonal } from './privacy.js'
 import { describeRecommendation, loadActive, readWish, recommend } from './recommend.js'
+import { SHIPPING } from './policy.js'
 import { FORBIDDEN } from './validate.js'
 
 const RULES_FILE = new URL('./chat_rules.md', import.meta.url)
@@ -34,11 +35,26 @@ const ROUTES = [
   {
     kind: 'refund',
     re: /환불|교환|반품|파손|불량|배송.{0,8}(안\s?와|안\s?오|늦|누락|잘못)|(받|온|왔|도착).{0,12}(상했|썩|깨졌|터졌|곰팡이|물러)/,
-    answer: () => '불편을 드려 죄송해요. 환불·교환은 제가 결정할 수 없어서 담당자에게 넘길게요. '
-      + '구매하신 곳(스마트스토어·쿠팡 등)과 받은 날짜, 상품 상태를 상품 Q&A에 남겨 주시면 담당자가 확인 후 안내해 드려요. '
-      + '연락처는 공개되지 않는 연락처 칸에만 적어 주세요.',
+    answer: () => '불편을 드려 죄송해요. 환불·교환 여부는 제가 결정할 수 없어서 담당자에게 넘길게요. '
+      + '받은 날부터 7일 안에 주문번호와 상품 상태(사진)를 고객센터나 상품 Q&A로 알려 주시면 담당자가 확인 후 안내해 드려요. '
+      + '자세한 기준은 화면 아래 [교환·환불 정책]에 있어요. 배송 준비 전이면 [주문 조회]에서 바로 취소할 수도 있어요.',
     handoff: true,
     action: 'qna',
+  },
+  {
+    kind: 'order',
+    re: /주문.{0,6}(확인|조회|어디|언제|취소|상태)|배송.{0,6}(언제|어디|조회|출발|상태)|송장|운송장|택배.{0,4}(언제|어디|조회)/,
+    answer: () => '주문 상태와 송장 번호는 [주문 조회]에서 주문번호와 주문자 휴대폰 번호로 확인할 수 있어요. '
+      + '배송 준비가 시작되기 전(결제 완료 상태)이면 거기서 바로 취소도 할 수 있어요. 주문 정보는 상담창에서 확인하지 않아요.',
+    handoff: false,
+    action: 'lookup',
+  },
+  {
+    kind: 'shipping',
+    re: /배송비|무료\s?배송|택배비|언제\s?(와|도착|받)|며칠.{0,4}(걸|와)/,
+    answer: () => `배송비는 ${SHIPPING.fee.toLocaleString('ko-KR')}원이고, ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상 사면 무료예요. ${SHIPPING.leadTime}.`,
+    handoff: false,
+    action: null,
   },
   {
     kind: 'b2b',

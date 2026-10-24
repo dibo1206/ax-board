@@ -61,7 +61,8 @@ export function Chat({ productCode, onOpenProduct }) {
                 ))}
               </div>
             )}
-            {m.action && m.productCode && (
+            {m.action === 'lookup' && <a className="button ghost" href="/order/lookup">주문 조회 열기</a>}
+            {m.action && m.action !== 'lookup' && m.productCode && (
               <button type="button" className="button ghost" onClick={() => onOpenProduct(m.productCode, m.action)}>
                 {m.action === 'b2b' ? '기업 구매 문의 열기' : '상품 Q&A에 질문 남기기'}
               </button>

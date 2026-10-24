@@ -1,5 +1,5 @@
 // 농가 판매 자사몰 백엔드. 화면($PORT) → 이 서버($PORT + 100) → PostgreSQL
-// 1단계: 데이터 읽기 / 2단계: 관리자 상품 관리 / 4단계: 상품 Q&A·기업 구매 문의 / 5단계: AI 상담 / 6단계: 추천 / 판매자(농가) 화면
+// 1단계: 데이터 읽기 / 2단계: 관리자 상품 관리 / 4단계: 상품 Q&A·기업 구매 문의 / 5단계: AI 상담 / 6단계: 추천 / 판매자(농가) 화면 / 7단계: 자체 주문·결제
 import 'dotenv/config'
 import { timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
@@ -9,6 +9,7 @@ import { currentAdmin, login, logout } from './auth.js'
 import { adminChatRouter, chatRouter } from './chat.js'
 import { initDb, pool } from './db.js'
 import { adminInquiryRouter, maskName, publicInquiryRouter } from './inquiry.js'
+import { adminOrderRouter, publicOrderRouter, sellerOrderRouter, startOrderSweeper } from './orders.js'
 import { recommendRouter } from './recommend.js'
 import { sellerRouter } from './seller.js'
 
@@ -105,11 +106,14 @@ app.get('/api/admin/me', (req, res) => {
 })
 app.use('/api/admin/inquiries', adminInquiryRouter)
 app.use('/api/admin/chat-logs', adminChatRouter)
+app.use('/api/admin/orders', adminOrderRouter)
 app.use('/api/admin', adminRouter)
+app.use('/api/seller/orders', sellerOrderRouter)
 app.use('/api/seller', sellerRouter)
 app.use('/api', publicInquiryRouter)
 app.use('/api', chatRouter)
 app.use('/api', recommendRouter)
+app.use('/api', publicOrderRouter)
 // 올린 사진은 그림으로만 쓰이게: 사진 주소를 직접 열어도 스크립트가 돌지 않는다
 app.use('/uploads', express.static(fileURLToPath(UPLOAD_DIR), {
   setHeaders: (res) => res.set('Content-Security-Policy', "default-src 'none'; img-src 'self'; sandbox"),
@@ -122,6 +126,7 @@ app.use((error, req, res, _next) => {
 })
 
 await initDb()
+startOrderSweeper()
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`[server] http://127.0.0.1:${PORT}`)
 })

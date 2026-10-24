@@ -3,6 +3,7 @@ import { Login, StatusLabel } from '../admin/Admin.jsx'
 import { adminApi, sellerApi } from '../admin/api.js'
 import { QuestionRow } from '../admin/Inbox.jsx'
 import { ProductForm } from '../admin/ProductForm.jsx'
+import { ORDER_STATUS, when } from '../shop/shared.js'
 
 // 판매자(농가) 화면: 로그인 → [내 상품 | 상품 문의 | 농가 소개]. 모든 요청은 /api/seller (자기 농가 것만)
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
@@ -105,6 +106,53 @@ function MyQuestions({ onMessage, onError }) {
   )
 }
 
+// 내 농가 상품이 들어 있는 주문. 내 상품만 있는 주문은 직접 배송 처리(송장 입력)할 수 있다
+function MyOrders({ onMessage, onError }) {
+  const [orders, setOrders] = useState(null)
+  const [tracking, setTracking] = useState({})
+
+  const load = () => sellerApi('/orders').then(setOrders).catch((e) => onError(e.message))
+  useEffect(() => {
+    sellerApi('/orders').then(setOrders).catch((e) => onError(e.message))
+  }, [onError])
+
+  async function advance(o, status) {
+    const t = tracking[o.order_no] ?? {}
+    try {
+      await sellerApi(`/orders/${o.order_no}`, { method: 'PATCH', body: { status, courier: t.courier, trackingNo: t.no } })
+      onMessage(`${o.order_no}: ${ORDER_STATUS[status]}`)
+      load()
+    } catch (e) {
+      onError(e.message)
+    }
+  }
+  const setT = (no, key) => (e) => setTracking((prev) => ({ ...prev, [no]: { ...prev[no], [key]: e.target.value } }))
+
+  if (!orders) return <p className="muted">불러오는 중…</p>
+  if (!orders.length) return <p className="muted">아직 내 상품 주문이 없어요.</p>
+  return (
+    <ul className="inbox">
+      {orders.map((o) => (
+        <li key={o.order_no} className={`box${o.status === 'cancelled' ? ' dim' : ''}`}>
+          <p><b>{o.order_no}</b> · {ORDER_STATUS[o.status]} · {when(o.created_at)}{o.is_test && ' · 테스트'}</p>
+          <ul>{o.items.map((i) => <li key={i.name}>{i.name} ({i.unit}) × {i.quantity}</li>)}</ul>
+          {o.receiver && <p className="muted">받는 분 {o.receiver.name} · {o.receiver.phone} · ({o.receiver.zipcode}) {o.receiver.address1} {o.receiver.address2 ?? ''}{o.receiver.memo && ` · 메모: ${o.receiver.memo}`}</p>}
+          {o.tracking_no && <p className="muted">송장 {o.courier} {o.tracking_no}</p>}
+          {!o.only_mine && o.status !== 'cancelled' && <p className="muted">다른 농가 상품과 함께 주문돼 회사에서 배송해요.</p>}
+          {o.only_mine && o.status === 'paid' && <button type="button" className="button ghost" onClick={() => advance(o, 'preparing')}>배송 준비 시작</button>}
+          {o.only_mine && o.status === 'preparing' && (
+            <div className="row form">
+              <label>택배사<input value={tracking[o.order_no]?.courier ?? ''} onChange={setT(o.order_no, 'courier')} /></label>
+              <label>송장 번호<input value={tracking[o.order_no]?.no ?? ''} onChange={setT(o.order_no, 'no')} inputMode="numeric" /></label>
+              <button type="button" className="button" onClick={() => advance(o, 'shipping')}>배송 시작</button>
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function Profile({ seller, onSaved, onError }) {
   const [intro, setIntro] = useState(seller.intro ?? '')
   const [story, setStory] = useState(seller.story ?? '')
@@ -172,6 +220,7 @@ export default function Seller() {
         <nav className="tabs">
           <button type="button" className={tab === 'products' ? 'on' : ''} onClick={() => go('products')}>내 상품</button>
           <button type="button" className={tab === 'questions' ? 'on' : ''} onClick={() => go('questions')}>상품 문의</button>
+          <button type="button" className={tab === 'orders' ? 'on' : ''} onClick={() => go('orders')}>주문</button>
           <button type="button" className={tab === 'profile' ? 'on' : ''} onClick={() => go('profile')}>농가 소개</button>
         </nav>
         <span className="muted">{me.seller.name} · {me.loginId}</span>
@@ -181,6 +230,7 @@ export default function Seller() {
       {error && <p className="error">{error}</p>}
       {tab === 'products' && <MyProducts onMessage={setMessage} onError={setError} />}
       {tab === 'questions' && <MyQuestions onMessage={setMessage} onError={setError} />}
+      {tab === 'orders' && <MyOrders onMessage={setMessage} onError={setError} />}
       {tab === 'profile' && (
         <Profile
           seller={me.seller}

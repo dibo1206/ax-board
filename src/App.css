@@ -119,3 +119,33 @@ button:disabled { opacity: 0.6; cursor: wait; }
 /* ---------- 판매자 화면 ---------- */
 .badge.pending { border-color: #9a6700; color: #9a6700; }
 .form textarea { min-height: 3em; }
+
+/* ---------- 7단계: 주문·결제 ---------- */
+.shop-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 8px; }
+.brand { font-size: 1.4rem; font-weight: 800; color: var(--text); text-decoration: none; }
+.shop-nav { display: flex; gap: 16px; }
+.shop-nav a { color: var(--text); text-decoration: none; font-weight: 600; }
+.count { display: inline-block; min-width: 1.4em; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 0.8rem; text-align: center; }
+.shop-foot { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--muted); }
+.shop-foot nav { display: flex; gap: 16px; margin-bottom: 8px; }
+.shop-foot a { color: var(--muted); }
+.buy { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.buy .qty select { margin-left: 8px; padding: 6px 8px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+.cart { list-style: none; margin: 0; padding: 0; }
+.cart li { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 12px; }
+.qty { display: flex; align-items: center; gap: 8px; }
+.qty button { width: 32px; height: 32px; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.totals { display: grid; grid-template-columns: 1fr auto; gap: 6px; max-width: 360px; margin: 16px 0 16px auto; }
+.totals dd { margin: 0; text-align: right; }
+.totals .sum { font-weight: 800; font-size: 1.1rem; }
+.totals .full { grid-column: 1 / -1; }
+.checkout { display: flex; flex-direction: column; gap: 4px; }
+.checkout .row { align-items: end; }
+.detail-list { display: grid; grid-template-columns: 90px 1fr; gap: 6px; }
+.detail-list dt { color: var(--muted); }
+.detail-list dd { margin: 0; }
+.order-items { padding-left: 18px; }
+.policy section { margin: 16px 0; }
+.policy p { line-height: 1.6; }
+#payment-method, #payment-agreement { margin: 8px 0; }
+@media (max-width: 560px) { .cart li { grid-template-columns: 1fr auto; } }

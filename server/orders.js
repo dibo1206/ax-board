@@ -1,0 +1,403 @@
+// 7단계: 자체 주문·결제
+// 1) 주문 만들기: 금액은 서버가 DB 가격으로 계산하고, 재고를 바로 잡아 둔다 (동시에 사도 초과 판매 없음)
+// 2) 결제 승인: 토스가 돌려준 paymentKey·금액을 우리 주문과 맞춰 본 뒤 서버에서만 승인한다
+// 3) 결제를 안 하고 30분이 지나면 주문을 만료하고 잡아 둔 재고를 돌려놓는다
+import { randomBytes } from 'node:crypto'
+import express from 'express'
+import { requireAdmin, requireSeller } from './auth.js'
+import { pool } from './db.js'
+import { createLimiter } from './limit.js'
+import { cancelPayment, clientKey, confirmPayment, isTestPayment, paymentMode } from './payments.js'
+import { POLICIES, SHIPPING, SHOP, shippingFee } from './policy.js'
+
+const PENDING_MINUTES = 30
+const text = (v) => (typeof v === 'string' ? v.trim() : '')
+const digits = (v) => text(v).replace(/[^0-9]/g, '')
+const isMobile = (v) => /^01[016789]\d{7,8}$/.test(v)
+const isPhone = (v) => /^0\d{8,10}$/.test(v)
+
+// 주문번호: 날짜 + 추측할 수 없는 10글자 (토스 규칙: 영문·숫자·-·_ 6~64자)
+function newOrderNo() {
+  const day = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' }).replaceAll('-', '').slice(2)
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  const random = [...randomBytes(10)].map((b) => alphabet[b % alphabet.length]).join('')
+  return `FM${day}-${random}`
+}
+
+async function restoreStock(client, orderId) {
+  await client.query(
+    `UPDATE products p SET stock = p.stock + oi.quantity, updated_at = now()
+     FROM order_items oi WHERE oi.order_id = $1 AND p.product_code = oi.product_code`,
+    [orderId],
+  )
+}
+
+async function inTransaction(work) {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const result = await work(client)
+    await client.query('COMMIT')
+    return result
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+// 결제하지 않고 30분이 지난 주문 → 만료, 재고 복구
+export async function expirePending() {
+  const { rows } = await pool.query(
+    `SELECT id FROM orders WHERE status = 'pending' AND created_at < now() - make_interval(mins => $1)`,
+    [PENDING_MINUTES],
+  )
+  for (const { id } of rows) {
+    await inTransaction(async (client) => {
+      const locked = await client.query("SELECT id FROM orders WHERE id = $1 AND status = 'pending' FOR UPDATE", [id])
+      if (!locked.rowCount) return
+      await restoreStock(client, id)
+      await client.query("UPDATE orders SET status = 'expired', updated_at = now() WHERE id = $1", [id])
+    })
+  }
+  if (rows.length) console.log(`[order] 결제 안 된 주문 ${rows.length}건 만료, 재고 복구`)
+}
+
+export function startOrderSweeper() {
+  setInterval(() => expirePending().catch((e) => console.error(`[order] 만료 처리 실패 · ${e.message}`)), 5 * 60_000).unref()
+}
+
+async function loadOrder(orderNo, client = pool) {
+  const { rows } = await client.query('SELECT * FROM orders WHERE order_no = $1', [orderNo])
+  if (!rows.length) return null
+  const items = await client.query(
+    'SELECT product_code, seller_code, name, unit, price, quantity, subtotal FROM order_items WHERE order_id = $1 ORDER BY id',
+    [rows[0].id],
+  )
+  return { ...rows[0], items: items.rows }
+}
+
+// 손님에게 보여 줄 주문 (결제 키·내부 번호는 빼고)
+function publicOrder(order) {
+  const { id: _id, payment_key: _key, ...rest } = order
+  return rest
+}
+
+// ---------- 손님용 ----------
+export const publicOrderRouter = express.Router()
+const tooManyOrders = createLimiter({ limit: 10, windowMs: 10 * 60_000 })
+const tooManyLookups = createLimiter({ limit: 10, windowMs: 10 * 60_000 })
+const tooManyPayments = createLimiter({ limit: 20, windowMs: 10 * 60_000 })
+
+publicOrderRouter.get('/policy', (req, res) => {
+  res.json({ shop: SHOP, shipping: SHIPPING, policies: POLICIES, payment: { mode: paymentMode(), test: isTestPayment() } })
+})
+
+function readOrderInput(body) {
+  const errors = []
+  const merged = new Map()
+  for (const item of Array.isArray(body.items) ? body.items.slice(0, 20) : []) {
+    const code = text(item?.productCode)
+    const quantity = Number(item?.quantity)
+    if (!/^[a-z0-9_]{1,64}$/.test(code) || !Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
+      errors.push('주문 상품 정보가 올바르지 않아요.')
+      break
+    }
+    merged.set(code, Math.min(99, (merged.get(code) ?? 0) + quantity))
+  }
+  if (!merged.size && !errors.length) errors.push('주문할 상품이 없어요.')
+  const input = {
+    buyerName: text(body.buyerName),
+    buyerPhone: digits(body.buyerPhone),
+    receiverName: text(body.receiverName),
+    receiverPhone: digits(body.receiverPhone),
+    zipcode: text(body.zipcode),
+    address1: text(body.address1),
+    address2: text(body.address2),
+    memo: text(body.memo),
+  }
+  if (!input.buyerName || input.buyerName.length > 20) errors.push('주문자 이름을 20자 안으로 적어 주세요.')
+  if (!isMobile(input.buyerPhone)) errors.push('주문자 휴대폰 번호를 확인해 주세요. (주문 조회에 써요)')
+  if (!input.receiverName || input.receiverName.length > 20) errors.push('받는 분 이름을 20자 안으로 적어 주세요.')
+  if (!isPhone(input.receiverPhone)) errors.push('받는 분 연락처를 확인해 주세요.')
+  if (!/^\d{5}$/.test(input.zipcode)) errors.push('우편번호 5자리를 넣어 주세요.')
+  if (!input.address1 || input.address1.length > 100) errors.push('주소를 넣어 주세요.')
+  if (input.address2.length > 60) errors.push('상세 주소는 60자 안으로 적어 주세요.')
+  if (input.memo.length > 100) errors.push('배송 메모는 100자 안으로 적어 주세요.')
+  if (body.agreeTerms !== true || body.agreePrivacy !== true) errors.push('구매 조건 확인과 개인정보 수집·이용에 동의해 주세요.')
+  return { input, items: [...merged].map(([productCode, quantity]) => ({ productCode, quantity })), errors }
+}
+
+publicOrderRouter.post('/orders', async (req, res) => {
+  if (paymentMode() === 'off') return res.status(503).json({ error: '지금은 주문을 받을 수 없어요. 잠시 후 다시 시도해 주세요.' })
+  const { input, items, errors } = readOrderInput(req.body)
+  if (errors.length) return res.status(400).json({ error: errors.join(' '), errors })
+  if (tooManyOrders(req)) return res.status(429).json({ error: '주문 시도가 너무 많아요. 잠시 후 다시 시도해 주세요.' })
+  await expirePending()
+
+  try {
+    const order = await inTransaction(async (client) => {
+      const lines = []
+      for (const { productCode, quantity } of items) {
+        // 판매 중이고 재고가 충분할 때만 재고를 줄인다. 가격은 이 순간의 DB 가격
+        const { rows } = await client.query(
+          `UPDATE products SET stock = stock - $2, updated_at = now()
+           WHERE product_code = $1 AND status = 'active' AND stock >= $2
+           RETURNING product_code, seller_code, name, unit, price`,
+          [productCode, quantity],
+        )
+        if (!rows.length) {
+          const found = await client.query('SELECT name, stock FROM products WHERE product_code = $1 AND status = $2', [productCode, 'active'])
+          const reason = found.rowCount ? `${found.rows[0].name}: 재고가 ${found.rows[0].stock}개 남았어요.` : '판매하지 않는 상품이 들어 있어요.'
+          throw Object.assign(new Error(reason), { status: 409 })
+        }
+        lines.push({ ...rows[0], quantity, subtotal: rows[0].price * quantity })
+      }
+      const itemsAmount = lines.reduce((sum, l) => sum + l.subtotal, 0)
+      const fee = shippingFee(itemsAmount)
+      const orderNo = newOrderNo()
+      const { rows } = await client.query(
+        `INSERT INTO orders (order_no, buyer_name, buyer_phone, receiver_name, receiver_phone, zipcode, address1, address2, memo,
+                             items_amount, shipping_fee, total_amount, is_test, agreed_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now()) RETURNING id`,
+        [orderNo, input.buyerName, input.buyerPhone, input.receiverName, input.receiverPhone, input.zipcode, input.address1,
+          input.address2 || null, input.memo || null, itemsAmount, fee, itemsAmount + fee, isTestPayment()],
+      )
+      for (const l of lines) {
+        await client.query(
+          `INSERT INTO order_items (order_id, product_code, seller_code, name, unit, price, quantity, subtotal)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [rows[0].id, l.product_code, l.seller_code, l.name, l.unit, l.price, l.quantity, l.subtotal],
+        )
+      }
+      const first = lines[0].name.replace(/\[예시\]\s*/g, '')
+      return {
+        orderNo,
+        orderName: (lines.length > 1 ? `${first} 외 ${lines.length - 1}건` : first).slice(0, 100),
+        itemsAmount,
+        shippingFee: fee,
+        amount: itemsAmount + fee,
+      }
+    })
+    console.log(`[order] 주문 생성 ${order.orderNo} · ${order.amount}원`)
+    res.status(201).json({ ...order, payment: { mode: paymentMode(), clientKey: clientKey(), test: isTestPayment() } })
+  } catch (error) {
+    if (error.status === 409) return res.status(409).json({ error: error.message })
+    throw error
+  }
+})
+
+// 결제 승인 (결제창에서 successUrl로 돌아온 화면이 부른다). 여러 번 불려도 한 번만 승인된다
+publicOrderRouter.post('/orders/:orderNo/confirm', async (req, res) => {
+  if (tooManyPayments(req)) return res.status(429).json({ error: '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.' })
+  const paymentKey = text(req.body.paymentKey).slice(0, 200)
+  const amount = Number(req.body.amount)
+  if (!paymentKey || !Number.isInteger(amount)) return res.status(400).json({ error: '결제 정보가 올바르지 않아요.' })
+
+  const result = await inTransaction(async (client) => {
+    const { rows } = await client.query('SELECT * FROM orders WHERE order_no = $1 FOR UPDATE', [req.params.orderNo])
+    const order = rows[0]
+    if (!order) return { status: 404, error: '주문을 찾지 못했어요.' }
+    if (order.status === 'paid' && order.payment_key === paymentKey) return { status: 200 } // 새로고침 등으로 다시 불림
+    if (order.status !== 'pending') {
+      const why = { expired: '결제 시간(30분)이 지나 주문이 만료됐어요. 다시 주문해 주세요.', failed: '이미 실패 처리된 주문이에요. 다시 주문해 주세요.' }
+      return { status: 409, error: why[order.status] ?? '이미 처리된 주문이에요.' }
+    }
+    // 금액 조작 확인: 결제창에서 돌아온 금액이 서버가 계산한 금액과 같아야 한다
+    if (amount !== order.total_amount) {
+      await restoreStock(client, order.id)
+      await client.query("UPDATE orders SET status = 'failed', fail_reason = $2, updated_at = now() WHERE id = $1", [order.id, '결제 금액 불일치'])
+      console.warn(`[order] ${order.order_no} 결제 금액 불일치 (요청 ${amount} / 주문 ${order.total_amount})`)
+      return { status: 400, error: '결제 금액이 주문 금액과 달라요. 다시 주문해 주세요.' }
+    }
+    try {
+      const paid = await confirmPayment({ paymentKey, orderId: order.order_no, amount })
+      await client.query(
+        `UPDATE orders SET status = 'paid', payment_key = $2, payment_method = $3, paid_at = $4, updated_at = now() WHERE id = $1`,
+        [order.id, paymentKey, paid.method, paid.approvedAt],
+      )
+      console.log(`[order] 결제 완료 ${order.order_no} · ${amount}원 · ${paid.method}`)
+      return { status: 200 }
+    } catch (error) {
+      // 승인은 됐는데 정보가 다르거나 지원하지 않는 상태면 바로 취소해서 돈이 묶이지 않게 한다
+      if (error.payment?.paymentKey) {
+        await cancelPayment({ paymentKey: error.payment.paymentKey, orderId: order.order_no, reason: '주문 확인 실패로 자동 취소' })
+          .catch((e) => console.error(`[order] ${order.order_no} 자동 취소 실패 — 직접 확인 필요 · ${e.message}`))
+      }
+      await restoreStock(client, order.id)
+      await client.query("UPDATE orders SET status = 'failed', fail_reason = $2, updated_at = now() WHERE id = $1", [order.id, (error.code ?? error.message).slice(0, 100)])
+      console.warn(`[order] 결제 승인 실패 ${order.order_no} · ${error.status ?? ''} ${error.code ?? ''}`)
+      return { status: 402, error: error.code === 'UNSUPPORTED_STATUS' ? error.message : `결제를 완료하지 못했어요. ${error.message}` }
+    }
+  })
+  if (result.error) return res.status(result.status).json({ error: result.error })
+  res.json(publicOrder(await loadOrder(req.params.orderNo)))
+})
+
+// 결제창에서 취소하거나 실패해서 failUrl로 돌아왔을 때: 재고를 바로 돌려놓는다
+publicOrderRouter.post('/orders/:orderNo/fail', async (req, res) => {
+  if (tooManyPayments(req)) return res.status(429).json({ error: '요청이 너무 많아요.' })
+  const reason = text(req.body.code || req.body.message).slice(0, 100) || '결제 취소'
+  await inTransaction(async (client) => {
+    const { rows } = await client.query("SELECT id FROM orders WHERE order_no = $1 AND status = 'pending' FOR UPDATE", [req.params.orderNo])
+    if (!rows.length) return
+    await restoreStock(client, rows[0].id)
+    await client.query("UPDATE orders SET status = 'failed', fail_reason = $2, updated_at = now() WHERE id = $1", [rows[0].id, reason])
+  })
+  res.status(204).end()
+})
+
+// 비회원 주문 조회: 주문번호 + 주문자 휴대폰 번호가 둘 다 맞아야 한다
+async function findMyOrder(req) {
+  const orderNo = text(req.body.orderNo).toUpperCase()
+  const phone = digits(req.body.phone)
+  if (!/^FM\d{6}-[A-Z0-9]{10}$/.test(orderNo) || !phone) return null
+  const order = await loadOrder(orderNo)
+  return order && order.buyer_phone === phone && !['failed', 'expired'].includes(order.status) ? order : null
+}
+
+publicOrderRouter.post('/orders/lookup', async (req, res) => {
+  if (tooManyLookups(req)) return res.status(429).json({ error: '조회가 너무 많아요. 10분 뒤에 다시 시도해 주세요.' })
+  const order = await findMyOrder(req)
+  if (!order) return res.status(404).json({ error: '주문을 찾지 못했어요. 주문번호와 휴대폰 번호를 확인해 주세요.' })
+  res.json(publicOrder(order))
+})
+
+publicOrderRouter.post('/orders/lookup/cancel', async (req, res) => {
+  if (tooManyLookups(req)) return res.status(429).json({ error: '요청이 너무 많아요. 10분 뒤에 다시 시도해 주세요.' })
+  const order = await findMyOrder(req)
+  if (!order) return res.status(404).json({ error: '주문을 찾지 못했어요.' })
+  if (order.status !== 'paid') return res.status(409).json({ error: '배송 준비가 시작된 주문은 고객센터로 취소를 요청해 주세요.' })
+  const reason = text(req.body.reason).slice(0, 100) || '손님 요청'
+  const done = await cancelOrder(order.order_no, `손님 취소: ${reason}`, ['paid'])
+  if (done.error) return res.status(done.status).json({ error: done.error })
+  res.json(publicOrder(await loadOrder(order.order_no)))
+})
+
+// 결제 취소 + 재고 복구 (손님·관리자 공통). allowed: 취소할 수 있는 상태
+async function cancelOrder(orderNo, reason, allowed) {
+  return inTransaction(async (client) => {
+    const { rows } = await client.query('SELECT * FROM orders WHERE order_no = $1 FOR UPDATE', [orderNo])
+    const order = rows[0]
+    if (!order) return { status: 404, error: '주문을 찾지 못했어요.' }
+    if (!allowed.includes(order.status)) return { status: 409, error: '이 상태의 주문은 취소할 수 없어요. 배송이 시작됐다면 반품으로 처리해요.' }
+    try {
+      await cancelPayment({ paymentKey: order.payment_key, orderId: order.order_no, reason })
+    } catch (error) {
+      console.error(`[order] 결제 취소 실패 ${order.order_no} · ${error.status ?? ''} ${error.code ?? ''}`)
+      return { status: 502, error: `결제 취소가 실패했어요. ${error.message}` }
+    }
+    await restoreStock(client, order.id)
+    await client.query(
+      "UPDATE orders SET status = 'cancelled', cancel_reason = $2, cancelled_at = now(), updated_at = now() WHERE id = $1",
+      [order.id, reason.slice(0, 200)],
+    )
+    console.log(`[order] 주문 취소 ${order.order_no}`)
+    return { status: 200 }
+  })
+}
+
+// ---------- 관리자용 ----------
+export const adminOrderRouter = express.Router()
+adminOrderRouter.use(requireAdmin)
+
+const LIST_SQL = `
+  SELECT o.order_no, o.status, o.buyer_name, o.receiver_name, o.total_amount, o.payment_method, o.is_test,
+         o.created_at, o.paid_at, o.tracking_no,
+         (SELECT string_agg(oi.name || ' ×' || oi.quantity, ', ' ORDER BY oi.id) FROM order_items oi WHERE oi.order_id = o.id) AS summary
+  FROM orders o`
+
+adminOrderRouter.get('/', async (req, res) => {
+  const status = text(req.query.status)
+  const params = []
+  let sql = `${LIST_SQL} WHERE o.status NOT IN ('pending', 'failed', 'expired')`
+  if (status) {
+    params.push(status)
+    sql = `${LIST_SQL} WHERE o.status = $1`
+  }
+  const { rows } = await pool.query(`${sql} ORDER BY o.created_at DESC LIMIT 200`, params)
+  res.json(rows)
+})
+
+adminOrderRouter.get('/:orderNo', async (req, res) => {
+  const order = await loadOrder(req.params.orderNo)
+  if (!order) return res.status(404).json({ error: '주문을 찾지 못했어요.' })
+  res.json(publicOrder(order))
+})
+
+// 배송 단계 바꾸기: 결제완료 → 배송준비 → 배송중(송장 필수) → 배송완료
+const NEXT = { paid: 'preparing', preparing: 'shipping', shipping: 'delivered' }
+
+async function advance(orderNo, body, who, onlySeller = null) {
+  const status = text(body.status)
+  const courier = text(body.courier).slice(0, 30)
+  const trackingNo = text(body.trackingNo).replace(/[^0-9A-Za-z-]/g, '').slice(0, 30)
+  return inTransaction(async (client) => {
+    const { rows } = await client.query('SELECT * FROM orders WHERE order_no = $1 FOR UPDATE', [orderNo])
+    const order = rows[0]
+    if (!order) return { status: 404, error: '주문을 찾지 못했어요.' }
+    if (onlySeller) {
+      const others = await client.query('SELECT 1 FROM order_items WHERE order_id = $1 AND seller_code <> $2', [order.id, onlySeller])
+      if (others.rowCount) return { status: 403, error: '다른 농가 상품이 함께 있는 주문은 회사에서 배송 처리해요.' }
+    }
+    if (NEXT[order.status] !== status) return { status: 409, error: '지금 상태에서 그 단계로 바꿀 수 없어요.' }
+    if (status === 'shipping' && (!courier || trackingNo.length < 6)) return { status: 400, error: '택배사와 송장 번호를 넣어 주세요.' }
+    await client.query(
+      `UPDATE orders SET status = $2, courier = COALESCE(NULLIF($3, ''), courier), tracking_no = COALESCE(NULLIF($4, ''), tracking_no), updated_at = now()
+       WHERE id = $1`,
+      [order.id, status, courier, trackingNo],
+    )
+    console.log(`[order] ${who} ${order.order_no} → ${status}`)
+    return { status: 200 }
+  })
+}
+
+adminOrderRouter.patch('/:orderNo', async (req, res) => {
+  const done = await advance(req.params.orderNo, req.body, req.admin.loginId)
+  if (done.error) return res.status(done.status).json({ error: done.error })
+  res.json(publicOrder(await loadOrder(req.params.orderNo)))
+})
+
+adminOrderRouter.post('/:orderNo/cancel', async (req, res) => {
+  const reason = text(req.body.reason)
+  if (reason.length < 2) return res.status(400).json({ error: '취소 사유를 적어 주세요.' })
+  const done = await cancelOrder(req.params.orderNo, `관리자 취소(${req.admin.loginId}): ${reason}`, ['paid', 'preparing'])
+  if (done.error) return res.status(done.status).json({ error: done.error })
+  res.json(publicOrder(await loadOrder(req.params.orderNo)))
+})
+
+// ---------- 판매자용: 내 농가 상품이 들어 있는 주문 ----------
+export const sellerOrderRouter = express.Router()
+sellerOrderRouter.use(requireSeller)
+
+sellerOrderRouter.get('/', async (req, res) => {
+  const seller = req.seller.sellerCode
+  const { rows } = await pool.query(`
+    SELECT o.id, o.order_no, o.status, o.created_at, o.paid_at, o.courier, o.tracking_no, o.memo, o.is_test,
+           o.receiver_name, o.receiver_phone, o.zipcode, o.address1, o.address2,
+           NOT EXISTS (SELECT 1 FROM order_items x WHERE x.order_id = o.id AND x.seller_code <> $1) AS only_mine
+    FROM orders o
+    WHERE o.status IN ('paid', 'preparing', 'shipping', 'delivered', 'cancelled')
+      AND EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id AND oi.seller_code = $1)
+    ORDER BY o.created_at DESC LIMIT 200`, [seller])
+  const items = rows.length
+    ? (await pool.query('SELECT order_id, name, unit, quantity, subtotal FROM order_items WHERE order_id = ANY($1) AND seller_code = $2 ORDER BY id',
+        [rows.map((r) => r.id), seller])).rows
+    : []
+  // 받는 분 정보는 내가 배송해야 하는 주문(내 상품만 있고 아직 배송 전)에만 보여 준다
+  res.json(rows.map(({ id, receiver_name, receiver_phone, zipcode, address1, address2, memo, ...o }) => {
+    const shipper = o.only_mine && ['paid', 'preparing'].includes(o.status)
+    return {
+      ...o,
+      items: items.filter((i) => i.order_id === id).map(({ order_id: _o, ...i }) => i),
+      receiver: shipper ? { name: receiver_name, phone: receiver_phone, zipcode, address1, address2, memo } : null,
+    }
+  }))
+})
+
+sellerOrderRouter.patch('/:orderNo', async (req, res) => {
+  const done = await advance(req.params.orderNo, req.body, req.seller.loginId, req.seller.sellerCode)
+  if (done.error) return res.status(done.status).json({ error: done.error })
+  res.status(204).end()
+})

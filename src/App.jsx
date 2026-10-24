@@ -5,6 +5,11 @@ import Seller from './seller/Seller.jsx'
 import { Chat } from './Chat.jsx'
 import { B2bForm, QuestionForm } from './Inquiry.jsx'
 import { Featured, Quiz, Related } from './Recommend.jsx'
+import { Cart } from './shop/Cart.jsx'
+import { Checkout } from './shop/Checkout.jsx'
+import { OrderFail, OrderLookup, OrderSuccess, Policy } from './shop/Orders.jsx'
+import { addToCart } from './shop/shared.js'
+import { ShopLayout } from './shop/ShopLayout.jsx'
 
 // 1단계 데이터 확인용 화면. 실제 디자인은 시안이 나오면 3단계에서 새로 만든다.
 async function api(path) {
@@ -16,6 +21,36 @@ async function api(path) {
 
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
 const CATEGORIES = ['전체', '과일', '채소', '가공품']
+
+// 7단계: 수량 고르기 → 장바구니 담기 / 바로 구매 (가격은 주문할 때 서버가 다시 계산)
+function BuyBox({ product, onAsk }) {
+  const [quantity, setQuantity] = useState(1)
+  const [added, setAdded] = useState(false)
+  if (product.sold_out) {
+    return (
+      <div className="actions">
+        <span className="button ghost">품절</span>
+        <button type="button" className="button ghost" onClick={onAsk}>입고 문의하기</button>
+      </div>
+    )
+  }
+  const max = Math.min(product.stock, 99)
+  return (
+    <div className="buy">
+      <label className="qty">수량
+        <select value={quantity} onChange={(e) => { setQuantity(Number(e.target.value)); setAdded(false) }}>
+          {Array.from({ length: Math.min(max, 20) }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </label>
+      <span className="price">{won(product.price * quantity)}</span>
+      <div className="actions">
+        <button type="button" className="button ghost" onClick={() => { addToCart(product.product_code, quantity); setAdded(true) }}>장바구니 담기</button>
+        <a className="button" href={`/checkout?item=${encodeURIComponent(product.product_code)}&qty=${quantity}`}>바로 구매</a>
+      </div>
+      {added && <p className="success">장바구니에 담았어요. <a href="/cart">장바구니 보기</a></p>}
+    </div>
+  )
+}
 
 // focus: AI 상담에서 넘어오면 'b2b'(기업 문의 폼 열기) 또는 'qna'(Q&A로 내리기)
 function ProductDetail({ code, focus, onBack, onOpen }) {
@@ -81,17 +116,13 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         <p>{seller.story}</p>
       </section>
 
+      <BuyBox product={product} onAsk={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })} />
       <div className="actions">
-        {product.external_url ? (
-          <a className="button" href={product.external_url} target="_blank" rel="noreferrer">구매하기</a>
-        ) : (
-          <button type="button" className="button" onClick={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })}>문의하기</button>
-        )}
+        <button type="button" className="link" onClick={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })}>상품 문의하기</button>
         {product.b2b_available && (
-          <button type="button" className="button ghost" onClick={() => setShowB2b(true)}>기업 구매 문의</button>
+          <button type="button" className="button ghost" onClick={() => setShowB2b(true)}>기업 구매 문의 (대량·납품)</button>
         )}
       </div>
-      {!product.external_url && <p className="muted">온라인 판매 링크가 아직 없는 상품이에요. 아래에 질문을 남기시면 구매 방법을 안내해 드려요.</p>}
       {showB2b && <B2bForm product={product} onClose={() => setShowB2b(false)} />}
 
       <section className="box" ref={qnaRef}>
@@ -141,6 +172,16 @@ function App() {
       </div>
     )
   }
+  return <ShopLayout>{shopPage(window.location.pathname)}</ShopLayout>
+}
+
+function shopPage(path) {
+  if (path === '/cart') return <Cart />
+  if (path === '/checkout') return <Checkout />
+  if (path === '/order/success') return <OrderSuccess />
+  if (path === '/order/fail') return <OrderFail />
+  if (path === '/order/lookup') return <OrderLookup />
+  if (path.startsWith('/policy/')) return <Policy kind={path.split('/')[2]} />
   return <Storefront />
 }
 
@@ -161,12 +202,7 @@ function Storefront() {
   }
 
   return (
-    <div className="app">
-      <header>
-        <h1>농가 판매 자사몰</h1>
-        <p className="notice">개발 중 · 데이터 확인 화면입니다. 모든 데이터는 [예시]이고, 디자인은 시안이 나오면 바꿉니다. <a href="/admin">관리자</a> · <a href="/seller">판매자</a></p>
-      </header>
-
+    <>
       {error && <p className="error">{error}</p>}
 
       {selected ? (
@@ -197,7 +233,7 @@ function Storefront() {
         </>
       )}
       <Chat productCode={selected?.code ?? null} onOpenProduct={open} />
-    </div>
+    </>
   )
 }
 
