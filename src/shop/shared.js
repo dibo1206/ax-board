@@ -10,8 +10,10 @@ export async function get(path) {
   return data
 }
 
-export async function post(path, body, timeoutMs) {
-  const response = await netFetch(`/api${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, timeoutMs)
+export const post = (path, body, timeoutMs) => send('POST', path, body, timeoutMs)
+
+export async function send(method, path, body, timeoutMs) {
+  const response = await netFetch(`/api${path}`, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) }, timeoutMs)
   if (response.status === 204) return null
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
@@ -19,6 +21,14 @@ export async function post(path, body, timeoutMs) {
   }
   return data
 }
+
+// 로그인한 회원 (없으면 null). 로그인·로그아웃하면 'account-change' 이벤트로 다시 읽는다
+let accountPromise
+export function getAccount() {
+  accountPromise ??= get('/account/me').catch(() => null)
+  return accountPromise
+}
+if (typeof window !== 'undefined') window.addEventListener('account-change', () => { accountPromise = null })
 
 let policyPromise
 export function getPolicy() {

@@ -3,6 +3,7 @@ import { adminApi } from './api.js'
 import { ChatLogs } from './ChatLogs.jsx'
 import { Inbox } from './Inbox.jsx'
 import { AccessLogs } from './AccessLogs.jsx'
+import { Notifications } from './Notifications.jsx'
 import { Orders } from './Orders.jsx'
 import { ProductForm } from './ProductForm.jsx'
 
@@ -71,6 +72,22 @@ function Admin() {
       .catch((e) => (e.status === 401 ? setMe(null) : setError(e.message)))
   }, [me])
 
+  // 새 주문 알림: 1분마다 확인해서 늘었으면 화면 위에 알리고 탭 제목에 개수를 붙인다
+  const [alert, setAlert] = useState('')
+  useEffect(() => {
+    if (!me || me.role === 'seller') return
+    let last = null
+    const tick = () => adminApi('/inquiries/summary').then((summary) => {
+      if (last !== null && summary.new_orders > last) setAlert(`새 주문 ${summary.new_orders - last}건이 들어왔어요`)
+      last = summary.new_orders
+      setCounts(summary)
+      document.title = summary.new_orders > 0 ? `(${summary.new_orders}) 관리자 · 농가 판매 자사몰` : '관리자 · 농가 판매 자사몰'
+    }).catch(() => {})
+    tick()
+    const timer = setInterval(tick, 60_000)
+    return () => clearInterval(timer)
+  }, [me])
+
   async function refresh(text) {
     setProducts(await adminApi('/products'))
     setEditing(null)
@@ -132,11 +149,13 @@ function Admin() {
           <button type="button" className={tab === 'orders' ? 'on' : ''} onClick={() => { setTab('orders'); setEditing(null); setMessage('') }}>주문{newOrders > 0 && ` (${newOrders})`}</button>
           <button type="button" className={tab === 'chat' ? 'on' : ''} onClick={() => { setTab('chat'); setEditing(null); setMessage('') }}>상담 기록</button>
           <button type="button" className={tab === 'access' ? 'on' : ''} onClick={() => { setTab('access'); setEditing(null); setMessage('') }}>접속 기록</button>
+          <button type="button" className={tab === 'mail' ? 'on' : ''} onClick={() => { setTab('mail'); setEditing(null); setMessage('') }}>알림 기록</button>
         </nav>
         <span className="muted">{me.loginId} 로그인 중</span>
         {!me.mfa && <span className="badge soldout" title="서버에서 npm run admin-2fa -- 아이디">2단계 인증 미등록</span>}
         <button type="button" className="link" onClick={logout}>로그아웃</button>
       </div>
+      {alert && <p className="notice-new" role="status">{alert} <button type="button" className="link" onClick={() => { setTab('orders'); setAlert('') }}>주문 보기</button></p>}
       {tab === 'products' && message && <p className="success">{message}</p>}
       {error && <p className="error">{error}</p>}
 
@@ -144,6 +163,8 @@ function Admin() {
         <Inbox onCount={setCounts} />
       ) : tab === 'orders' ? (
         <Orders onCount={setCounts} />
+      ) : tab === 'mail' ? (
+        <Notifications />
       ) : tab === 'access' ? (
         <AccessLogs />
       ) : tab === 'chat' ? (

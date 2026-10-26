@@ -4,11 +4,14 @@
 // 3) 결제를 안 하고 30분이 지나면 주문을 만료하고 잡아 둔 재고를 돌려놓는다
 import { randomBytes } from 'node:crypto'
 import express from 'express'
+import { currentCustomer, requireCustomer } from './account.js'
 import { requireAdmin, requireSeller } from './auth.js'
+import { COURIERS, trackingUrl } from './couriers.js'
 import { pool } from './db.js'
 import { createLimiter } from './limit.js'
 import { cancelPayment, checkApproved, clientKey, confirmPayment, isTestPayment, lookupPayment, paymentMode } from './payments.js'
 import { POLICIES, SHIPPING, SHOP, shippingFee } from './policy.js'
+import { adminEmail, publicUrl, queueMail, retryMails } from './mailer.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
 
 const PENDING_MINUTES = 30
@@ -105,14 +108,21 @@ export async function expirePending() {
       if (!locked.rowCount) return 'gone'
       return settleWithToss(client, locked.rows[0], found, 'expired')
     })
-    if (result === 'paid') revived += 1
+    if (result === 'paid') {
+      revived += 1
+      notifyOrder(row.order_no, 'paid')
+    }
     if (result === 'closed') closed += 1
   }
   if (closed || revived) console.log(`[order] 결제 안 된 주문 정리: 만료 ${closed}건, 결제 확인으로 되살림 ${revived}건`)
 }
 
+// 5분마다: 결제 안 된 주문 정리 + 못 보낸 메일 다시 보내기
 export function startOrderSweeper() {
-  setInterval(() => expirePending().catch((e) => console.error(`[order] 만료 처리 실패 · ${e.message}`)), 5 * 60_000).unref()
+  setInterval(() => {
+    expirePending().catch((e) => console.error(`[order] 만료 처리 실패 · ${e.message}`))
+    retryMails().catch((e) => console.error(`[mail] 다시 보내기 실패 · ${e.message}`))
+  }, 5 * 60_000).unref()
 }
 
 async function loadOrder(orderNo, client = pool) {
@@ -127,8 +137,8 @@ async function loadOrder(orderNo, client = pool) {
 
 // 손님에게 보여 줄 주문 (결제 키·내부 번호는 빼고)
 function publicOrder(order) {
-  const { id: _id, payment_key: _key, ...rest } = order
-  return rest
+  const { id: _id, payment_key: _key, customer_id: _customer, ...rest } = order
+  return { ...rest, tracking_url: trackingUrl(order.courier, order.tracking_no) }
 }
 
 // ---------- 손님용 ----------
@@ -138,7 +148,7 @@ const tooManyLookups = createLimiter({ limit: 10, windowMs: 10 * 60_000 })
 const tooManyPayments = createLimiter({ limit: 20, windowMs: 10 * 60_000 })
 
 publicOrderRouter.get('/policy', (req, res) => {
-  res.json({ shop: SHOP, shipping: SHIPPING, policies: POLICIES, payment: { mode: paymentMode(), test: isTestPayment() } })
+  res.json({ shop: SHOP, shipping: SHIPPING, policies: POLICIES, couriers: COURIERS, payment: { mode: paymentMode(), test: isTestPayment() } })
 })
 
 function readOrderInput(body) {
@@ -163,6 +173,7 @@ function readOrderInput(body) {
     address1: text(body.address1),
     address2: text(body.address2),
     memo: text(body.memo),
+    email: text(body.email).toLowerCase(),
   }
   if (!input.buyerName || input.buyerName.length > 20) errors.push('주문자 이름을 20자 안으로 적어 주세요.')
   if (!isMobile(input.buyerPhone)) errors.push('주문자 휴대폰 번호를 확인해 주세요. (주문 조회에 써요)')
@@ -172,6 +183,7 @@ function readOrderInput(body) {
   if (!input.address1 || input.address1.length > 100) errors.push('주소를 넣어 주세요.')
   if (input.address2.length > 60) errors.push('상세 주소는 60자 안으로 적어 주세요.')
   if (input.memo.length > 100) errors.push('배송 메모는 100자 안으로 적어 주세요.')
+  if (input.email && !/^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(input.email)) errors.push('알림 받을 이메일을 확인해 주세요.')
   const sensitive = findSensitive(input.buyerName, input.receiverName, input.address1, input.address2, input.memo)
   if (sensitive) errors.push(SENSITIVE_MESSAGE(sensitive))
   if (body.agreeTerms !== true || body.agreePrivacy !== true) errors.push('구매 조건 확인과 개인정보 수집·이용에 동의해 주세요.')
@@ -184,6 +196,7 @@ publicOrderRouter.post('/orders', async (req, res) => {
   if (errors.length) return res.status(400).json({ error: errors.join(' '), errors })
   if (tooManyOrders(req)) return res.status(429).json({ error: '주문 시도가 너무 많아요. 잠시 후 다시 시도해 주세요.' })
   await expirePending()
+  const customer = await currentCustomer(req) // 로그인한 회원이면 주문을 계정에 묶는다
 
   try {
     const order = await inTransaction(async (client) => {
@@ -208,10 +221,11 @@ publicOrderRouter.post('/orders', async (req, res) => {
       const orderNo = newOrderNo()
       const { rows } = await client.query(
         `INSERT INTO orders (order_no, buyer_name, buyer_phone, receiver_name, receiver_phone, zipcode, address1, address2, memo,
-                             items_amount, shipping_fee, total_amount, is_test, agreed_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now()) RETURNING id`,
+                             items_amount, shipping_fee, total_amount, is_test, agreed_at, customer_id, buyer_email)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now(), $14, $15) RETURNING id`,
         [orderNo, input.buyerName, input.buyerPhone, input.receiverName, input.receiverPhone, input.zipcode, input.address1,
-          input.address2 || null, input.memo || null, itemsAmount, fee, itemsAmount + fee, isTestPayment()],
+          input.address2 || null, input.memo || null, itemsAmount, fee, itemsAmount + fee, isTestPayment(),
+          customer?.id ?? null, customer?.email ?? (input.email || null)],
       )
       for (const l of lines) {
         await client.query(
@@ -229,7 +243,12 @@ publicOrderRouter.post('/orders', async (req, res) => {
         amount: itemsAmount + fee,
       }
     })
-    console.log(`[order] 주문 생성 ${order.orderNo} · ${order.amount}원`)
+    console.log(`[order] 주문 생성 ${order.orderNo} · ${order.amount}원${customer ? ' · 회원' : ''}`)
+    if (customer && req.body.saveAddress === true) {
+      // 회원이 '배송지 저장'을 골랐으면 받는 분 주소를 회원 정보에 저장
+      await pool.query('UPDATE customers SET zipcode = $2, address1 = $3, address2 = $4 WHERE id = $1',
+        [customer.id, input.zipcode, input.address1, input.address2 || null])
+    }
     res.status(201).json({ ...order, payment: { mode: paymentMode(), clientKey: clientKey(), test: isTestPayment() } })
   } catch (error) {
     if (error.status === 409) return res.status(409).json({ error: error.message })
@@ -267,7 +286,7 @@ publicOrderRouter.post('/orders/:orderNo/confirm', async (req, res) => {
         [order.id, paymentKey, paid.method, paid.approvedAt],
       )
       console.log(`[order] 결제 완료 ${order.order_no} · ${amount}원 · ${paid.method}`)
-      return { status: 200 }
+      return { status: 200, newlyPaid: true }
     } catch (error) {
       if (error.uncertain) {
         // 통신이 끊기거나 결제사가 일시 오류: 승인됐는지 모른다 → 실패로 처리하지 않고 결제 조회로 확인
@@ -280,7 +299,7 @@ publicOrderRouter.post('/orders/:orderNo/confirm', async (req, res) => {
           return { status: 202, pending: true, error: '결제 확인이 늦어지고 있어요. 잠시 후 [다시 확인]을 눌러 주세요. 돈이 두 번 나가지는 않아요.' }
         }
         const result = await settleWithToss(client, order, found, 'failed')
-        if (result === 'paid') return { status: 200 }
+        if (result === 'paid') return { status: 200, newlyPaid: true }
         if (result === 'wait') return { status: 202, pending: true, error: '결제 확인이 늦어지고 있어요. 잠시 후 [다시 확인]을 눌러 주세요. 돈이 두 번 나가지는 않아요.' }
         return { status: 402, error: '결제가 승인되지 않았어요. 돈은 나가지 않았어요. 다시 주문해 주세요.' }
       }
@@ -296,6 +315,7 @@ publicOrderRouter.post('/orders/:orderNo/confirm', async (req, res) => {
     }
   })
   if (result.error) return res.status(result.status).json({ error: result.error, pending: result.pending === true })
+  if (result.newlyPaid) notifyOrder(req.params.orderNo, 'paid')
   res.json(publicOrder(await loadOrder(req.params.orderNo)))
 })
 
@@ -339,8 +359,14 @@ publicOrderRouter.post('/orders/lookup/cancel', async (req, res) => {
   res.json(publicOrder(await loadOrder(order.order_no)))
 })
 
-// 결제 취소 + 재고 복구 (손님·관리자 공통). allowed: 취소할 수 있는 상태
+// 결제 취소 + 재고 복구 (손님·회원·관리자 공통). allowed: 취소할 수 있는 상태
 async function cancelOrder(orderNo, reason, allowed) {
+  const result = await cancelOrderTx(orderNo, reason, allowed)
+  if (result.status === 200) notifyOrder(orderNo, 'cancelled')
+  return result
+}
+
+function cancelOrderTx(orderNo, reason, allowed) {
   return inTransaction(async (client) => {
     const { rows } = await client.query('SELECT * FROM orders WHERE order_no = $1 FOR UPDATE', [orderNo])
     const order = rows[0]
@@ -394,6 +420,12 @@ adminOrderRouter.get('/:orderNo', async (req, res) => {
 const NEXT = { paid: 'preparing', preparing: 'shipping', shipping: 'delivered' }
 
 async function advance(orderNo, body, who, onlySeller = null) {
+  const result = await advanceTx(orderNo, body, who, onlySeller)
+  if (result.status === 200 && body.status === 'shipping') notifyOrder(orderNo, 'shipping')
+  return result
+}
+
+function advanceTx(orderNo, body, who, onlySeller) {
   const status = text(body.status)
   const courier = text(body.courier).slice(0, 30)
   const trackingNo = text(body.trackingNo).replace(/[^0-9A-Za-z-]/g, '').slice(0, 30)
@@ -465,3 +497,59 @@ sellerOrderRouter.patch('/:orderNo', async (req, res) => {
   if (done.error) return res.status(done.status).json({ error: done.error })
   res.status(204).end()
 })
+
+// ---------- 주문 알림 메일 (손님: 주문 때 남긴 이메일·회원 이메일 / 관리자: ADMIN_EMAIL) ----------
+async function notifyOrder(orderNo, event) {
+  try {
+    const order = await loadOrder(orderNo)
+    if (!order) return
+    const lines = order.items.map((i) => `- ${i.name.replace(/\[예시\]\s*/g, '')} × ${i.quantity}  ${i.subtotal.toLocaleString('ko-KR')}원`).join('\n')
+    const total = `합계 ${order.total_amount.toLocaleString('ko-KR')}원 (배송비 ${order.shipping_fee.toLocaleString('ko-KR')}원 포함)`
+    const lookup = `${publicUrl()}/order/lookup`
+    const mails = {
+      paid: [`[${SHOP.name}] 주문이 완료됐어요 (${order.order_no})`,
+        `${order.buyer_name}님, 주문해 주셔서 고마워요.\n\n주문번호: ${order.order_no}\n${lines}\n${total}\n\n${SHIPPING.leadTime}.\n주문 조회: ${lookup}\n`],
+      shipping: [`[${SHOP.name}] 상품을 보냈어요 (${order.order_no})`,
+        `${order.buyer_name}님, 주문하신 상품을 보냈어요.\n\n${order.courier} ${order.tracking_no}\n배송 조회: ${trackingUrl(order.courier, order.tracking_no)}\n\n${lines}\n`],
+      cancelled: [`[${SHOP.name}] 주문이 취소됐어요 (${order.order_no})`,
+        `${order.buyer_name}님, 주문이 취소되어 결제를 취소했어요. 카드사에 따라 환불까지 며칠 걸릴 수 있어요.\n\n주문번호: ${order.order_no}\n${lines}\n${total}\n`],
+    }
+    const [subject, body] = mails[event]
+    queueMail({ kind: `order_${event}`, to: order.buyer_email, subject, body })
+    if (event === 'paid' && adminEmail()) {
+      queueMail({ kind: 'admin_new_order', to: adminEmail(), subject: `[새 주문] ${order.order_no} · ${order.total_amount.toLocaleString('ko-KR')}원${order.is_test ? ' (테스트)' : ''}`,
+        body: `새 주문이 들어왔어요.\n\n${lines}\n${total}\n받는 분: ${order.receiver_name}\n관리자 화면: ${publicUrl()}/admin\n` })
+    }
+  } catch (error) {
+    console.error(`[order] 알림 메일 준비 실패 ${orderNo} · ${error.message}`)
+  }
+}
+
+// ---------- 회원: 내 주문 상세·취소 ----------
+export const memberOrderRouter = express.Router()
+memberOrderRouter.use(requireCustomer)
+
+async function myOrder(req, res) {
+  const order = await loadOrder(req.params.orderNo)
+  if (!order || order.customer_id !== req.customer.id || ['pending', 'failed', 'expired'].includes(order.status)) {
+    res.status(404).json({ error: '내 주문 중에서 찾지 못했어요.' })
+    return null
+  }
+  return order
+}
+
+memberOrderRouter.get('/:orderNo', async (req, res) => {
+  const order = await myOrder(req, res)
+  if (order) res.json(publicOrder(order))
+})
+
+memberOrderRouter.post('/:orderNo/cancel', async (req, res) => {
+  const order = await myOrder(req, res)
+  if (!order) return
+  if (order.status !== 'paid') return res.status(409).json({ error: '배송 준비가 시작된 주문은 고객센터로 취소를 요청해 주세요.' })
+  const done = await cancelOrder(order.order_no, `회원 취소: ${text(req.body.reason).slice(0, 100) || '손님 요청'}`, ['paid'])
+  if (done.error) return res.status(done.status).json({ error: done.error })
+  res.json(publicOrder(await loadOrder(order.order_no)))
+})
+
+export { COURIERS }

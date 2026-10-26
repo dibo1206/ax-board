@@ -1,4 +1,5 @@
-// 관리자 로그인. 비밀번호는 scrypt 해시로만 저장하고, 로그인 상태는 서명한 쿠키로 확인한다.
+// 관리자·판매자 로그인. 비밀번호는 scrypt 해시로만 저장하고, 로그인 상태는 서명한 쿠키로 확인한다.
+// 비밀번호 확인·서명·쿠키·로그인 잠금 함수는 손님 회원(account.js)도 같이 쓴다.
 import { createHmac, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
 import { writeAccessLog } from './accessLog.js'
@@ -17,7 +18,7 @@ export async function hashPassword(password) {
   return `scrypt:${salt}:${hash.toString('hex')}`
 }
 
-async function verifyPassword(password, stored) {
+export async function verifyPassword(password, stored) {
   const [kind, salt, hex] = stored.split(':')
   if (kind !== 'scrypt' || !salt || !hex) return false
   const expected = Buffer.from(hex, 'hex')
@@ -31,13 +32,13 @@ function secret() {
   return value
 }
 
-function sign(payload) {
+export function signToken(payload) {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url')
   const mac = createHmac('sha256', secret()).update(body).digest('base64url')
   return `${body}.${mac}`
 }
 
-function verify(token) {
+export function verifyToken(token) {
   const [body, mac] = (token || '').split('.')
   if (!body || !mac) return null
   const expected = createHmac('sha256', secret()).update(body).digest('base64url')
@@ -46,15 +47,17 @@ function verify(token) {
   return payload.exp > Date.now() ? payload : null
 }
 
-function readCookie(req, name) {
+export function readCookie(req, name) {
   const found = (req.headers.cookie || '').split(';').map((c) => c.trim()).find((c) => c.startsWith(`${name}=`))
   return found ? decodeURIComponent(found.slice(name.length + 1)) : null
 }
 
-function setSessionCookie(res, value, maxAgeSeconds) {
+export function setCookie(res, name, value, maxAgeSeconds) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''
-  res.setHeader('Set-Cookie', `${COOKIE}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${secure}`)
+  res.append('Set-Cookie', `${name}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${secure}`)
 }
+
+const setSessionCookie = (res, value, maxAgeSeconds) => setCookie(res, COOKIE, value, maxAgeSeconds)
 
 // 같은 아이디로 5번 틀리면 10분 동안 막는다. 아이디를 바꿔 가며 시도하는 것도 막으려고 같은 IP는 20번까지 (서버 메모리 기준)
 const fails = new Map()
@@ -90,6 +93,14 @@ export function adminIpAllowed(ip) {
 
 // REQUIRE_2FA=1 이면 2단계 인증을 등록하지 않은 계정은 로그인할 수 없다 (운영에서 켜기)
 const twoFactorRequired = () => process.env.REQUIRE_2FA === '1'
+
+// 손님 회원 로그인도 같은 잠금 규칙을 쓴다 (key 앞에 'c:'를 붙여 관리자 아이디와 섞이지 않게)
+export const isLocked = (key, ip) => locked(ipFails, ip, MAX_IP_FAILS) || locked(fails, key, MAX_FAILS)
+export function noteFail(key, ip) {
+  addFail(fails, key)
+  addFail(ipFails, ip)
+}
+export const clearFails = (key) => fails.delete(key)
 
 export async function login(req, res) {
   const loginId = typeof req.body.loginId === 'string' ? req.body.loginId.trim().slice(0, 40) : ''
@@ -131,7 +142,7 @@ export async function login(req, res) {
     return res.status(403).json({ error: '2단계 인증을 먼저 등록해 주세요. (서버에서 npm run admin-2fa -- 아이디)' })
   }
   fails.delete(loginId)
-  setSessionCookie(res, sign({ id, loginId: account, role, sellerCode, mfa: Boolean(sealed), exp: Date.now() + SESSION_HOURS * 3_600_000 }), SESSION_HOURS * 3600)
+  setSessionCookie(res, signToken({ kind: 'staff', id, loginId: account, role, sellerCode, mfa: Boolean(sealed), exp: Date.now() + SESSION_HOURS * 3_600_000 }), SESSION_HOURS * 3600)
   log('login_ok', { role })
   res.json({ loginId: account, role, sellerCode, mfa: Boolean(sealed) })
 }
@@ -145,7 +156,8 @@ export function logout(req, res) {
 
 export function currentAdmin(req) {
   try {
-    return verify(readCookie(req, COOKIE))
+    const payload = verifyToken(readCookie(req, COOKIE))
+    return payload && payload.kind !== 'customer' ? payload : null // 손님 쿠키를 관리자 쿠키 자리에 넣어도 통과하지 못하게
   } catch {
     return null
   }

@@ -4,6 +4,7 @@ import express from 'express'
 import { requireAdmin } from './auth.js'
 import { pool } from './db.js'
 import { createLimiter } from './limit.js'
+import { adminEmail, publicUrl, queueMail } from './mailer.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
 import { FORBIDDEN } from './validate.js'
 
@@ -47,6 +48,7 @@ publicInquiryRouter.post('/products/:code/questions', async (req, res) => {
     [req.params.code, author, question, contact || null],
   )
   if (!rows.length) return res.status(409).json({ error: '같은 질문이 이미 올라와 있어요.' })
+  queueMail({ kind: 'admin_new_question', to: adminEmail(), subject: `[상품 문의] ${req.params.code}`, body: `새 상품 문의가 올라왔어요.\n\n${question}\n\n답변하기: ${publicUrl()}/admin\n` })
   res.status(201).json({ ...rows[0], author: maskName(rows[0].author) })
 })
 
@@ -81,6 +83,7 @@ publicInquiryRouter.post('/b2b-inquiries', async (req, res) => {
     [body.company, body.contactName, body.contact, body.productCode || null, body.quantity || null, body.message || null],
   )
   console.log(`[b2b] 새 기업 구매 문의 #${rows[0].id}`)
+  queueMail({ kind: 'admin_new_b2b', to: adminEmail(), subject: `[기업 구매 문의] ${body.company}`, body: `새 기업 구매 문의가 들어왔어요.\n\n회사: ${body.company}\n수량: ${body.quantity || '-'}\n요청: ${body.message || '-'}\n\n확인하기: ${publicUrl()}/admin\n` })
   res.status(201).json({ id: rows[0].id, message: '문의가 접수됐어요. 담당자가 확인 후 연락드립니다.' })
 })
 

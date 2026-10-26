@@ -207,3 +207,46 @@ CREATE TABLE IF NOT EXISTS access_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS access_logs_created_idx ON access_logs (created_at DESC);
+
+-- 손님 회원 (비회원 주문도 그대로 받는다). 비밀번호는 해시로만, 탈퇴하면 개인정보를 지우고 주문 기록은 법정 기간 보관
+CREATE TABLE IF NOT EXISTS customers (
+  id SERIAL PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  zipcode TEXT,
+  address1 TEXT,
+  address2 TEXT,
+  session_version INT NOT NULL DEFAULT 1, -- 비밀번호를 바꾸거나 탈퇴하면 올려서 예전 로그인을 모두 끊는다
+  agreed_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_login_at TIMESTAMPTZ,
+  deleted_at TIMESTAMPTZ
+);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id INT REFERENCES customers(id) ON DELETE SET NULL;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS buyer_email TEXT;
+CREATE INDEX IF NOT EXISTS orders_customer_idx ON orders (customer_id, created_at DESC);
+
+-- 비밀번호 찾기: 메일로 보낸 링크의 토큰은 해시만 저장, 30분 유효, 한 번만 사용
+CREATE TABLE IF NOT EXISTS password_resets (
+  token_hash TEXT PRIMARY KEY,
+  customer_id INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ
+);
+
+-- 보낼 메일 목록: 먼저 여기에 저장하고 보낸다. 실패하면 정리 때 다시 보낸다 (메일 서버가 잠깐 끊겨도 알림이 사라지지 않게)
+CREATE TABLE IF NOT EXISTS email_outbox (
+  id SERIAL PRIMARY KEY,
+  kind TEXT NOT NULL,
+  to_email TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'sent', 'failed', 'skipped')),
+  attempts INT NOT NULL DEFAULT 0,
+  last_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  sent_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS email_outbox_status_idx ON email_outbox (status, created_at);

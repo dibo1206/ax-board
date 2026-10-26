@@ -1,19 +1,24 @@
 import { useEffect, useState } from 'react'
-import { cartCount, getPolicy } from './shared.js'
+import { cartCount, getAccount, getPolicy } from './shared.js'
 
 // 손님 화면 공통 틀: 위쪽 메뉴(장바구니·주문 조회)와 아래쪽 사업자 정보·약관
 export function ShopLayout({ children }) {
   const [count, setCount] = useState(cartCount)
   const [policy, setPolicy] = useState(null)
+  const [account, setAccount] = useState(null)
 
   useEffect(() => {
     const update = () => setCount(cartCount())
     window.addEventListener('cart-change', update)
     window.addEventListener('storage', update)
     getPolicy().then(setPolicy).catch(() => {})
+    const reloadAccount = () => getAccount().then(setAccount)
+    reloadAccount()
+    window.addEventListener('account-change', reloadAccount)
     return () => {
       window.removeEventListener('cart-change', update)
       window.removeEventListener('storage', update)
+      window.removeEventListener('account-change', reloadAccount)
     }
   }, [])
 
@@ -23,7 +28,8 @@ export function ShopLayout({ children }) {
       <header className="shop-head">
         <a href="/" className="brand">{shop?.name ?? '농가 판매 자사몰'}</a>
         <nav className="shop-nav">
-          <a href="/order/lookup">주문 조회</a>
+          {account ? <a href="/account">{account.name}님</a> : <a href="/account/login">로그인</a>}
+          {!account && <a href="/order/lookup">주문 조회</a>}
           <a href="/cart">장바구니{count > 0 && <span className="count">{count}</span>}</a>
         </nav>
       </header>

@@ -10,6 +10,7 @@ import { Checkout } from './shop/Checkout.jsx'
 import { OrderFail, OrderLookup, OrderSuccess, Policy } from './shop/Orders.jsx'
 import { addToCart } from './shop/shared.js'
 import { ShopLayout } from './shop/ShopLayout.jsx'
+import { FindPasswordPage, LoginPage, MyPage, ResetPasswordPage, SignupPage } from './account/Account.jsx'
 import { netFetch } from './net.js'
 
 // 1단계 데이터 확인용 화면. 실제 디자인은 시안이 나오면 3단계에서 새로 만든다.
@@ -183,6 +184,11 @@ function shopPage(path) {
   if (path === '/order/fail') return <OrderFail />
   if (path === '/order/lookup') return <OrderLookup />
   if (path.startsWith('/policy/')) return <Policy kind={path.split('/')[2]} />
+  if (path === '/account/login') return <LoginPage />
+  if (path === '/account/signup') return <SignupPage />
+  if (path === '/account/find') return <FindPasswordPage />
+  if (path === '/account/reset') return <ResetPasswordPage />
+  if (path === '/account') return <MyPage />
   return <Storefront />
 }
 

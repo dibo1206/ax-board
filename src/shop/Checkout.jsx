@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Totals } from './Cart.jsx'
-import { loadScript, post, readCart, savePending, won } from './shared.js'
+import { getAccount, loadScript, post, readCart, savePending, won } from './shared.js'
 import { useCartLines } from './useCartLines.js'
 
 // 주문서 → (주문 만들기: 서버가 금액 계산·재고 잡아 둠) → 결제 단계(토스 결제위젯)
@@ -79,8 +79,22 @@ export function Checkout() {
   const cart = useCartLines(lines)
   const [form, setForm] = useState({
     buyerName: '', buyerPhone: '', same: true, receiverName: '', receiverPhone: '',
-    zipcode: '', address1: '', address2: '', memo: '', agreeTerms: false, agreePrivacy: false,
+    zipcode: '', address1: '', address2: '', memo: '', email: '', saveAddress: false, agreeTerms: false, agreePrivacy: false,
   })
+  const [account, setAccount] = useState(null)
+
+  // 회원이면 이름·휴대폰·기본 배송지를 채워 둔다
+  useEffect(() => {
+    getAccount().then((me) => {
+      if (!me) return
+      setAccount(me)
+      setForm((prev) => ({
+        ...prev, buyerName: prev.buyerName || me.name, buyerPhone: prev.buyerPhone || me.phone,
+        zipcode: prev.zipcode || me.zipcode || '', address1: prev.address1 || me.address1 || '', address2: prev.address2 || me.address2 || '',
+        saveAddress: !me.address1,
+      }))
+    })
+  }, [])
   const [errors, setErrors] = useState([])
   const [sending, setSending] = useState(false)
   const [order, setOrder] = useState(null)
@@ -140,7 +154,14 @@ export function Checkout() {
           <label>이름*<input value={form.buyerName} onChange={set('buyerName')} maxLength={20} autoComplete="name" /></label>
           <label>휴대폰*<input value={form.buyerPhone} onChange={set('buyerPhone')} placeholder="010-1234-5678" inputMode="tel" autoComplete="tel" /></label>
         </div>
-        <p className="muted">주문번호와 이 휴대폰 번호로 주문을 조회해요.</p>
+        {account ? (
+          <p className="muted">{account.email}로 주문 알림을 보내 드려요. 주문 내역은 마이페이지에서 볼 수 있어요.</p>
+        ) : (
+          <>
+            <label>이메일 <span className="muted">(선택) 주문·발송 알림을 받고 싶을 때</span><input type="email" value={form.email} onChange={set('email')} autoComplete="email" /></label>
+            <p className="muted">비회원은 주문번호와 휴대폰 번호로 주문을 조회해요. <a href="/account/login?next=/checkout">로그인</a>하면 주문 내역이 저장돼요.</p>
+          </>
+        )}
       </section>
       <section className="box form">
         <h3>받는 분</h3>
@@ -158,6 +179,7 @@ export function Checkout() {
         <label>주소*<input value={form.address1} onChange={set('address1')} maxLength={100} /></label>
         <label>상세 주소<input value={form.address2} onChange={set('address2')} maxLength={60} /></label>
         <label>배송 메모<input value={form.memo} onChange={set('memo')} maxLength={100} placeholder="예: 문 앞에 두세요" /></label>
+        {account && <label className="check"><input type="checkbox" checked={form.saveAddress} onChange={set('saveAddress')} />이 주소를 기본 배송지로 저장</label>}
       </section>
       <section className="box form">
         <label className="check"><input type="checkbox" checked={form.agreeTerms} onChange={set('agreeTerms')} />[필수] 주문 상품과 결제 금액을 확인했고, <a href="/policy/terms" target="_blank" rel="noreferrer">이용약관</a>·<a href="/policy/refund" target="_blank" rel="noreferrer">교환·환불 정책</a>에 동의해요</label>

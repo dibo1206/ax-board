@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getPolicy, ORDER_STATUS, post, readCart, takePending, when, won, writeCart } from './shared.js'
 
 // 주문 결과(성공·실패) · 비회원 주문 조회 · 약관 페이지
-function OrderDetail({ order }) {
+export function OrderDetail({ order }) {
   return (
     <>
       <dl className="detail-list">
@@ -11,7 +11,7 @@ function OrderDetail({ order }) {
         <dt>주문일</dt><dd>{when(order.created_at)}</dd>
         {order.payment_method && <><dt>결제</dt><dd>{order.payment_method} · {won(order.total_amount)}</dd></>}
         <dt>받는 분</dt><dd>{order.receiver_name} · ({order.zipcode}) {order.address1} {order.address2 ?? ''}</dd>
-        {order.tracking_no && <><dt>송장</dt><dd>{order.courier} {order.tracking_no}</dd></>}
+        {order.tracking_no && <><dt>송장</dt><dd>{order.courier} {order.tracking_no} {order.tracking_url && <a href={order.tracking_url} target="_blank" rel="noreferrer">배송 조회</a>}</dd></>}
         {order.cancel_reason && <><dt>취소</dt><dd>{when(order.cancelled_at)} · {order.cancel_reason}</dd></>}
       </dl>
       <ul className="order-items">
@@ -159,6 +159,7 @@ export function OrderLookup() {
   return (
     <section>
       <h2>주문 조회</h2>
+      <p className="muted">회원은 <a href="/account">마이페이지</a>에서 주문 내역을 볼 수 있어요. 비회원은 주문번호와 휴대폰 번호로 조회해요.</p>
       <form className="box form" onSubmit={lookup}>
         <div className="row">
           <label>주문번호<input value={orderNo} onChange={(e) => setOrderNo(e.target.value)} placeholder="FM261024-XXXXXXXXXX" /></label>

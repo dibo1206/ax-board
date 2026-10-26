@@ -152,3 +152,9 @@ button:disabled { opacity: 0.6; cursor: wait; }
 
 /* ---------- 관리자 보안 ---------- */
 .warn-row td { color: #c62828; }
+
+/* ---------- 회원 ---------- */
+.narrow { max-width: 440px; margin: 16px auto; }
+.notice-new { padding: 10px 14px; border-radius: 10px; background: var(--accent); color: #fff; font-weight: 700; }
+.notice-new .link { color: #fff; text-decoration: underline; }
+.mail-body { white-space: pre-wrap; font: inherit; font-size: 0.85rem; background: var(--bg); padding: 8px; border-radius: 8px; }
