@@ -17,7 +17,7 @@ import { createLimiter } from './limit.js'
 import { maskPersonal } from './privacy.js'
 import { describeRecommendation, loadActive, readWish, recommend } from './recommend.js'
 import { SHIPPING } from './policy.js'
-import { mostSimilar } from './similar.js'
+import { mostSimilar, similarity } from './similar.js'
 import { FORBIDDEN } from './validate.js'
 
 const RULES_FILE = new URL('./chat_rules.md', import.meta.url)
@@ -76,14 +76,17 @@ const ROUTES = [
 ]
 
 // ---------- 2. DB에서 자료 꺼내기 ----------
-async function loadCatalog() {
-  const [products, items] = await Promise.all([
-    pool.query(`SELECT p.*, (p.stock = 0) AS sold_out, s.name AS seller_name, s.region AS seller_region, s.story AS seller_story
-                FROM products p JOIN sellers s ON s.seller_code = p.seller_code
-                WHERE p.status = 'active' ORDER BY p.product_code LIMIT 300`),
-    pool.query('SELECT * FROM items'),
-  ])
-  return { products: products.rows, items: items.rows }
+// 질문마다 DB를 읽지 않게 15초 동안 기억한다 (관리자가 상품·재고를 바꾸면 cache.js가 바로 지운다)
+function loadCatalog() {
+  return cached('chat:catalog', 15_000, async () => {
+    const [products, items] = await Promise.all([
+      pool.query(`SELECT p.*, (p.stock = 0) AS sold_out, s.name AS seller_name, s.region AS seller_region, s.story AS seller_story
+                  FROM products p JOIN sellers s ON s.seller_code = p.seller_code
+                  WHERE p.status = 'active' ORDER BY p.product_code LIMIT 300`),
+      pool.query('SELECT * FROM items'),
+    ])
+    return { products: products.rows, items: items.rows }
+  })
 }
 
 // 질문(과 앞선 질문)에 나온 품목을 찾는다. 긴 이름부터 찾고 지워서 '배즙' 안의 '배'가 다시 잡히지 않게 한다
@@ -712,4 +715,54 @@ adminChatRouter.get('/', async (req, res) => {
     usageToday(),
   ])
   res.json({ summary: { ...summary.rows[0], ai_today: aiToday, ai_limit: dailyLimit() }, logs: logs.rows })
+})
+
+// 답 못 한 질문 모아 보기: 규칙으로 못 답해 안내로 끝난 질문, AI가 답한 질문, 상한 때문에 못 답한 질문을
+// 같은 품목 + 비슷한 말끼리 묶어 많은 순으로 보여 준다 → 위에서부터 채우면 AI 호출이 가장 많이 준다
+const AI_ANSWERED = "(model NOT LIKE 'rule:%' AND model NOT LIKE 'cache:%' AND model NOT LIKE 'similar:%' AND model <> 'limit')"
+
+adminChatRouter.get('/gaps', async (req, res) => {
+  const days = Math.min(90, Math.max(1, Number(req.query.days) || 30))
+  const [{ rows }, catalog] = await Promise.all([
+    pool.query(
+      `SELECT question, model, created_at FROM chat_logs
+       WHERE created_at > now() - make_interval(days => $1) AND (model IN ('rule:ask', 'limit') OR ${AI_ANSWERED})
+       ORDER BY created_at DESC LIMIT 2000`,
+      [days],
+    ),
+    loadCatalog(),
+  ])
+  const groups = []
+  for (const r of rows) {
+    const items = findItems(r.question, catalog.items).map((i) => i.name).sort()
+    const key = items.join(',')
+    const kind = r.model === 'rule:ask' ? 'guided' : r.model === 'limit' ? 'limit' : 'ai'
+    let group = groups.find((g) => g.key === key && similarity(g.question, r.question) >= 0.6)
+    if (!group) {
+      group = { key, question: r.question, items, count: 0, guided: 0, ai: 0, limit: 0, examples: [], last_at: r.created_at }
+      groups.push(group)
+    }
+    group.count += 1
+    group[kind] += 1
+    if (r.question !== group.question && group.examples.length < 3 && !group.examples.includes(r.question)) group.examples.push(r.question)
+  }
+  // 그사이 품목 정보·규칙을 채워서 지금은 AI 없이 답하는 질문은 지금 나가는 답을 붙여 아래로 (AI는 부르지 않는다)
+  // 규칙 답이 질문에 꼭 맞지는 않을 수 있어서(예: 냉동 질문에 일반 보관법) '해결'이라 하지 않고 확인을 부탁한다
+  const top = groups.sort((a, b) => b.count - a.count || new Date(b.last_at) - new Date(a.last_at)).slice(0, 30)
+  for (const g of top) {
+    const now = await answerChat({ message: g.question }, { useCache: false, allowAi: false })
+    g.resolved = now.model !== 'rule:ask' && now.model !== 'limit'
+    if (g.resolved) g.now_answer = now.answer
+  }
+  top.sort((a, b) => a.resolved - b.resolved)
+  res.json({
+    days,
+    total: rows.length,
+    groups: top.map(({ key: _k, ...g }) => ({
+      ...g,
+      hint: g.resolved ? `지금은 AI 없이 이렇게 답해요: "${g.now_answer.slice(0, 80)}${g.now_answer.length > 80 ? '…' : ''}" 질문에 맞는 답인지 확인해 주세요` : g.items.length
+        ? `${g.items.join('·')} 품목 정보(data/items.csv)나 상품 Q&A에 답이 될 내용을 채우면 다음부터 AI 없이 답해요`
+        : '상품과 상관없는 질문이에요. 자주 나오면 정해진 답(server/chat.js)이나 안내 문구를 추가해요',
+    })),
+  })
 })

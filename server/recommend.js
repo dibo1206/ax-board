@@ -1,19 +1,23 @@
 // 6단계: 추천. 상품 태그로 점수를 매겨 고르고, 왜 골랐는지 이유를 같이 준다.
 // 고르는 건 항상 DB 규칙이라 매번 같은 결과가 나오고, 품절 상품은 추천하지 않는다.
 import express from 'express'
+import { cached } from './cache.js'
 import { pool } from './db.js'
 
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
 
-export async function loadActive() {
-  const [products, tags] = await Promise.all([
-    pool.query(`SELECT p.*, (p.stock = 0) AS sold_out, i.name AS item_name, i.category, i.show_brix,
-                       s.name AS seller_name, s.region AS seller_region
-                FROM products p JOIN items i ON i.item_code = p.item_code JOIN sellers s ON s.seller_code = p.seller_code
-                WHERE p.status = 'active'`),
-    pool.query('SELECT * FROM tags'),
-  ])
-  return { products: products.rows, tagLabel: Object.fromEntries(tags.rows.map((t) => [t.tag_code, t.label])) }
+// 추천할 때마다 DB를 읽지 않게 15초 동안 기억한다 (상품이 바뀌면 cache.js가 바로 지운다)
+export function loadActive() {
+  return cached('recommend:active', 15_000, async () => {
+    const [products, tags] = await Promise.all([
+      pool.query(`SELECT p.*, (p.stock = 0) AS sold_out, i.name AS item_name, i.category, i.show_brix,
+                         s.name AS seller_name, s.region AS seller_region
+                  FROM products p JOIN items i ON i.item_code = p.item_code JOIN sellers s ON s.seller_code = p.seller_code
+                  WHERE p.status = 'active'`),
+      pool.query('SELECT * FROM tags'),
+    ])
+    return { products: products.rows, tagLabel: Object.fromEntries(tags.rows.map((t) => [t.tag_code, t.label])) }
+  })
 }
 
 const brixReason = (p) => (p.show_brix && p.brix ? `당도 ${p.brix}Brix${p.brix_measured_at ? `(${p.brix_measured_at.slice(5).replace('-', '/')} 측정)` : ''}` : null)

@@ -193,6 +193,8 @@ CREATE INDEX IF NOT EXISTS order_items_seller_idx ON order_items (seller_code);
 -- 관리자 페이지 보호: 2단계 인증 비밀값(암호화해서 저장), 같은 코드를 두 번 못 쓰게 마지막으로 쓴 시간칸
 ALTER TABLE admins ADD COLUMN IF NOT EXISTS totp_secret_enc TEXT;
 ALTER TABLE admins ADD COLUMN IF NOT EXISTS totp_last_counter BIGINT NOT NULL DEFAULT 0;
+-- 비밀번호·2단계 인증을 바꾸면 1 올린다 → 그 전에 받은 로그인 쿠키는 모두 끊긴다
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS session_version INT NOT NULL DEFAULT 1;
 
 -- 관리자·판매자 접속 기록 (개인정보 안전성 확보조치: 계정·일시·IP·한 일을 1년 이상 보관). 요청 내용(본문)은 남기지 않는다
 CREATE TABLE IF NOT EXISTS access_logs (

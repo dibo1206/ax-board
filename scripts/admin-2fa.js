@@ -22,7 +22,7 @@ if (!rows.length) {
 }
 
 if (flag === '--off') {
-  await pool.query('UPDATE admins SET totp_secret_enc = NULL, totp_last_counter = 0 WHERE id = $1', [rows[0].id])
+  await pool.query('UPDATE admins SET totp_secret_enc = NULL, totp_last_counter = 0, session_version = session_version + 1 WHERE id = $1', [rows[0].id])
   console.log(`"${loginId}"의 2단계 인증을 해제했어요.`)
   await pool.end()
   process.exit(0)
@@ -44,6 +44,7 @@ if (counter === null) {
   await pool.end()
   process.exit(1)
 }
-await pool.query('UPDATE admins SET totp_secret_enc = $1, totp_last_counter = $2 WHERE id = $3', [encrypt(secret), counter, rows[0].id])
+// 2단계 인증을 바꾸면 예전 로그인(인증 없이 받은 쿠키)은 끊는다
+await pool.query('UPDATE admins SET totp_secret_enc = $1, totp_last_counter = $2, session_version = session_version + 1 WHERE id = $3', [encrypt(secret), counter, rows[0].id])
 console.log(`"${loginId}"에 2단계 인증을 등록했어요. 다음 로그인부터 인증 앱 코드가 필요해요.`)
 await pool.end()

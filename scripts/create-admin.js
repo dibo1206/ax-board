@@ -41,7 +41,7 @@ if (sellerCode) {
 const role = sellerCode ? 'seller' : 'admin'
 await pool.query(
   `INSERT INTO admins (login_id, password_hash, role, seller_code) VALUES ($1, $2, $3, $4)
-   ON CONFLICT (login_id) DO UPDATE SET password_hash = $2, role = $3, seller_code = $4`,
+   ON CONFLICT (login_id) DO UPDATE SET password_hash = $2, role = $3, seller_code = $4, session_version = admins.session_version + 1`, // 예전 로그인 끊기
   [loginId, await hashPassword(password), role, sellerCode ?? null],
 )
 console.log(sellerCode ? `판매자 "${loginId}"(${sellerCode})를 저장했어요. /seller 에서 로그인해요.` : `관리자 "${loginId}"를 저장했어요.`)

@@ -192,9 +192,9 @@ a.card { text-decoration: none; height: 100%; box-sizing: border-box; }
 .photo-manage img { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; display: block; }
 
 /* ---------- 관리자 매출 화면 ---------- */
-.dashboard .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
-.dashboard .filters button { padding: 6px 12px; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; }
-.dashboard .filters button.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.filters button { padding: 6px 12px; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; }
+.filters button.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
 .tile { display: flex; flex-direction: column; gap: 4px; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
 .tile b { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
@@ -210,3 +210,4 @@ a.card { text-decoration: none; height: 100%; box-sizing: border-box; }
 .chart .hit { fill: transparent; cursor: default; }
 .chart .hit:focus { outline: 2px solid var(--accent); }
 .chart-tip { position: absolute; top: 0; transform: translateX(-50%); padding: 6px 10px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; font-size: 0.85rem; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 8px rgb(0 0 0 / 0.12); }
+.nowrap { white-space: nowrap; }

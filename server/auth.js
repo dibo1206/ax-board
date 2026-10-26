@@ -112,7 +112,7 @@ export async function login(req, res) {
     return res.status(429).json({ error: `로그인을 여러 번 틀렸어요. ${LOCK_MINUTES}분 뒤에 다시 시도해 주세요.` })
   }
   const { rows } = await pool.query(
-    'SELECT id, login_id, password_hash, role, seller_code, totp_secret_enc, totp_last_counter FROM admins WHERE login_id = $1',
+    'SELECT id, login_id, password_hash, role, seller_code, totp_secret_enc, totp_last_counter, session_version FROM admins WHERE login_id = $1',
     [loginId],
   )
   const ok = rows.length === 1 && (await verifyPassword(password, rows[0].password_hash))
@@ -122,7 +122,7 @@ export async function login(req, res) {
     log('login_fail')
     return res.status(401).json({ error: '아이디 또는 비밀번호가 맞지 않아요.' })
   }
-  const { id, login_id: account, role, seller_code: sellerCode, totp_secret_enc: sealed, totp_last_counter: lastCounter } = rows[0]
+  const { id, login_id: account, role, seller_code: sellerCode, totp_secret_enc: sealed, totp_last_counter: lastCounter, session_version: sv } = rows[0]
   if (role === 'admin' && !adminIpAllowed(req.ip)) {
     log('login_blocked_ip', { role })
     return res.status(403).json({ error: '허용된 곳에서만 관리자 로그인이 돼요.' })
@@ -142,7 +142,7 @@ export async function login(req, res) {
     return res.status(403).json({ error: '2단계 인증을 먼저 등록해 주세요. (서버에서 npm run admin-2fa -- 아이디)' })
   }
   fails.delete(loginId)
-  setSessionCookie(res, signToken({ kind: 'staff', id, loginId: account, role, sellerCode, mfa: Boolean(sealed), exp: Date.now() + SESSION_HOURS * 3_600_000 }), SESSION_HOURS * 3600)
+  setSessionCookie(res, signToken({ kind: 'staff', id, sv, loginId: account, role, sellerCode, mfa: Boolean(sealed), exp: Date.now() + SESSION_HOURS * 3_600_000 }), SESSION_HOURS * 3600)
   log('login_ok', { role })
   res.json({ loginId: account, role, sellerCode, mfa: Boolean(sealed) })
 }
@@ -163,10 +163,23 @@ export function currentAdmin(req) {
   }
 }
 
+// 쿠키 서명만 믿지 않고 요청마다 DB에서 계정을 다시 확인한다
+// → 계정을 지우거나 비밀번호·2단계 인증을 바꾸면(session_version 증가) 이미 로그인한 쿠키도 바로 끊긴다. 역할·농가도 DB 값을 쓴다
+export async function currentStaff(req) {
+  const token = currentAdmin(req)
+  if (!token?.id) return null
+  const { rows } = await pool.query(
+    'SELECT login_id, role, seller_code, session_version, totp_secret_enc IS NOT NULL AS mfa FROM admins WHERE id = $1',
+    [token.id],
+  )
+  const row = rows[0]
+  if (!row || row.session_version !== token.sv) return null
+  return { ...token, loginId: row.login_id, role: row.role, sellerCode: row.seller_code, mfa: row.mfa }
+}
+
 // 관리자 API 앞에 붙이는 문지기. 로그인하지 않았으면 401, 판매자 계정이면 403
-// (판매자 기능 전에 만든 로그인 쿠키에는 role이 없는데, 그때는 관리자 계정만 있었다)
-export function requireAdmin(req, res, next) {
-  const admin = currentAdmin(req)
+export async function requireAdmin(req, res, next) {
+  const admin = await currentStaff(req)
   if (!admin) return res.status(401).json({ error: '관리자 로그인이 필요해요.' })
   if (admin.role === 'seller') return res.status(403).json({ error: '관리자만 쓸 수 있어요. 판매자 화면(/seller)을 이용해 주세요.' })
   if (!adminIpAllowed(req.ip)) return res.status(403).json({ error: '허용된 곳에서만 관리자 화면을 쓸 수 있어요.' })
@@ -175,8 +188,8 @@ export function requireAdmin(req, res, next) {
 }
 
 // 판매자 API 앞에 붙이는 문지기. 판매자 계정만 통과하고, req.seller.sellerCode로 자기 농가만 다룬다
-export function requireSeller(req, res, next) {
-  const account = currentAdmin(req)
+export async function requireSeller(req, res, next) {
+  const account = await currentStaff(req)
   if (!account) return res.status(401).json({ error: '판매자 로그인이 필요해요.' })
   if (account.role !== 'seller' || !account.sellerCode) return res.status(403).json({ error: '판매자 계정만 쓸 수 있어요. 관리자는 관리자 화면(/admin)을 이용해 주세요.' })
   req.seller = account

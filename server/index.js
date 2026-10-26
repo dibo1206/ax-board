@@ -11,7 +11,7 @@ import { accessLogger, adminAccessLogRouter } from './accessLog.js'
 import { dashboardRouter } from './dashboard.js'
 import { adminRouter, UPLOAD_DIR } from './admin.js'
 import { cached, clearCache } from './cache.js'
-import { currentAdmin, login, logout, requireAdmin } from './auth.js'
+import { currentStaff, login, logout, requireAdmin } from './auth.js'
 import { listMails } from './mailer.js'
 import { adminChatRouter, chatRouter } from './chat.js'
 import { initDb, isTransientDbError, pool } from './db.js'
@@ -188,8 +188,8 @@ app.get('/api/tags', async (req, res) => {
 app.use(['/api/admin', '/api/seller'], accessLogger)
 app.post('/api/admin/login', login)
 app.post('/api/admin/logout', logout)
-app.get('/api/admin/me', (req, res) => {
-  const admin = currentAdmin(req)
+app.get('/api/admin/me', async (req, res) => {
+  const admin = await currentStaff(req)
   if (!admin) return res.status(401).json({ error: '관리자 로그인이 필요해요.' })
   res.json({ loginId: admin.loginId, role: admin.role ?? 'admin', sellerCode: admin.sellerCode ?? null, mfa: Boolean(admin.mfa) })
 })
