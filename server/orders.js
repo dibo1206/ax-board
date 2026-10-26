@@ -129,7 +129,9 @@ async function loadOrder(orderNo, client = pool) {
   const { rows } = await client.query('SELECT * FROM orders WHERE order_no = $1', [orderNo])
   if (!rows.length) return null
   const items = await client.query(
-    'SELECT product_code, seller_code, name, unit, price, quantity, subtotal FROM order_items WHERE order_id = $1 ORDER BY id',
+    `SELECT oi.product_code, oi.seller_code, oi.name, oi.unit, oi.price, oi.quantity, oi.subtotal,
+            EXISTS (SELECT 1 FROM reviews r WHERE r.order_id = oi.order_id AND r.product_code = oi.product_code) AS reviewed
+     FROM order_items oi WHERE oi.order_id = $1 ORDER BY oi.id`,
     [rows[0].id],
   )
   return { ...rows[0], items: items.rows }

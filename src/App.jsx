@@ -5,6 +5,7 @@ import Seller from './seller/Seller.jsx'
 import { Chat } from './Chat.jsx'
 import { B2bForm, QuestionForm } from './Inquiry.jsx'
 import { Featured, Quiz, Related } from './Recommend.jsx'
+import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
 import { Cart } from './shop/Cart.jsx'
 import { Checkout } from './shop/Checkout.jsx'
 import { OrderFail, OrderLookup, OrderSuccess, Policy } from './shop/Orders.jsx'
@@ -81,6 +82,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
       {product.image_url && <img className="hero" src={product.image_url} alt={product.name} />}
       <h2>{product.name}</h2>
       <p className="price">{won(product.price)} <span className="muted">/ {product.unit}</span></p>
+      <RatingBadge rating={product.rating} count={product.review_count} />
       {product.sold_out && <p className="badge soldout">품절</p>}
 
       <dl>
@@ -127,6 +129,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
       </div>
       {showB2b && <B2bForm product={product} onClose={() => setShowB2b(false)} />}
 
+      <ReviewList code={product.product_code} />
       <section className="box" ref={qnaRef}>
         <h3>Q&A {product.questions.length}개</h3>
         <QuestionForm
@@ -233,6 +236,7 @@ function Storefront() {
                   <span>{p.sold_out ? '품절' : won(p.price)}</span>
                   <span className="muted">{p.seller_name}</span>
                   {p.show_brix && p.brix && <span className="badge">당도 {p.brix}</span>}
+                  <RatingBadge rating={p.rating} count={p.review_count} />
                 </button>
               </li>
             ))}

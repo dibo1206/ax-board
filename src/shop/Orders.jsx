@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ReviewForm } from './Reviews.jsx'
 import { getPolicy, ORDER_STATUS, post, readCart, takePending, when, won, writeCart } from './shared.js'
 
 // 주문 결과(성공·실패) · 비회원 주문 조회 · 약관 페이지
-export function OrderDetail({ order }) {
+// phone: 비회원 후기 쓰기에 쓰는 주문자 휴대폰 (회원은 로그인으로 확인)
+export function OrderDetail({ order, phone = '' }) {
+  const [writing, setWriting] = useState(null)
+  const [written, setWritten] = useState([])
+  const canReview = (i) => order.status === 'delivered' && !i.reviewed && !written.includes(i.product_code)
   return (
     <>
       <dl className="detail-list">
@@ -15,7 +20,16 @@ export function OrderDetail({ order }) {
         {order.cancel_reason && <><dt>취소</dt><dd>{when(order.cancelled_at)} · {order.cancel_reason}</dd></>}
       </dl>
       <ul className="order-items">
-        {order.items.map((i) => <li key={i.product_code}>{i.name} ({i.unit}) × {i.quantity} — {won(i.subtotal)}</li>)}
+        {order.items.map((i) => (
+          <li key={i.product_code}>
+            {i.name} ({i.unit}) × {i.quantity} — {won(i.subtotal)}
+            {canReview(i) && writing !== i.product_code && <button type="button" className="link" onClick={() => setWriting(i.product_code)}> 후기 쓰기</button>}
+            {written.includes(i.product_code) && <span className="success"> 후기를 남겼어요</span>}
+            {writing === i.product_code && (
+              <ReviewForm orderNo={order.order_no} phone={phone} item={i} onDone={() => { setWritten((w) => [...w, i.product_code]); setWriting(null) }} />
+            )}
+          </li>
+        ))}
         <li className="muted">상품 {won(order.items_amount)} + 배송비 {won(order.shipping_fee)} = <b>{won(order.total_amount)}</b></li>
       </ul>
     </>
@@ -170,7 +184,7 @@ export function OrderLookup() {
       {error && <p className="error">{error}</p>}
       {order && (
         <div className="box">
-          <OrderDetail order={order} />
+          <OrderDetail order={order} phone={phone} />
           {order.status === 'paid' && (
             <div className="actions">
               <button type="button" className="button ghost" onClick={cancel} disabled={busy}>주문 취소하기</button>

@@ -158,3 +158,15 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .notice-new { padding: 10px 14px; border-radius: 10px; background: var(--accent); color: #fff; font-weight: 700; }
 .notice-new .link { color: #fff; text-decoration: underline; }
 .mail-body { white-space: pre-wrap; font: inherit; font-size: 0.85rem; background: var(--bg); padding: 8px; border-radius: 8px; }
+
+/* ---------- 구매 후기 ---------- */
+.stars { color: #e0a100; letter-spacing: 1px; }
+.stars .off { color: var(--border); }
+.rating { font-size: 0.9rem; }
+.reviews { list-style: none; padding: 0; margin: 0; }
+.reviews li { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.reply { margin-left: 12px; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--bg); font-size: 0.9rem; }
+.star-pick { display: flex; gap: 2px; }
+.star-pick button { font-size: 1.6rem; line-height: 1; color: var(--border); background: none; border: none; cursor: pointer; padding: 0 2px; }
+.star-pick button.on { color: #e0a100; }
+.review-form { margin: 8px 0 12px; }

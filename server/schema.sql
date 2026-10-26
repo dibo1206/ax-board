@@ -250,3 +250,20 @@ CREATE TABLE IF NOT EXISTS email_outbox (
   sent_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS email_outbox_status_idx ON email_outbox (status, created_at);
+
+-- 구매 후기: 배송 완료된 주문의 상품만, 주문·상품마다 한 번. 공개 화면에는 이름 첫 글자만
+CREATE TABLE IF NOT EXISTS reviews (
+  id SERIAL PRIMARY KEY,
+  order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  product_code TEXT NOT NULL REFERENCES products(product_code),
+  customer_id INT REFERENCES customers(id) ON DELETE SET NULL,
+  author TEXT NOT NULL,
+  rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  content TEXT NOT NULL,
+  reply TEXT,
+  replied_at TIMESTAMPTZ,
+  hidden BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (order_id, product_code)
+);
+CREATE INDEX IF NOT EXISTS reviews_product_idx ON reviews (product_code, created_at DESC);

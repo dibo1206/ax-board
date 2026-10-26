@@ -14,6 +14,7 @@ import { initDb, isTransientDbError, pool } from './db.js'
 import { adminInquiryRouter, maskName, publicInquiryRouter } from './inquiry.js'
 import { adminOrderRouter, memberOrderRouter, publicOrderRouter, sellerOrderRouter, startOrderSweeper } from './orders.js'
 import { recommendRouter } from './recommend.js'
+import { adminReviewRouter, reviewRouter } from './reviews.js'
 import { sellerRouter } from './seller.js'
 
 if (!process.env.PORT && process.env.BACKEND_PORT === undefined) {
@@ -59,10 +60,13 @@ app.use(express.json({ limit: '100kb' }))
 const PRODUCT_SELECT = `
   SELECT p.*, (p.stock = 0) AS sold_out,
          i.name AS item_name, i.category, i.show_brix,
-         s.name AS seller_name, s.region AS seller_region, s.is_company
+         s.name AS seller_name, s.region AS seller_region, s.is_company,
+         rv.rating, COALESCE(rv.review_count, 0) AS review_count
   FROM products p
   JOIN items i ON i.item_code = p.item_code
   JOIN sellers s ON s.seller_code = p.seller_code
+  LEFT JOIN (SELECT product_code, round(avg(rating)::numeric, 1)::float AS rating, count(*)::int AS review_count
+             FROM reviews WHERE NOT hidden GROUP BY product_code) rv ON rv.product_code = p.product_code
   WHERE p.status = 'active'`
 
 // 상태 확인: DB까지 살아 있으면 200, DB가 안 되면 503 (배포 후 모니터링·자동 재시작이 이 주소를 본다)
@@ -127,6 +131,7 @@ app.use('/api/admin/inquiries', adminInquiryRouter)
 app.use('/api/admin/chat-logs', adminChatRouter)
 app.use('/api/admin/orders', adminOrderRouter)
 app.use('/api/admin/access-logs', adminAccessLogRouter)
+app.use('/api/admin/reviews', adminReviewRouter)
 app.get('/api/admin/notifications', requireAdmin, async (req, res) => res.json(await listMails()))
 app.use('/api/admin', adminRouter)
 app.use('/api/seller/orders', sellerOrderRouter)
@@ -135,6 +140,7 @@ app.use('/api', publicInquiryRouter)
 app.use('/api', chatRouter)
 app.use('/api', recommendRouter)
 app.use('/api', publicOrderRouter)
+app.use('/api', reviewRouter)
 app.use('/api/account/orders', memberOrderRouter)
 app.use('/api/account', accountRouter)
 // 올린 사진은 그림으로만 쓰이게: 사진 주소를 직접 열어도 스크립트가 돌지 않는다

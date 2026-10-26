@@ -4,6 +4,7 @@ import { ChatLogs } from './ChatLogs.jsx'
 import { Inbox } from './Inbox.jsx'
 import { AccessLogs } from './AccessLogs.jsx'
 import { Notifications } from './Notifications.jsx'
+import { AdminReviews } from './Reviews.jsx'
 import { Orders } from './Orders.jsx'
 import { ProductForm } from './ProductForm.jsx'
 
@@ -147,6 +148,7 @@ function Admin() {
             문의함{waiting > 0 && ` (${waiting})`}
           </button>
           <button type="button" className={tab === 'orders' ? 'on' : ''} onClick={() => { setTab('orders'); setEditing(null); setMessage('') }}>주문{newOrders > 0 && ` (${newOrders})`}</button>
+          <button type="button" className={tab === 'reviews' ? 'on' : ''} onClick={() => { setTab('reviews'); setEditing(null); setMessage('') }}>후기</button>
           <button type="button" className={tab === 'chat' ? 'on' : ''} onClick={() => { setTab('chat'); setEditing(null); setMessage('') }}>상담 기록</button>
           <button type="button" className={tab === 'access' ? 'on' : ''} onClick={() => { setTab('access'); setEditing(null); setMessage('') }}>접속 기록</button>
           <button type="button" className={tab === 'mail' ? 'on' : ''} onClick={() => { setTab('mail'); setEditing(null); setMessage('') }}>알림 기록</button>
@@ -163,6 +165,8 @@ function Admin() {
         <Inbox onCount={setCounts} />
       ) : tab === 'orders' ? (
         <Orders onCount={setCounts} />
+      ) : tab === 'reviews' ? (
+        <AdminReviews />
       ) : tab === 'mail' ? (
         <Notifications />
       ) : tab === 'access' ? (
