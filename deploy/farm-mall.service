@@ -1,0 +1,29 @@
+# 운영 서버에서 쇼핑몰을 항상 켜 두는 설정 (docs/deploy.md 4번)
+# /etc/systemd/system/farm-mall.service 로 복사 → systemctl enable --now farm-mall
+[Unit]
+Description=YOONJU MARKET (farm-mall)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=farm
+WorkingDirectory=/srv/farm-mall
+Environment=NODE_ENV=production
+Environment=PORT=3000
+# .env 는 앱이 직접 읽는다 (WorkingDirectory 기준)
+ExecStart=/usr/bin/node server/index.js --serve
+Restart=always
+RestartSec=3
+# 끄라는 신호를 받으면 처리 중인 요청(결제 승인 포함)을 마치고 20초 안에 꺼진다
+KillSignal=SIGTERM
+TimeoutStopSec=25
+
+# 앱이 쓸 수 있는 곳은 상품 사진 폴더뿐
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/farm-mall/uploads
+
+[Install]
+WantedBy=multi-user.target

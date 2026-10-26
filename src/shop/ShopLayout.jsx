@@ -83,7 +83,8 @@ export function ShopLayout({ children }) {
           {shop && (
             <p className="foot-biz">
               {shop.company} · 대표 {shop.ceo} · 사업자등록번호 {shop.bizNo} · 통신판매업 {shop.mailOrderNo}<br />
-              {shop.address} · 고객센터 {shop.phone} · {shop.email}
+              {shop.address}<br />
+              대표전화 <a href={`tel:${shop.phone.replace(/\D/g, '')}`}>{shop.phone}</a> · {shop.email}{shop.hours && ` · ${shop.hours}`}
             </p>
           )}
           <p className="foot-copy">© Yunjufarm.</p>
