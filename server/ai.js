@@ -33,9 +33,10 @@ export async function usageToday() {
 }
 
 // 한 번 부를 때마다 센다 (OpenRouter는 실패한 요청도 횟수에 넣는다). 상한에 닿았으면 false
+// 상한 0(AI 끄기)이면 그날 첫 호출도 막는다
 async function takeCall() {
   const { rows } = await pool.query(
-    `INSERT INTO ai_usage (day, calls) VALUES (${TODAY}, 1)
+    `INSERT INTO ai_usage (day, calls) SELECT ${TODAY}, 1 WHERE $1::int > 0
      ON CONFLICT (day) DO UPDATE SET calls = ai_usage.calls + 1 WHERE ai_usage.calls < $1
      RETURNING calls`,
     [dailyLimit()],
