@@ -41,6 +41,8 @@ export default defineConfig(({ mode }) => {
       proxy: {
         '/api': { target, changeOrigin: true, xfwd: true, headers },
         '/uploads': { target, changeOrigin: true, headers },
+        '/robots.txt': { target, changeOrigin: true, xfwd: true, headers },
+        '/sitemap.xml': { target, changeOrigin: true, xfwd: true, headers },
       },
     },
   }

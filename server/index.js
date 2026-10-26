@@ -1,13 +1,16 @@
-// 농가 판매 자사몰 백엔드. 화면($PORT) → 이 서버($PORT + 100) → PostgreSQL
+// 농가 판매 자사몰 백엔드. 개발: 화면(Vite, $PORT) → 이 서버($PORT + 100) → PostgreSQL
+// 배포(npm run build → npm start): 이 서버 하나가 $PORT 에서 화면(dist)과 API를 함께 보낸다
 // 1단계: 데이터 읽기 / 2단계: 관리자 상품 관리 / 4단계: 상품 Q&A·기업 구매 문의 / 5단계: AI 상담 / 6단계: 추천 / 판매자(농가) 화면 / 7단계: 자체 주문·결제
 import 'dotenv/config'
 import { timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import compression from 'compression'
 import express from 'express'
 import { accountRouter } from './account.js'
 import { accessLogger, adminAccessLogRouter } from './accessLog.js'
 import { dashboardRouter } from './dashboard.js'
 import { adminRouter, UPLOAD_DIR } from './admin.js'
+import { cached, clearCache } from './cache.js'
 import { currentAdmin, login, logout, requireAdmin } from './auth.js'
 import { listMails } from './mailer.js'
 import { adminChatRouter, chatRouter } from './chat.js'
@@ -17,13 +20,15 @@ import { adminOrderRouter, memberOrderRouter, publicOrderRouter, sellerOrderRout
 import { recommendRouter } from './recommend.js'
 import { adminReviewRouter, reviewRouter } from './reviews.js'
 import { sellerRouter } from './seller.js'
+import { seoRouter, serveDist } from './web.js'
 
 if (!process.env.PORT && process.env.BACKEND_PORT === undefined) {
   console.error('[server] PORT 환경변수가 없어요. 실습서버 내 계정 터미널에서 실행해 주세요. (echo $PORT 로 확인)')
   process.exit(1)
 }
+const SERVE = process.argv.includes('--serve') // 배포 모드: 화면까지 이 서버가 보낸다
 // BACKEND_PORT: 시험 스크립트가 빈 포트(0)로 따로 띄울 때만 쓴다
-const PORT = process.env.BACKEND_PORT !== undefined ? Number(process.env.BACKEND_PORT) : Number(process.env.PORT) + 100
+const PORT = process.env.BACKEND_PORT !== undefined ? Number(process.env.BACKEND_PORT) : Number(process.env.PORT) + (SERVE ? 0 : 100)
 const app = express()
 
 // 끄는 중에는 새 요청을 받지 않는다 (처리 중인 요청은 마저 끝낸다)
@@ -33,6 +38,8 @@ app.use((req, res, next) => {
   res.set('Connection', 'close')
   res.status(503).json({ error: '서버를 잠시 다시 켜는 중이에요. 몇 초 뒤에 다시 시도해 주세요.' })
 })
+// 글자로 된 응답(화면 파일·상품 목록 JSON)은 압축해서 보낸다 (사진은 이미 압축돼 있어 그대로)
+app.use(compression())
 // 손님 IP(글 남기기 횟수 제한용)는 앞단 프록시가 붙인 값만 믿는다. 개발: Vite 1단, 배포 시 프록시 수에 맞게 TRUST_PROXY_HOPS
 app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 1))
 app.disable('x-powered-by')
@@ -45,8 +52,9 @@ app.use((req, res, next) => {
 
 // 공유 서버라 같은 서버의 다른 사용자도 이 포트(127.0.0.1)에 직접 접속할 수 있다.
 // 화면 서버(Vite·웹 서버)만 아는 PROXY_SECRET을 붙인 요청만 받아서, 직접 접속해 IP를 속이거나 AI 한도를 쓰는 걸 막는다.
-const PROXY_SECRET = process.env.PROXY_SECRET ?? ''
-if (!PROXY_SECRET) console.warn('[server] PROXY_SECRET이 없어서 누구나 이 포트로 직접 요청할 수 있어요. .env에 넣어 주세요.')
+// 배포 모드는 이 서버가 맨 앞이라(앞단 화면 서버가 없음) 이 검사를 하지 않는다
+const PROXY_SECRET = SERVE ? '' : (process.env.PROXY_SECRET ?? '')
+if (!PROXY_SECRET && !SERVE) console.warn('[server] PROXY_SECRET이 없어서 누구나 이 포트로 직접 요청할 수 있어요. .env에 넣어 주세요.')
 app.use((req, res, next) => {
   if (!PROXY_SECRET) return next()
   const got = Buffer.from(req.get('x-proxy-secret') ?? '')
@@ -56,6 +64,14 @@ app.use((req, res, next) => {
 })
 
 app.use(express.json({ limit: '100kb' }))
+
+// 무언가 바뀌면(관리자·판매자 수정, 주문, 후기·문의 남기기) 기억해 둔 상품 목록·상세를 지운다. AI 상담은 상품을 바꾸지 않아서 뺀다
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD' && !req.path.startsWith('/api/chat')) {
+    res.on('finish', () => { if (res.statusCode < 400) clearCache() })
+  }
+  next()
+})
 
 // 상품 + 품목·농가 정보를 함께 읽는다. 품절은 재고 0으로 계산한다.
 const PRODUCT_SELECT = `
@@ -93,8 +109,7 @@ app.get('/api/products', async (req, res) => {
     sql += ` AND i.category = $${params.length}`
   }
   sql += ' ORDER BY (p.stock = 0), i.category, p.name'
-  const { rows } = await pool.query(sql, params)
-  res.json(rows)
+  res.json(await cached(`products:${category ?? ''}`, 15_000, async () => (await pool.query(sql, params)).rows))
 })
 
 // 상품 찾기: 검색어(q, 띄어쓰기로 여러 단어)·카테고리·정렬·페이지. 품절 상품은 항상 뒤로
@@ -126,18 +141,27 @@ app.get('/api/catalog', async (req, res) => {
                OR EXISTS (SELECT 1 FROM tags t WHERE t.tag_code = ANY(p.tags) AND t.label ILIKE ${n}))`
   }
   params.push(size, (page - 1) * size)
-  const { rows } = await pool.query(
-    `SELECT x.*, count(*) OVER () AS total FROM (${PRODUCT_SELECT} ${where}) x
-     ORDER BY (x.stock = 0), ${SORTS[sort]} LIMIT $${params.length - 1} OFFSET $${params.length}`,
-    params,
-  )
-  const total = Number(rows[0]?.total ?? 0)
-  res.json({ items: rows.map(({ total: _t, ...p }) => p), total, page, pages: Math.max(1, Math.ceil(total / size)), sort })
+  // 같은 검색·정렬·페이지는 15초 동안 DB를 다시 읽지 않는다 (재고는 주문할 때 서버가 다시 확인)
+  res.json(await cached(`catalog:${JSON.stringify(params)}:${sort}`, 15_000, async () => {
+    const { rows } = await pool.query(
+      `SELECT x.*, count(*) OVER () AS total FROM (${PRODUCT_SELECT} ${where}) x
+       ORDER BY (x.stock = 0), ${SORTS[sort]} LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
+    )
+    const total = Number(rows[0]?.total ?? 0)
+    return { items: rows.map(({ total: _t, ...p }) => p), total, page, pages: Math.max(1, Math.ceil(total / size)), sort }
+  }))
 })
 
 app.get('/api/products/:code', async (req, res) => {
-  const { rows } = await pool.query(`${PRODUCT_SELECT} AND p.product_code = $1`, [req.params.code])
-  if (rows.length === 0) return res.status(404).json({ error: '상품을 찾지 못했어요.' })
+  const detail = await cached(`product:${req.params.code}`, 15_000, () => loadProductDetail(req.params.code))
+  if (!detail) return res.status(404).json({ error: '상품을 찾지 못했어요.' })
+  res.json(detail)
+})
+
+async function loadProductDetail(code) {
+  const { rows } = await pool.query(`${PRODUCT_SELECT} AND p.product_code = $1`, [code])
+  if (rows.length === 0) return null
   const product = rows[0]
   const [item, seller, questions] = await Promise.all([
     pool.query('SELECT * FROM items WHERE item_code = $1', [product.item_code]),
@@ -147,17 +171,16 @@ app.get('/api/products/:code', async (req, res) => {
       [product.product_code],
     ),
   ])
-  res.json({
+  return {
     ...product,
     item: item.rows[0],
     seller: seller.rows[0],
     questions: questions.rows.map((q) => ({ ...q, author: maskName(q.author) })),
-  })
-})
+  }
+}
 
 app.get('/api/tags', async (req, res) => {
-  const { rows } = await pool.query('SELECT * FROM tags ORDER BY tag_group, tag_code')
-  res.json(rows)
+  res.json(await cached('tags', 5 * 60_000, async () => (await pool.query('SELECT * FROM tags ORDER BY tag_group, tag_code')).rows))
 })
 
 // ---------- 관리자 (2단계) ----------
@@ -191,10 +214,14 @@ app.use('/api/account', accountRouter)
 app.use('/uploads', express.static(fileURLToPath(UPLOAD_DIR), {
   setHeaders: (res) => res.set({ 'Content-Security-Policy': "default-src 'none'; img-src 'self'; sandbox", 'Cache-Control': 'public, max-age=31536000, immutable' }),
 }))
+app.use('/api', (req, res) => res.status(404).json({ error: '없는 주소예요.' }))
+app.use(seoRouter)
+if (SERVE) await serveDist(app)
 
 app.use((error, req, res, _next) => {
   if (error.type === 'entity.too.large') return res.status(413).json({ error: '파일이 너무 커요. 사진은 2MB 이하만 올릴 수 있어요.' })
   if (error.type === 'entity.parse.failed') return res.status(400).json({ error: '보낸 내용을 읽지 못했어요.' })
+  if (error.status === 404) return res.status(404).json({ error: '없는 주소예요.' }) // 없는 화면 파일(/assets/...)
   if (isTransientDbError(error)) {
     // DB가 잠깐 끊기거나 느린 경우: 트랜잭션은 자동으로 되돌려졌으니 다시 시도하면 된다
     console.warn(`[server] ${req.method} ${req.path} · DB 연결 불안정 ${error.code ?? ''}`)
@@ -207,7 +234,7 @@ app.use((error, req, res, _next) => {
 await initDb()
 startOrderSweeper()
 const server = app.listen(PORT, '127.0.0.1', () => {
-  console.log(`[server] http://127.0.0.1:${server.address().port}`)
+  console.log(`[server] http://127.0.0.1:${server.address().port}${SERVE ? ' (배포 모드: 화면 + API)' : ''}`)
 })
 
 // 안전하게 끄기: 새 연결은 받지 않고, 처리 중인 요청(결제 승인 포함)을 끝낸 뒤 DB 연결을 닫는다. 20초가 넘으면 강제 종료

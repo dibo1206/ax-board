@@ -1,18 +1,29 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
-import Admin from './admin/Admin.jsx'
-import Seller from './seller/Seller.jsx'
 import { Chat } from './Chat.jsx'
 import { B2bForm, QuestionForm } from './Inquiry.jsx'
 import { Featured, Quiz, Related } from './Recommend.jsx'
 import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
-import { Cart } from './shop/Cart.jsx'
-import { Checkout } from './shop/Checkout.jsx'
-import { OrderFail, OrderLookup, OrderSuccess, Policy } from './shop/Orders.jsx'
 import { addToCart, thumbUrl } from './shop/shared.js'
 import { ShopLayout } from './shop/ShopLayout.jsx'
-import { FindPasswordPage, LoginPage, MyPage, ResetPasswordPage, SignupPage } from './account/Account.jsx'
 import { netFetch } from './net.js'
+
+// 첫 화면(상품 목록)에 필요 없는 페이지는 그 주소에 들어갈 때 따로 받는다 → 손님이 처음 받는 파일이 작아진다
+const page = (load, name) => lazy(() => load().then((m) => ({ default: m[name] })))
+const Admin = lazy(() => import('./admin/Admin.jsx'))
+const Seller = lazy(() => import('./seller/Seller.jsx'))
+const Cart = page(() => import('./shop/Cart.jsx'), 'Cart')
+const Checkout = page(() => import('./shop/Checkout.jsx'), 'Checkout')
+const OrderSuccess = page(() => import('./shop/Orders.jsx'), 'OrderSuccess')
+const OrderFail = page(() => import('./shop/Orders.jsx'), 'OrderFail')
+const OrderLookup = page(() => import('./shop/Orders.jsx'), 'OrderLookup')
+const Policy = page(() => import('./shop/Orders.jsx'), 'Policy')
+const LoginPage = page(() => import('./account/Account.jsx'), 'LoginPage')
+const SignupPage = page(() => import('./account/Account.jsx'), 'SignupPage')
+const FindPasswordPage = page(() => import('./account/Account.jsx'), 'FindPasswordPage')
+const ResetPasswordPage = page(() => import('./account/Account.jsx'), 'ResetPasswordPage')
+const MyPage = page(() => import('./account/Account.jsx'), 'MyPage')
+const loading = <p className="muted">불러오는 중…</p>
 
 // 1단계 데이터 확인용 화면. 실제 디자인은 시안이 나오면 3단계에서 새로 만든다.
 async function api(path) {
@@ -32,7 +43,7 @@ function Gallery({ product }) {
   if (!photos.length) return null
   return (
     <div className="gallery">
-      <img className="hero" src={photos[index]} alt={product.name} width="1200" height="900" />
+      <img className="hero" src={photos[index]} alt={product.name} width="1200" height="900" fetchPriority="high" />
       {photos.length > 1 && (
         <div className="gallery-thumbs">
           {photos.map((url, i) => (
@@ -139,6 +150,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {product.harvest_date && <><dt>수확일</dt><dd>{product.harvest_date.slice(0, 10)}</dd></>}
         <dt>판매 농가</dt><dd>{seller.name} · {seller.region}</dd>
       </dl>
+      <BuyBox product={product} onAsk={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })} />
 
       <Description text={product.description} />
       <section className="box">
@@ -166,7 +178,6 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         <p>{seller.story}</p>
       </section>
 
-      <BuyBox product={product} onAsk={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })} />
       <div className="actions">
         <button type="button" className="link" onClick={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })}>상품 문의하기</button>
         {product.b2b_available && (
@@ -208,7 +219,7 @@ function App() {
           <h1>농가 판매 자사몰 · 판매자</h1>
           <p className="notice">개발 중 · 농가 판매자 화면입니다. 내 농가 상품만 보여요. <a href="/">소비자 화면으로</a></p>
         </header>
-        <Seller />
+        <Suspense fallback={loading}><Seller /></Suspense>
       </div>
     )
   }
@@ -219,11 +230,11 @@ function App() {
           <h1>농가 판매 자사몰 · 관리자</h1>
           <p className="notice">개발 중 · 관리자 화면입니다. <a href="/">소비자 화면으로</a></p>
         </header>
-        <Admin />
+        <Suspense fallback={loading}><Admin /></Suspense>
       </div>
     )
   }
-  return <ShopLayout>{shopPage(window.location.pathname)}</ShopLayout>
+  return <ShopLayout><Suspense fallback={loading}>{shopPage(window.location.pathname)}</Suspense></ShopLayout>
 }
 
 function shopPage(path) {
