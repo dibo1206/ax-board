@@ -187,7 +187,7 @@ app.use('/api/account/orders', memberOrderRouter)
 app.use('/api/account', accountRouter)
 // 올린 사진은 그림으로만 쓰이게: 사진 주소를 직접 열어도 스크립트가 돌지 않는다
 app.use('/uploads', express.static(fileURLToPath(UPLOAD_DIR), {
-  setHeaders: (res) => res.set('Content-Security-Policy', "default-src 'none'; img-src 'self'; sandbox"),
+  setHeaders: (res) => res.set({ 'Content-Security-Policy': "default-src 'none'; img-src 'self'; sandbox", 'Cache-Control': 'public, max-age=31536000, immutable' }),
 }))
 
 app.use((error, req, res, _next) => {

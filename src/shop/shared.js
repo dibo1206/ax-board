@@ -3,6 +3,9 @@ import { netFetch } from '../net.js'
 
 export const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
 
+// 목록에는 서버가 만든 400px 썸네일을 쓴다 (예전 png·jpg 사진은 그대로)
+export const thumbUrl = (url) => (url?.endsWith('.webp') ? url.replace(/\.webp$/, '-thumb.webp') : url)
+
 export async function get(path) {
   const response = await netFetch(`/api${path}`)
   const data = await response.json().catch(() => ({}))

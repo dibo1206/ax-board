@@ -1,9 +1,10 @@
 import { useState } from 'react'
+import { thumbUrl } from '../shop/shared.js'
 import { adminApi } from './api.js'
 
 const EMPTY = {
   product_code: '', seller_code: '', item_code: '', name: '', price: '', unit: '', stock: '',
-  weight_g: '', count_per_box: '', brix: '', brix_measured_at: '', harvest_date: '', summary: '',
+  weight_g: '', count_per_box: '', brix: '', brix_measured_at: '', harvest_date: '', summary: '', description: '',
   external_url: '', b2b_available: false, tags: [],
 }
 
@@ -41,6 +42,8 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
   const [form, setForm] = useState(() => toForm(product))
   const [errors, setErrors] = useState([])
   const [image, setImage] = useState(null)
+  const [gallery, setGallery] = useState([]) // 새로 올릴 상세 사진들
+  const [photos, setPhotos] = useState(() => ({ main: product?.image_url ?? null, list: product?.images ?? [] }))
   const [saving, setSaving] = useState(false)
 
   const item = options.items.find((i) => i.item_code === form.item_code)
@@ -64,6 +67,9 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
           headers: { 'Content-Type': image.type },
           body: image,
         })
+      }
+      for (const file of gallery) {
+        await api(`/products/${saved.product_code}/image?role=gallery`, { method: 'POST', headers: { 'Content-Type': file.type }, body: file })
       }
       onSaved(saved, SAVED[saved.status] ?? '저장했어요')
     } catch (e) {
@@ -122,7 +128,10 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
       {item && item.category !== '가공품' && (
         <label>수확일<input type="date" value={form.harvest_date} onChange={set('harvest_date')} /></label>
       )}
-      <label>한 줄 소개<input value={form.summary} onChange={set('summary')} /></label>
+      <label>한 줄 소개<input value={form.summary} onChange={set('summary')} maxLength={200} /></label>
+      <label>상품 설명 <span className="muted">(선택) 빈 줄로 문단을 나눠요. 효능 표현은 쓰지 않아요</span>
+        <textarea value={form.description} onChange={set('description')} rows={6} maxLength={3000} placeholder="재배 방법, 맛, 크기, 포장 방법 등" />
+      </label>
       <label>판매 링크 (스마트스토어·쿠팡, 없으면 비우기)<input value={form.external_url} onChange={set('external_url')} placeholder="https://" /></label>
       <label className="check"><input type="checkbox" checked={form.b2b_available} onChange={set('b2b_available')} />기업(B2B) 구매 문의 받기</label>
 
@@ -140,10 +149,29 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
         ))}
       </fieldset>
 
-      <label>상품 사진 (jpg·png·webp, 2MB 이하)
+      <label>대표 사진 (jpg·png·webp, 2MB 이하 · 자동으로 줄이고 위치 정보를 지워요)
         <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setImage(e.target.files?.[0] ?? null)} />
       </label>
-      {!image && product?.image_url && <img className="thumb" src={product.image_url} alt="현재 사진" />}
+      <label>상세 사진 추가 (여러 장, 모두 합쳐 8장까지)
+        <input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={(e) => setGallery([...(e.target.files ?? [])].slice(0, 8))} />
+      </label>
+      {!isNew && (photos.main || photos.list.length > 0) && (
+        <div className="photo-manage">
+          {[photos.main, ...photos.list].filter(Boolean).map((url) => (
+            <figure key={url}>
+              <img src={thumbUrl(url)} alt="" width="80" height="80" />
+              <figcaption>{url === photos.main ? '대표' : '상세'} <button type="button" className="link" onClick={async () => {
+                try {
+                  const updated = await api(`/products/${product.product_code}/image`, { method: 'DELETE', body: { url } })
+                  setPhotos({ main: updated.image_url, list: updated.images })
+                } catch (e) {
+                  setErrors([e.message])
+                }
+              }}>지우기</button></figcaption>
+            </figure>
+          ))}
+        </div>
+      )}
 
       {errors.length > 0 && <ul className="error">{errors.map((e) => <li key={e}>{e}</li>)}</ul>}
 

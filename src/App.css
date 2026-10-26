@@ -177,3 +177,14 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .search select { padding: 8px; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
 a.card { text-decoration: none; height: 100%; box-sizing: border-box; }
 .more { display: block; margin: 16px auto; }
+
+/* ---------- 상품 사진·설명 ---------- */
+.hero { height: auto; aspect-ratio: 4 / 3; background: var(--bg); }
+.gallery-thumbs { display: flex; gap: 6px; margin-top: 6px; overflow-x: auto; }
+.gallery-thumbs button { padding: 0; border: 2px solid transparent; border-radius: 8px; background: none; cursor: pointer; }
+.gallery-thumbs button.on { border-color: var(--accent); }
+.gallery-thumbs img { display: block; width: 64px; height: 64px; object-fit: cover; border-radius: 6px; }
+.para { white-space: pre-wrap; line-height: 1.6; }
+.photo-manage { display: flex; flex-wrap: wrap; gap: 8px; }
+.photo-manage figure { margin: 0; font-size: 0.8rem; text-align: center; }
+.photo-manage img { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; display: block; }

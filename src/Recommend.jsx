@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { netFetch } from './net.js'
+import { thumbUrl } from './shop/shared.js'
 
 // 6단계: 이번 주 추천 배너 · 질문형 추천 · 함께 보면 좋은 상품
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
@@ -17,7 +18,7 @@ function PickList({ items, onOpen }) {
       {items.map((x) => (
         <li key={x.product_code}>
           <button type="button" className="card" onClick={() => onOpen(x.product_code)}>
-            {x.image_url && <img className="thumb" src={x.image_url} alt="" />}
+            {x.image_url && <img className="thumb" src={thumbUrl(x.image_url)} alt="" loading="lazy" width="160" height="160" />}
             <strong>{x.name}</strong>
             <span>{won(x.price)}</span>
             <span className="reasons">{x.reasons.map((r) => <span key={r} className="badge">{r}</span>)}</span>

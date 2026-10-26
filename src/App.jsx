@@ -9,7 +9,7 @@ import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
 import { Cart } from './shop/Cart.jsx'
 import { Checkout } from './shop/Checkout.jsx'
 import { OrderFail, OrderLookup, OrderSuccess, Policy } from './shop/Orders.jsx'
-import { addToCart } from './shop/shared.js'
+import { addToCart, thumbUrl } from './shop/shared.js'
 import { ShopLayout } from './shop/ShopLayout.jsx'
 import { FindPasswordPage, LoginPage, MyPage, ResetPasswordPage, SignupPage } from './account/Account.jsx'
 import { netFetch } from './net.js'
@@ -24,6 +24,38 @@ async function api(path) {
 
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
 const CATEGORIES = ['전체', '과일', '채소', '가공품']
+
+// 대표 사진 + 상세 사진: 작은 사진을 누르면 큰 사진이 바뀐다
+function Gallery({ product }) {
+  const photos = [product.image_url, ...(product.images ?? [])].filter(Boolean)
+  const [index, setIndex] = useState(0)
+  if (!photos.length) return null
+  return (
+    <div className="gallery">
+      <img className="hero" src={photos[index]} alt={product.name} width="1200" height="900" />
+      {photos.length > 1 && (
+        <div className="gallery-thumbs">
+          {photos.map((url, i) => (
+            <button key={url} type="button" className={i === index ? 'on' : ''} onClick={() => setIndex(i)} aria-label={`사진 ${i + 1}`}>
+              <img src={thumbUrl(url)} alt="" loading="lazy" width="64" height="64" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// 상품 설명: 글만 보여 준다 (HTML로 해석하지 않음). 빈 줄로 문단을 나눈다
+function Description({ text }) {
+  if (!text) return null
+  return (
+    <section className="box">
+      <h3>상품 설명</h3>
+      {text.split(/\n{2,}/).map((para, i) => <p key={i} className="para">{para}</p>)}
+    </section>
+  )
+}
 
 // 7단계: 수량 고르기 → 장바구니 담기 / 바로 구매 (가격은 주문할 때 서버가 다시 계산)
 function BuyBox({ product, onAsk }) {
@@ -92,7 +124,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   return (
     <article className="detail">
       <button type="button" className="link" onClick={onBack}>← 목록</button>
-      {product.image_url && <img className="hero" src={product.image_url} alt={product.name} />}
+      <Gallery product={product} />
       <h2>{product.name}</h2>
       <p className="price">{won(product.price)} <span className="muted">/ {product.unit}</span></p>
       <RatingBadge rating={product.rating} count={product.review_count} />
@@ -108,6 +140,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         <dt>판매 농가</dt><dd>{seller.name} · {seller.region}</dd>
       </dl>
 
+      <Description text={product.description} />
       <section className="box">
         <h3>보관·섭취 안내</h3>
         <p>{item.storage_method}</p>
@@ -340,7 +373,7 @@ function Storefront() {
                 {list.items.map((p) => (
                   <li key={p.product_code}>
                     <a href={`/p/${encodeURIComponent(p.product_code)}`} className={`card${p.sold_out ? ' dim' : ''}`} onClick={(e) => { e.preventDefault(); open(p.product_code) }}>
-                      {p.image_url && <img className="thumb" src={p.image_url} alt="" loading="lazy" width="160" height="160" />}
+                      {p.image_url && <img className="thumb" src={thumbUrl(p.image_url)} alt="" loading="lazy" width="160" height="160" />}
                       <span className="cat">{p.category}</span>
                       <strong>{p.name}</strong>
                       <span>{p.sold_out ? '품절' : won(p.price)}</span>

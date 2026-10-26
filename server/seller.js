@@ -1,7 +1,7 @@
 // 판매자(농가) API. 로그인한 농가의 상품·질문·소개만 다룬다 (다른 농가 것은 없는 것처럼 404)
 // 새 상품은 '검토 대기'로 올라가고 회사 관리자가 승인해야 판매된다. 이미 판매 중인 상품의 수정(가격·재고 등)은 바로 반영된다.
 import express from 'express'
-import { codeSets, insertProduct, rawImage, storeImage, updateProduct } from './admin.js'
+import { codeSets, insertProduct, rawImage, removeImage, storeImage, updateProduct } from './admin.js'
 import { requireSeller } from './auth.js'
 import { pool } from './db.js'
 import { FORBIDDEN, validateProduct } from './validate.js'
@@ -90,6 +90,7 @@ sellerRouter.patch('/products/:code', ownProduct, async (req, res) => {
 })
 
 sellerRouter.post('/products/:code/image', ownProduct, rawImage, storeImage)
+sellerRouter.delete('/products/:code/image', ownProduct, removeImage)
 
 // 내 상품에 달린 질문 (연락처는 회사만 본다)
 sellerRouter.get('/questions', async (req, res) => {

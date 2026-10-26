@@ -22,6 +22,7 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
     brix_measured_at: text(input.brix_measured_at),
     harvest_date: text(input.harvest_date),
     summary: text(input.summary),
+    description: text(input.description),
     external_url: text(input.external_url),
     b2b_available: Boolean(input.b2b_available),
     tags: Array.isArray(input.tags) ? input.tags.map(text).filter(Boolean) : [],
@@ -33,7 +34,7 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
   if (!p.name) errors.push('상품 이름을 적어 주세요.')
   if (!p.unit) errors.push('판매 단위를 적어 주세요. (예: 5kg 1박스)')
   // 상품 글은 AI 상담 자료로도 들어가므로 길이를 제한한다 (긴 지시문을 숨겨 넣는 것 방지)
-  for (const [key, label, max] of [['name', '상품 이름', 60], ['unit', '판매 단위', 30], ['summary', '한 줄 소개', 200], ['external_url', '판매 링크', 300]]) {
+  for (const [key, label, max] of [['name', '상품 이름', 60], ['unit', '판매 단위', 30], ['summary', '한 줄 소개', 200], ['description', '상품 설명', 3000], ['external_url', '판매 링크', 300]]) {
     if (p[key].length > max) errors.push(`${label}은(는) ${max}자 안으로 적어 주세요.`)
   }
   if (!itemCodes.has(p.item_code)) errors.push('품목을 골라 주세요.')
@@ -53,7 +54,7 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
   if (p.external_url && !/^https?:\/\//.test(p.external_url)) errors.push('판매 링크는 http로 시작해야 해요.')
   const unknown = p.tags.filter((t) => !tagCodes.has(t))
   if (unknown.length) errors.push(`없는 태그예요: ${unknown.join(', ')}`)
-  const all = `${p.name} ${p.summary}`
+  const all = `${p.name} ${p.summary} ${p.description}`
   const bad = FORBIDDEN.filter((w) => all.includes(w))
   if (bad.length) errors.push(`효능 표현은 쓰지 않아요: ${bad.join(', ')}`)
   if (p.review_note && p.review_note.length > 300) errors.push('반려 사유는 300자 안으로 적어 주세요.')
@@ -71,6 +72,7 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
       brix_measured_at: orNull(p.brix_measured_at),
       harvest_date: orNull(p.harvest_date),
       summary: orNull(p.summary),
+      description: orNull(p.description),
       external_url: orNull(p.external_url),
     },
   }

@@ -274,3 +274,7 @@ CREATE INDEX IF NOT EXISTS products_status_item_idx ON products (status, item_co
 CREATE INDEX IF NOT EXISTS products_seller_idx ON products (seller_code);
 CREATE INDEX IF NOT EXISTS order_items_product_idx ON order_items (product_code);
 CREATE INDEX IF NOT EXISTS questions_product_idx ON questions (product_code, created_at DESC);
+
+-- 상품 상세: 긴 설명(글만, HTML 아님)과 사진 여러 장(최대 8장). 대표 사진은 image_url
+ALTER TABLE products ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS images TEXT[] NOT NULL DEFAULT '{}';
