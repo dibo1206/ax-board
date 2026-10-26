@@ -7,6 +7,7 @@
   --text: #1f2a1f;
   --muted: #5f6b5f;
   --accent: #2f7d32;
+  --chart-bar: #2f7d32;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -17,6 +18,7 @@
     --text: #e6ece6;
     --muted: #a3b0a3;
     --accent: #6fbf73;
+    --chart-bar: #57a85c;
   }
 }
 
@@ -188,3 +190,23 @@ a.card { text-decoration: none; height: 100%; box-sizing: border-box; }
 .photo-manage { display: flex; flex-wrap: wrap; gap: 8px; }
 .photo-manage figure { margin: 0; font-size: 0.8rem; text-align: center; }
 .photo-manage img { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; display: block; }
+
+/* ---------- 관리자 매출 화면 ---------- */
+.dashboard .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.dashboard .filters button { padding: 6px 12px; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; }
+.dashboard .filters button.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.tile { display: flex; flex-direction: column; gap: 4px; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.tile b { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.tasks { list-style: none; padding: 0; margin: 0; }
+.tasks li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.chart { position: relative; }
+.chart svg { width: 100%; height: auto; display: block; }
+.chart .grid { stroke: var(--border); stroke-width: 1; }
+.chart .axis { fill: var(--muted); font-size: 12px; }
+.chart .bar { fill: var(--chart-bar); }
+.chart .bar.on { opacity: 0.75; }
+.chart .hit { fill: transparent; cursor: default; }
+.chart .hit:focus { outline: 2px solid var(--accent); }
+.chart-tip { position: absolute; top: 0; transform: translateX(-50%); padding: 6px 10px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; font-size: 0.85rem; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 8px rgb(0 0 0 / 0.12); }

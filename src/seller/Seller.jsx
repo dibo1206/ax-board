@@ -3,6 +3,7 @@ import { Login, StatusLabel } from '../admin/Admin.jsx'
 import { adminApi, sellerApi } from '../admin/api.js'
 import { QuestionRow } from '../admin/Inbox.jsx'
 import { ProductForm } from '../admin/ProductForm.jsx'
+import { CourierList } from '../shop/CourierList.jsx'
 import { ORDER_STATUS, when } from '../shop/shared.js'
 
 // 판매자(농가) 화면: 로그인 → [내 상품 | 상품 문의 | 농가 소개]. 모든 요청은 /api/seller (자기 농가 것만)
@@ -142,7 +143,8 @@ function MyOrders({ onMessage, onError }) {
           {o.only_mine && o.status === 'paid' && <button type="button" className="button ghost" onClick={() => advance(o, 'preparing')}>배송 준비 시작</button>}
           {o.only_mine && o.status === 'preparing' && (
             <div className="row form">
-              <label>택배사<input value={tracking[o.order_no]?.courier ?? ''} onChange={setT(o.order_no, 'courier')} /></label>
+              <label>택배사<input value={tracking[o.order_no]?.courier ?? ''} onChange={setT(o.order_no, 'courier')} list="couriers" placeholder="골라 주세요" /></label>
+              <CourierList />
               <label>송장 번호<input value={tracking[o.order_no]?.no ?? ''} onChange={setT(o.order_no, 'no')} inputMode="numeric" /></label>
               <button type="button" className="button" onClick={() => advance(o, 'shipping')}>배송 시작</button>
             </div>

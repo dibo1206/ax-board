@@ -3,6 +3,7 @@ import { adminApi } from './api.js'
 import { ChatLogs } from './ChatLogs.jsx'
 import { Inbox } from './Inbox.jsx'
 import { AccessLogs } from './AccessLogs.jsx'
+import { Dashboard } from './Dashboard.jsx'
 import { Notifications } from './Notifications.jsx'
 import { AdminReviews } from './Reviews.jsx'
 import { Orders } from './Orders.jsx'
@@ -59,7 +60,7 @@ function Admin() {
   const [editing, setEditing] = useState(null) // null: 목록, 'new': 새 상품, 객체: 수정
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const [tab, setTab] = useState('products')
+  const [tab, setTab] = useState('dashboard')
   const [counts, setCounts] = useState(null)
 
   useEffect(() => {
@@ -143,6 +144,7 @@ function Admin() {
     <section>
       <div className="admin-head">
         <nav className="tabs">
+          <button type="button" className={tab === 'dashboard' ? 'on' : ''} onClick={() => { setTab('dashboard'); setEditing(null); setMessage('') }}>매출</button>
           <button type="button" className={tab === 'products' ? 'on' : ''} onClick={() => setTab('products')}>상품 관리{pending > 0 && ` (검토 ${pending})`}</button>
           <button type="button" className={tab === 'inbox' ? 'on' : ''} onClick={() => { setTab('inbox'); setEditing(null); setMessage('') }}>
             문의함{waiting > 0 && ` (${waiting})`}
@@ -161,7 +163,9 @@ function Admin() {
       {tab === 'products' && message && <p className="success">{message}</p>}
       {error && <p className="error">{error}</p>}
 
-      {tab === 'inbox' ? (
+      {tab === 'dashboard' ? (
+        <Dashboard onGo={(next) => { setTab(next); setEditing(null); setMessage('') }} />
+      ) : tab === 'inbox' ? (
         <Inbox onCount={setCounts} />
       ) : tab === 'orders' ? (
         <Orders onCount={setCounts} />

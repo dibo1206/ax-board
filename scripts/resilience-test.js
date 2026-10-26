@@ -70,7 +70,7 @@ function startBackend(extraEnv = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['server/index.js'], {
       env: {
-        ...process.env, BACKEND_PORT: '0', NODE_ENV: 'development', TOSS_API_BASE: FAKE, TOSS_TIMEOUT_MS: '1500',
+        ...process.env, BACKEND_PORT: '0', NODE_ENV: 'development', TOSS_API_BASE: FAKE, TOSS_TIMEOUT_MS: '1500', DB_POOL_MAX: '1',
         TOSS_CLIENT_KEY: 'test_gck_resilience', TOSS_SECRET_KEY: 'test_gsk_resilience', ...extraEnv,
       },
       stdio: ['ignore', 'pipe', 'pipe'],

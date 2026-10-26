@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { CourierList } from '../shop/CourierList.jsx'
 import { ORDER_STATUS, when, won } from '../shop/shared.js'
 import { adminApi } from './api.js'
 
@@ -52,7 +53,8 @@ function OrderPanel({ orderNo, onChanged, onClose }) {
         <div className="form">
           {next[0] === 'shipping' && (
             <div className="row">
-              <label>택배사<input value={courier} onChange={(e) => setCourier(e.target.value)} placeholder="예: CJ대한통운" /></label>
+              <label>택배사<input value={courier} onChange={(e) => setCourier(e.target.value)} list="couriers" placeholder="골라 주세요" /></label>
+              <CourierList />
               <label>송장 번호<input value={trackingNo} onChange={(e) => setTrackingNo(e.target.value)} inputMode="numeric" /></label>
             </div>
           )}

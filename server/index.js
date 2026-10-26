@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import express from 'express'
 import { accountRouter } from './account.js'
 import { accessLogger, adminAccessLogRouter } from './accessLog.js'
+import { dashboardRouter } from './dashboard.js'
 import { adminRouter, UPLOAD_DIR } from './admin.js'
 import { currentAdmin, login, logout, requireAdmin } from './auth.js'
 import { listMails } from './mailer.js'
@@ -174,6 +175,7 @@ app.use('/api/admin/chat-logs', adminChatRouter)
 app.use('/api/admin/orders', adminOrderRouter)
 app.use('/api/admin/access-logs', adminAccessLogRouter)
 app.use('/api/admin/reviews', adminReviewRouter)
+app.use('/api/admin/dashboard', dashboardRouter)
 app.get('/api/admin/notifications', requireAdmin, async (req, res) => res.json(await listMails()))
 app.use('/api/admin', adminRouter)
 app.use('/api/seller/orders', sellerOrderRouter)
