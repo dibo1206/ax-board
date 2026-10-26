@@ -1,17 +1,23 @@
-// 5단계: 상품 기반 AI 상담
-// 1) 건강·환불·대량 구매는 AI를 부르지 않고 정해진 답으로 넘긴다
-// 2) 질문에 나온 품목의 상품 정보를 DB에서 바로 꺼내 [자료]로 준다 → 새로 등록한 상품도 바로 답한다
-// 3) AI 답에서 자료에 없는 가격·당도, 효능 표현, "먹어도 돼요", 환불 약속을 찾으면 한 번 다시 시키고, 그래도 틀리면 담당자에게 넘긴다
+// 5단계: 상품 기반 상담 — AI는 마지막 수단이다. 앞 단계에서 끝날수록 토큰을 쓰지 않는다
+// 1) 건강·환불·대량 구매·주문 조회·배송비는 정해진 답 (토큰 0)
+// 2) 가격·재고·개수·당도는 DB 값 그대로, 추천은 DB 규칙 (토큰 0)
+// 3) 보관·개봉 후·레시피·먹어도 되나·알레르기·산지·수확일·상품 비교는 품목 정보로 문장을 만든다 (토큰 0)
+// 4) 예전에 AI가 답한 비슷한 질문, 담당자가 답한 Q&A를 글자 비교로 찾아 다시 쓴다 (토큰 0)
+// 5) 그래도 못 찾으면 고를 수 있는 질문 버튼 + [AI에게 물어보기]. 손님이 그 버튼을 눌렀을 때만 AI를 부른다
+//    AI 답에서 자료에 없는 가격·당도, 효능 표현, "먹어도 돼요", 환불 약속을 찾으면 한 번 다시 시키고, 그래도 틀리면 담당자에게 넘긴다
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import express from 'express'
+import { currentCustomer } from './account.js'
 import { complete, dailyLimit, describeAiError, keyLoaded, usageToday } from './ai.js'
 import { requireAdmin } from './auth.js'
+import { cached } from './cache.js'
 import { pool } from './db.js'
 import { createLimiter } from './limit.js'
 import { maskPersonal } from './privacy.js'
 import { describeRecommendation, loadActive, readWish, recommend } from './recommend.js'
 import { SHIPPING } from './policy.js'
+import { mostSimilar } from './similar.js'
 import { FORBIDDEN } from './validate.js'
 
 const RULES_FILE = new URL('./chat_rules.md', import.meta.url)
@@ -22,7 +28,7 @@ const QNA_HINT = '상품 페이지 아래 Q&A에 질문을 남겨 주시면 담�
 const ROUTES = [
   {
     kind: 'health',
-    re: /당뇨|임신|임산부|수유|(?<!이)아기|유아|이유식|혈압|혈당|복용|질환|환자|수술|아토피|신장|통풍|알레르기.{0,6}(있|반응)/,
+    re: /당뇨|임신|임산부|수유|(?<!이)아기|유아|이유식|혈압|혈당|복용|질환|환자|수술|아토피|신장|통풍|알레르기(가|이)?\s?(있|반응)|알레르기\s?체질/,
     answer: (ctx) => {
       const allergy = ctx.items.filter((i) => i.allergens.length).map((i) => `${i.name}: ${i.allergens.join(', ')}`)
       return '건강 상태에 따라 드셔도 되는지는 제가 판단할 수 없어요. 의사·약사 같은 전문가와 꼭 상의해 주세요. '
@@ -72,7 +78,7 @@ const ROUTES = [
 // ---------- 2. DB에서 자료 꺼내기 ----------
 async function loadCatalog() {
   const [products, items] = await Promise.all([
-    pool.query(`SELECT p.*, (p.stock = 0) AS sold_out, s.name AS seller_name, s.region AS seller_region
+    pool.query(`SELECT p.*, (p.stock = 0) AS sold_out, s.name AS seller_name, s.region AS seller_region, s.story AS seller_story
                 FROM products p JOIN sellers s ON s.seller_code = p.seller_code
                 WHERE p.status = 'active' ORDER BY p.product_code LIMIT 300`),
     pool.query('SELECT * FROM items'),
@@ -215,11 +221,12 @@ async function pickTagsWithAi(message, tagLabel) {
   return { model, tags }
 }
 
-async function answerRecommend(message) {
+async function answerRecommend(message, allowAi) {
   const data = await loadActive()
   let wish = readWish(message)
   let model = 'rule:recommend'
-  if (!wish.want.length && !wish.budget && keyLoaded()) { // 예산만 말해도 그걸로 고른다
+  // 말에서 조건을 못 찾으면 먼저 조건 버튼을 보여 주고, 손님이 [AI에게 물어보기]를 눌렀을 때만 AI가 태그를 고른다
+  if (!wish.want.length && !wish.budget && allowAi && keyLoaded()) { // 예산만 말해도 그걸로 고른다
     try {
       const picked = await pickTagsWithAi(message, data.tagLabel)
       if (picked.tags.length) {
@@ -232,7 +239,14 @@ async function answerRecommend(message) {
   }
   const base = { handoff: false, action: null, model, blocked: false }
   if (!wish.want.length && !wish.budget) {
-    return { ...base, answer: '어떤 용도(선물·집에서·카페), 어떤 맛(달콤·새콤·담백)을 원하시는지 알려 주시면 골라 드릴게요. 상품 목록 위의 [추천 받기]에서 골라도 돼요.', sources: [], productCode: null }
+    return {
+      ...base,
+      answer: '어떤 용도(선물·집에서·카페), 어떤 맛(달콤·새콤·담백)을 원하시는지 알려 주시면 골라 드릴게요. 상품 목록 위의 [추천 받기]에서 골라도 돼요.',
+      sources: [],
+      productCode: null,
+      suggestions: ['선물용 추천해 주세요', '집에서 먹을 달콤한 과일 추천', '카페용 추천해 주세요'],
+      askAi: !allowAi && keyLoaded() && dailyLimit() > 0,
+    }
   }
   const items = recommend(data, wish)
   return {
@@ -243,8 +257,15 @@ async function answerRecommend(message) {
   }
 }
 
+// 같은 품목 상품이 여럿이면 질문에 나온 이름 조각(선물세트, 가정용, 3kg …)으로 좁힌다
+function narrow(products, message, catalog) {
+  const words = (p) => p.name.replace(/\[예시\]/g, '').split(/\s+/).filter((w) => w.length >= 2 && !catalog.items.some((i) => i.name === w))
+  const narrowed = products.filter((p) => words(p).some((w) => message.includes(w)))
+  return narrowed.length ? narrowed : products
+}
+
 function answerFact(message, catalog, ctx) {
-  if (NEEDS_EXPLAIN.test(message)) return null
+  if (NEEDS_EXPLAIN.test(message) || TOPICS.some((t) => t.re.test(message))) return null
   let facts = FACTS.filter((f) => f.re.test(message))
   if (!facts.length) return null
   // "당도는 얼마예요?", "몇 개 들어 있어요?"처럼 겹치면 구체적인 쪽(당도·개수)만 답한다
@@ -254,10 +275,7 @@ function answerFact(message, catalog, ctx) {
     ? catalog.products.filter((p) => mentioned.includes(p.item_code))
     : (ctx.current ? [ctx.current] : [])
   if (!products.length) return null
-  // 같은 품목 상품이 여럿이면 질문에 나온 이름 조각(선물세트, 가정용, 3kg …)으로 좁힌다
-  const words = (p) => p.name.replace(/\[예시\]/g, '').split(/\s+/).filter((w) => w.length >= 2 && !catalog.items.some((i) => i.name === w))
-  const narrowed = products.filter((p) => words(p).some((w) => message.includes(w)))
-  if (narrowed.length) products = narrowed
+  products = narrow(products, message, catalog)
   if (products.length > 3) return null
   const sentences = []
   for (const p of products) {
@@ -272,6 +290,171 @@ function answerFact(message, catalog, ctx) {
     answer: sentences.join(' '),
     sources: products.map((p) => ({ code: p.product_code, name: p.name })),
     productCode: products[0].product_code,
+  }
+}
+
+// ---------- 2-3. 보관·레시피·먹어도 되나 같은 설명 질문도 품목 정보(식품팀이 채운 칸)로 문장을 만든다 ----------
+// AI가 하던 일은 결국 이 칸들을 문장으로 바꾸는 것이라, 틀만 있으면 토큰 없이 같은 내용을 답할 수 있다
+const hasBatchim = (word) => {
+  const code = word.charCodeAt(word.length - 1) - 0xac00
+  return code >= 0 && code <= 11171 && code % 28 !== 0
+}
+const josa = (word, withBatchim, without) => `${word}${hasBatchim(word) ? withBatchim : without}`
+const sentence = (s) => (/[.!?)]$/.test(s.trim()) ? s.trim() : `${s.trim()}.`)
+const label = (p) => p.name.replace(/\[예시\]\s*/g, '')
+
+const opened = (item) => (item.opened_note ? `개봉 후에는 ${sentence(item.opened_note.replace(/^개봉\s?후(에는|엔)?\s*/, ''))}` : '')
+
+function timeline(item) {
+  if (!item.fresh_days_stage1) return ''
+  return `받은 날부터 ${item.fresh_days_stage1}일까지는 ${list(item.stage1_uses)}, ${item.fresh_days_stage2}일까지는 ${list(item.stage2_uses)}, 그 뒤에는 ${list(item.stage3_uses)} 용도로 안내하고 있어요.`
+}
+
+// 위에서부터 먼저 맞는 주제 하나로 답한다 ("먹어도 돼요?"가 "보관"보다 먼저)
+const TOPICS = [
+  { kind: 'safety', word: '먹어도 되는지', re: /(먹어|드셔|마셔|섭취해)도|싹(이|\s?났)|상했|상한\s?(것|거)|변했|변색|곰팡|이상한\s?냄새|냄새가\s?(나|이상)|물렀|물러졌|썩/ },
+  { kind: 'compare', word: '차이', re: /차이|비교|뭐가\s?달라|다른\s?점|뭐가\s?나아|어떤\s?게\s?나아/ },
+  { kind: 'recipe', word: '레시피', re: /레시피|만들|요리|활용|먹는\s?(법|방법)|어떻게\s?먹|해\s?먹|비율|음료|에이드/ },
+  { kind: 'storage', word: '보관법', re: /보관|냉장|냉동|상온|실온|어디에?\s?(둬|두|놔)|넣어도|개봉|뜯(은|으면|고)|언제까지|며칠|유통\s?기한|얼마나\s?(가|두|오래)/ },
+  { kind: 'taste', word: '맛', re: /맛있|맛이\s?(어때|좋|괜찮)|맛은|무슨\s?맛/ },
+  { kind: 'allergy', word: '알레르기 정보', re: /알레르기|알러지/ },
+  { kind: 'origin', word: '산지', re: /어디서|산지|원산지|농가|누가\s?(키|만들)|재배|키운|생산/ },
+  { kind: 'harvest', word: '수확일', re: /수확|언제\s?딴|딴\s?지/ },
+]
+
+// 품목 하나로 답하는 주제
+const SAY_ITEM = {
+  safety: (item) => [
+    `${josa(item.name, '을', '를')} 드셔도 되는지는 제가 판단할 수 없어요.`,
+    item.danger_signs.length ? `상품 정보에서는 ${item.danger_signs.join(', ')} 같은 상태라면 드시지 말라고 안내해요.` : '',
+    item.fresh_days_stage1 ? `참고로 ${timeline(item)}` : opened(item),
+    '애매하면 드시지 마시고, 사진과 함께 상품 Q&A나 고객센터로 알려 주세요.',
+  ].filter(Boolean).join(' '),
+  storage: (item, message) => [
+    `${item.name} 보관법은 이래요: ${sentence(item.storage_method || '보관 방법 정보가 아직 없어요')}`,
+    (item.storage_method ?? '').includes('개봉 후') ? '' : opened(item),
+    /언제까지|며칠|유통|얼마나/.test(message) || !item.opened_note ? timeline(item) : '',
+    /유통/.test(message) && !item.fresh_days_stage1 ? '유통기한은 상품 포장에 적힌 날짜를 확인해 주세요.' : '',
+  ].filter(Boolean).join(' '),
+  recipe: (item) => (item.recipes?.length
+    ? `${josa(item.name, '은', '는')} 이렇게 즐겨 보세요. ${item.recipes.slice(0, 3).map((r, i) => `${i + 1}) ${r.title}: ${r.ingredients} — ${r.method}`).join(' ')}`
+    : `${item.name} 레시피 정보는 아직 없어요.`),
+  allergy: (item) => (item.allergens.length
+    ? `${item.name} 상품 정보에 표시된 알레르기 성분은 ${item.allergens.join(', ')}예요.`
+    : `${josa(item.name, '은', '는')} 상품 정보에 표시된 알레르기 성분이 없어요. 정확한 성분이 필요하면 상품 Q&A로 물어봐 주세요.`),
+}
+
+// 상품(같은 품목의 여러 상품)으로 답하는 주제
+const SAY_PRODUCTS = {
+  origin: (products) => {
+    const lines = products.map((p) => `${label(p)}: ${p.seller_name.replace(/\[예시\]\s*/g, '')}(${p.seller_region})에서 보내요.`)
+    if (products[0].seller_story) lines.push(`농가 이야기: ${sentence(products[0].seller_story)}`)
+    return lines.join(' ')
+  },
+  harvest: (products, items) => (items.every((i) => i.category === '가공품')
+    ? '가공품이라 수확일 대신 상품 페이지의 상품 정보를 확인해 주세요.'
+    : products.map((p) => `${label(p)}: ${p.harvest_date ? `${p.harvest_date} 수확` : '수확일 정보 없음'}`).join(' / ')),
+  taste: (products, items) => products.map((p) => {
+    const item = items.find((i) => i.item_code === p.item_code)
+    return `${label(p)}: ${[p.summary, item?.show_brix && p.brix && `당도 ${p.brix}Brix(${p.brix_measured_at ?? ''} 측정)`].filter(Boolean).join(' · ') || '맛 정보가 아직 없어요'}`
+  }).join(' / ') + ' 상품 페이지에서 구매 후기도 볼 수 있어요.',
+  compare: (products) => (products.length < 2 ? null
+    : `${products.map((p) => `${label(p)}: ${[`${won(p.price)} / ${p.unit}`, p.count_per_box && `${p.count_per_box}개`, p.brix && `당도 ${p.brix}Brix`, p.sold_out && '품절'].filter(Boolean).join(' · ')}`).join(' / ')}. 상품 이름을 누르면 자세히 볼 수 있어요.`),
+}
+
+function answerTemplate(message, catalog, ctx) {
+  const topic = TOPICS.find((t) => t.re.test(message))
+  if (!topic) return null
+  const mentioned = findItems(message, catalog.items)
+  const items = (mentioned.length ? mentioned : ctx.items).slice(0, 2)
+  const base = { handoff: false, action: null, model: `rule:${topic.kind}`, blocked: false }
+  if (!items.length) {
+    // 무엇을 묻는지는 알지만 어떤 상품인지 모를 때: 품목 버튼을 보여 준다
+    return { ...base, answer: `어떤 상품의 ${josa(topic.word, '을', '를')} 알려 드릴까요?`, sources: [], productCode: null, suggestions: catalog.items.slice(0, 6).map((i) => `${i.name} ${topic.word}`) }
+  }
+  const ofItems = catalog.products.filter((p) => items.some((i) => i.item_code === p.item_code))
+  if (SAY_ITEM[topic.kind]) {
+    const firsts = items.map((i) => ofItems.find((p) => p.item_code === i.item_code)).filter(Boolean)
+    const current = ctx.current && items.some((i) => i.item_code === ctx.current.item_code) ? ctx.current : firsts[0]
+    return {
+      ...base,
+      answer: items.map((i) => SAY_ITEM[topic.kind](i, message)).join(' '),
+      sources: firsts.map((p) => ({ code: p.product_code, name: p.name })),
+      productCode: current?.product_code ?? null,
+      ...(topic.kind === 'safety' ? { handoff: true, action: 'qna' } : {}),
+    }
+  }
+  let products = !mentioned.length && ctx.current && topic.kind !== 'compare' ? [ctx.current] : narrow(ofItems, message, catalog)
+  products = products.slice(0, 4)
+  const answer = products.length ? SAY_PRODUCTS[topic.kind](products, items) : null
+  if (!answer) return null
+  return { ...base, answer, sources: products.map((p) => ({ code: p.product_code, name: p.name })), productCode: products[0].product_code }
+}
+
+// ---------- 2-4. 비슷한 질문 다시 쓰기: 담당자가 답한 Q&A, 최근 7일 AI 답 (글자 비교라 토큰 0) ----------
+async function loadSimilarCandidates() {
+  const [logs, qna] = await Promise.all([
+    pool.query(
+      `SELECT question, answer, sources FROM chat_logs
+       WHERE created_at > now() - make_interval(days => $1) AND NOT blocked AND NOT handed_off
+         AND model NOT LIKE 'rule:%' AND model NOT LIKE 'similar:%' AND model NOT LIKE 'ai-tags:%' AND model <> 'limit'
+       ORDER BY created_at DESC LIMIT 500`,
+      [CACHE_DAYS],
+    ),
+    pool.query(
+      `SELECT q.question, q.answer, q.product_code, p.name, p.item_code FROM questions q JOIN products p ON p.product_code = q.product_code
+       WHERE q.answer IS NOT NULL AND NOT q.hidden AND p.status = 'active' ORDER BY q.answered_at DESC LIMIT 300`,
+    ),
+  ])
+  return { logs: logs.rows, qna: qna.rows }
+}
+
+async function answerSimilar(message, catalog, ctx, fallbackProduct) {
+  const { logs, qna } = await cached('chat:similar', 60_000, loadSimilarCandidates)
+  const itemKey = (text) => findItems(text, catalog.items).map((i) => i.item_code).sort().join(',')
+  const mine = ctx.items.map((i) => i.item_code)
+  const base = { handoff: false, action: null, blocked: false }
+  // 담당자 답이 가장 믿을 만하다. 같은 품목의 상품 Q&A만 본다
+  const staff = mine.length ? mostSimilar(message, qna.filter((q) => mine.includes(q.item_code)), 0.5) : null
+  if (staff) {
+    return {
+      ...base,
+      answer: `담당자가 비슷한 질문에 답한 내용이에요. 질문: "${staff.question}" → 답: ${staff.answer}`,
+      sources: [{ code: staff.product_code, name: staff.name }],
+      productCode: staff.product_code,
+      model: 'similar:qna',
+    }
+  }
+  // AI 답은 같은 품목을 물은 질문끼리만, 그리고 지금 자료(가격·당도)와 어긋나지 않을 때만 다시 쓴다
+  const key = itemKey(message) || [...mine].sort().join(',')
+  const past = mostSimilar(message, logs.filter((l) => itemKey(l.question) === key))
+  if (!past || findProblem(past.answer, catalog)) return null
+  const sources = toSourceChips(past.sources ?? [], catalog, ctx)
+  return { ...base, answer: past.answer, sources, productCode: sources[0]?.code ?? fallbackProduct, model: 'similar:log' }
+}
+
+// ---------- 2-5. 여기까지 못 찾으면: 고를 수 있는 질문 + [AI에게 물어보기] (손님이 누를 때만 AI) ----------
+function askFirst(ctx, fallbackProduct) {
+  const item = ctx.items[0]
+  // 상품과 상관없는 질문(날씨 등)은 AI에게 물어도 답할 자료가 없어서 AI 버튼을 보여 주지 않는다
+  const canAskAi = Boolean(item) && keyLoaded() && dailyLimit() > 0
+  if (!item) {
+    return {
+      answer: `저는 이 쇼핑몰의 상품·배송·주문 질문에 답해 드려요. 아래에서 고르시거나 상품 이름을 넣어 다시 물어봐 주세요. ${QNA_HINT}`,
+      suggestions: ['배송비 얼마예요?', '선물용 추천해 주세요', '교환·환불은 어떻게 해요?'],
+      askAi: false, sources: [], handoff: false, action: null, productCode: null, model: 'rule:ask', blocked: false,
+    }
+  }
+  return {
+    answer: `등록된 상품 정보에서 바로 맞는 답을 찾지 못했어요. 아래 질문 중에 고르시거나${canAskAi ? ', [AI에게 물어보기]를 누르면 AI가 상품 정보를 읽고 답해 드려요' : ''}. ${QNA_HINT}`,
+    suggestions: [`${item.name} 보관법`, `${item.name} 레시피`, `${item.name} 가격`],
+    askAi: canAskAi,
+    sources: [],
+    handoff: false,
+    action: fallbackProduct ? 'qna' : null,
+    productCode: fallbackProduct,
+    model: 'rule:ask',
+    blocked: false,
   }
 }
 
@@ -375,15 +558,16 @@ async function writeCache(key, reply, model) {
 }
 
 // useCache: 테스트 스크립트는 false (모델 성능을 매번 새로 재야 해서)
-export async function answerChat({ message: raw, history = [], productCode = null }, { useCache = true } = {}) {
+// allowAi: 손님 화면은 [AI에게 물어보기]를 눌렀을 때만 true. false면 AI 대신 고를 수 있는 질문을 돌려준다
+export async function answerChat({ message: raw, history = [], productCode = null }, { useCache = true, allowAi = true } = {}) {
   // 연락처 같은 개인정보는 AI·기록 모두에 들어가기 전에 가린다
   const { text: message, masked } = maskPersonal(raw)
   const safeHistory = history.map((h) => ({ ...h, content: maskPersonal(h.content).text }))
-  const result = await answerMasked({ message, history: safeHistory, productCode }, { useCache })
+  const result = await answerMasked({ message, history: safeHistory, productCode }, { useCache, allowAi })
   return { ...result, question: message, masked }
 }
 
-async function answerMasked({ message, history, productCode }, { useCache }) {
+async function answerMasked({ message, history, productCode }, { useCache, allowAi }) {
   const catalog = await loadCatalog()
   const ctx = pickContext(catalog, { message, history, productCode })
   const fallbackProduct = ctx.current?.product_code ?? (ctx.products.length === 1 ? ctx.products[0].product_code : null)
@@ -401,22 +585,28 @@ async function answerMasked({ message, history, productCode }, { useCache }) {
       blocked: false,
     }
   }
-  if (WANTS_RECOMMEND.test(message)) return answerRecommend(message)
+  if (WANTS_RECOMMEND.test(message)) return answerRecommend(message, allowAi)
 
   const fact = answerFact(message, catalog, ctx)
   if (fact) return { ...fact, handoff: false, action: null, model: 'rule:fact', blocked: false }
 
-  if (!keyLoaded()) {
-    const error = new Error('OPENROUTER_API_KEY 없음')
-    error.code = 'NO_KEY'
-    throw error
-  }
+  const template = answerTemplate(message, catalog, ctx)
+  if (template) return template
 
   const material = await buildMaterial(catalog, ctx)
   const key = cacheKey('answer', message, material)
   if (useCache) {
     const saved = await readCache(key)
     if (saved) return { ...saved.reply, model: `cache:${saved.model}`, blocked: false }
+    const similar = await answerSimilar(message, catalog, ctx, fallbackProduct)
+    if (similar) return similar
+  }
+
+  if (!allowAi) return askFirst(ctx, fallbackProduct)
+  if (!keyLoaded()) {
+    const error = new Error('OPENROUTER_API_KEY 없음')
+    error.code = 'NO_KEY'
+    throw error
   }
   // 앞선 대화는 품목을 찾는 데만 쓰고 AI에게는 보내지 않는다 (토큰 절약 + 같은 질문의 답을 다시 쓸 수 있게)
   const messages = [
@@ -453,6 +643,9 @@ async function answerMasked({ message, history, productCode }, { useCache }) {
 
 // ---------- API ----------
 const tooMany = createLimiter({ limit: 15, windowMs: 10 * 60_000 })
+// [AI에게 물어보기]는 따로 더 적게: 비회원은 IP당 10분에 3번, 회원은 계정당 10분에 10번 (하루 전체 상한은 ai.js)
+const tooManyAiGuest = createLimiter({ limit: 3, windowMs: 10 * 60_000 })
+const tooManyAiMember = createLimiter({ limit: 10, windowMs: 10 * 60_000, key: (req) => `customer:${req.customerId}` })
 
 function cleanHistory(history) {
   if (!Array.isArray(history)) return []
@@ -469,10 +662,18 @@ chatRouter.post('/chat', async (req, res) => {
   if (message.length < 2 || message.length > 300) return res.status(400).json({ error: '질문은 2~300자로 적어 주세요.' })
   if (tooMany(req)) return res.status(429).json({ error: '질문이 너무 많아요. 잠시 후 다시 시도해 주세요.' })
   const productCode = typeof req.body.productCode === 'string' ? req.body.productCode : null
+  const allowAi = req.body.ai === true
+  if (allowAi) {
+    const customer = await currentCustomer(req)
+    req.customerId = customer?.id
+    if (customer ? tooManyAiMember(req) : tooManyAiGuest(req)) {
+      return res.status(429).json({ error: `AI 질문은 잠시 후 다시 해 주세요.${customer ? '' : ' 로그인하면 더 많이 물어볼 수 있어요.'} ${QNA_HINT}` })
+    }
+  }
 
   let result
   try {
-    result = await answerChat({ message, history: cleanHistory(req.body.history), productCode })
+    result = await answerChat({ message, history: cleanHistory(req.body.history), productCode }, { allowAi })
   } catch (error) {
     const { status, message: text } = error.code === 'NO_KEY'
       ? { status: 503, message: `AI 상담 준비 중이에요. ${QNA_HINT}` }
@@ -492,6 +693,8 @@ chatRouter.post('/chat', async (req, res) => {
     handoff: result.handoff,
     action: result.action,
     productCode: result.productCode,
+    suggestions: result.suggestions ?? [],
+    askAi: Boolean(result.askAi),
   })
 })
 
@@ -504,7 +707,7 @@ adminChatRouter.get('/', async (req, res) => {
     pool.query(`SELECT count(*)::int AS total,
                        count(*) FILTER (WHERE handed_off)::int AS handed_off,
                        count(*) FILTER (WHERE blocked)::int AS blocked,
-                       count(*) FILTER (WHERE model LIKE 'rule:%' OR model LIKE 'cache:%')::int AS no_ai
+                       count(*) FILTER (WHERE model LIKE 'rule:%' OR model LIKE 'cache:%' OR model LIKE 'similar:%')::int AS no_ai
                 FROM chat_logs`),
     usageToday(),
   ])
