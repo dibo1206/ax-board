@@ -267,3 +267,10 @@ CREATE TABLE IF NOT EXISTS reviews (
   UNIQUE (order_id, product_code)
 );
 CREATE INDEX IF NOT EXISTS reviews_product_idx ON reviews (product_code, created_at DESC);
+
+-- 신상품순 정렬용 등록 시각, 상품 찾기·주문 집계용 색인
+ALTER TABLE products ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+CREATE INDEX IF NOT EXISTS products_status_item_idx ON products (status, item_code);
+CREATE INDEX IF NOT EXISTS products_seller_idx ON products (seller_code);
+CREATE INDEX IF NOT EXISTS order_items_product_idx ON order_items (product_code);
+CREATE INDEX IF NOT EXISTS questions_product_idx ON questions (product_code, created_at DESC);

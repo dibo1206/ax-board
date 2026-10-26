@@ -170,3 +170,10 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .star-pick button { font-size: 1.6rem; line-height: 1; color: var(--border); background: none; border: none; cursor: pointer; padding: 0 2px; }
 .star-pick button.on { color: #e0a100; }
 .review-form { margin: 8px 0 12px; }
+
+/* ---------- 상품 찾기 ---------- */
+.search { display: flex; gap: 8px; margin-bottom: 12px; }
+.search input { flex: 1; min-width: 0; padding: 10px 12px; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.search select { padding: 8px; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+a.card { text-decoration: none; height: 100%; box-sizing: border-box; }
+.more { display: block; margin: 16px auto; }

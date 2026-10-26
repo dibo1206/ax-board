@@ -61,12 +61,16 @@ const PRODUCT_SELECT = `
   SELECT p.*, (p.stock = 0) AS sold_out,
          i.name AS item_name, i.category, i.show_brix,
          s.name AS seller_name, s.region AS seller_region, s.is_company,
-         rv.rating, COALESCE(rv.review_count, 0) AS review_count
+         rv.rating, COALESCE(rv.review_count, 0) AS review_count, COALESCE(sales.sold, 0) AS sold_30d
   FROM products p
   JOIN items i ON i.item_code = p.item_code
   JOIN sellers s ON s.seller_code = p.seller_code
   LEFT JOIN (SELECT product_code, round(avg(rating)::numeric, 1)::float AS rating, count(*)::int AS review_count
              FROM reviews WHERE NOT hidden GROUP BY product_code) rv ON rv.product_code = p.product_code
+  LEFT JOIN (SELECT oi.product_code, sum(oi.quantity)::int AS sold
+             FROM order_items oi JOIN orders o ON o.id = oi.order_id
+             WHERE o.status IN ('paid', 'preparing', 'shipping', 'delivered') AND o.created_at > now() - interval '30 days'
+             GROUP BY oi.product_code) sales ON sales.product_code = p.product_code
   WHERE p.status = 'active'`
 
 // 상태 확인: DB까지 살아 있으면 200, DB가 안 되면 503 (배포 후 모니터링·자동 재시작이 이 주소를 본다)
@@ -90,6 +94,44 @@ app.get('/api/products', async (req, res) => {
   sql += ' ORDER BY (p.stock = 0), i.category, p.name'
   const { rows } = await pool.query(sql, params)
   res.json(rows)
+})
+
+// 상품 찾기: 검색어(q, 띄어쓰기로 여러 단어)·카테고리·정렬·페이지. 품절 상품은 항상 뒤로
+const SORTS = {
+  recommended: `('season' = ANY(x.tags)) DESC, x.rating DESC NULLS LAST, x.sold_30d DESC, x.name`,
+  popular: 'x.sold_30d DESC, x.review_count DESC, x.name',
+  price_asc: 'x.price, x.name',
+  price_desc: 'x.price DESC, x.name',
+  new: 'x.created_at DESC, x.name',
+  rating: 'x.rating DESC NULLS LAST, x.review_count DESC, x.name',
+}
+
+app.get('/api/catalog', async (req, res) => {
+  const q = String(req.query.q ?? '').trim().slice(0, 50)
+  const sort = Object.hasOwn(SORTS, req.query.sort) ? req.query.sort : 'recommended'
+  const size = Math.min(48, Math.max(1, Number(req.query.size) || 12))
+  const page = Math.min(1000, Math.max(1, Number(req.query.page) || 1))
+  const params = []
+  let where = ''
+  if (req.query.category) {
+    params.push(String(req.query.category))
+    where += ` AND i.category = $${params.length}`
+  }
+  // 단어마다 상품 이름·품목·소개·농가·태그 중 하나에 들어 있어야 한다 (%·_는 글자 그대로 찾게)
+  for (const word of q.split(/\s+/).filter(Boolean).slice(0, 5)) {
+    params.push(`%${word.replace(/[\\%_]/g, (c) => `\\${c}`)}%`)
+    const n = `$${params.length}`
+    where += ` AND (p.name ILIKE ${n} OR i.name ILIKE ${n} OR p.summary ILIKE ${n} OR s.name ILIKE ${n}
+               OR EXISTS (SELECT 1 FROM tags t WHERE t.tag_code = ANY(p.tags) AND t.label ILIKE ${n}))`
+  }
+  params.push(size, (page - 1) * size)
+  const { rows } = await pool.query(
+    `SELECT x.*, count(*) OVER () AS total FROM (${PRODUCT_SELECT} ${where}) x
+     ORDER BY (x.stock = 0), ${SORTS[sort]} LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params,
+  )
+  const total = Number(rows[0]?.total ?? 0)
+  res.json({ items: rows.map(({ total: _t, ...p }) => p), total, page, pages: Math.max(1, Math.ceil(total / size)), sort })
 })
 
 app.get('/api/products/:code', async (req, res) => {

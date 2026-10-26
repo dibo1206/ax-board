@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 import Admin from './admin/Admin.jsx'
 import Seller from './seller/Seller.jsx'
@@ -70,6 +70,19 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   useEffect(() => {
     if (product && focus === 'qna') qnaRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [product, focus])
+
+  useEffect(() => {
+    if (!product) return undefined
+    const before = document.title
+    document.title = `${product.name.replace(/\[예시\]\s*/g, '')} · ${product.seller_name}`
+    const meta = document.querySelector('meta[name="description"]')
+    const beforeDescription = meta?.content
+    if (meta) meta.content = product.summary ?? product.name
+    return () => {
+      document.title = before
+      if (meta) meta.content = beforeDescription ?? ''
+    }
+  }, [product])
 
   if (error) return <p className="error">{error}</p>
   if (!product) return <p className="muted">불러오는 중…</p>
@@ -192,58 +205,162 @@ function shopPage(path) {
   if (path === '/account/find') return <FindPasswordPage />
   if (path === '/account/reset') return <ResetPasswordPage />
   if (path === '/account') return <MyPage />
-  return <Storefront />
+  return <Storefront /> // / 와 /p/상품코드
+}
+
+// 상품 목록 상태는 주소(?q=&cat=&sort=)에, 상품 상세는 /p/상품코드 에 둔다 → 새로고침·공유·뒤로 가기가 그대로 된다
+const SORT_OPTIONS = [['recommended', '추천순'], ['popular', '인기순'], ['new', '신상품순'], ['rating', '별점순'], ['price_asc', '낮은 가격순'], ['price_desc', '높은 가격순']]
+
+function readLocation() {
+  const params = new URLSearchParams(window.location.search)
+  const path = window.location.pathname
+  return {
+    code: path.startsWith('/p/') ? decodeURIComponent(path.slice(3)) : null,
+    q: params.get('q') ?? '',
+    cat: CATEGORIES.includes(params.get('cat')) ? params.get('cat') : '전체',
+    sort: SORT_OPTIONS.some(([key]) => key === params.get('sort')) ? params.get('sort') : 'recommended',
+  }
+}
+
+function listUrl({ q, cat, sort }) {
+  const params = new URLSearchParams()
+  if (q) params.set('q', q)
+  if (cat !== '전체') params.set('cat', cat)
+  if (sort !== 'recommended') params.set('sort', sort)
+  return `/${params.size ? `?${params}` : ''}`
+}
+
+function fetchCatalog({ q, cat, sort }, page) {
+  const params = new URLSearchParams({ q, sort, page, size: 12 })
+  if (cat !== '전체') params.set('category', cat)
+  return api(`/catalog?${params}`)
 }
 
 function Storefront() {
-  const [products, setProducts] = useState([])
-  const [category, setCategory] = useState('전체')
-  const [selected, setSelected] = useState(null) // { code, focus, n }
+  const [loc, setLoc] = useState(readLocation)
+  const [focus, setFocus] = useState({ value: null, n: 0 })
+  const [typed, setTyped] = useState(loc.q)
+  const [list, setList] = useState(null)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
+  const pushed = useRef(0) // 이 화면에서 상품을 연 횟수 (뒤로 가기로 목록에 돌아갈 수 있는지)
 
   useEffect(() => {
-    const query = category === '전체' ? '' : `?category=${encodeURIComponent(category)}`
-    api(`/products${query}`).then(setProducts).catch((e) => setError(e.message))
-  }, [category])
+    const onPop = () => setLoc(readLocation())
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
 
-  const open = (code, focus = null) => {
-    setSelected((prev) => ({ code, focus, n: (prev?.n ?? 0) + 1 }))
+  const changeList = useCallback((change) => {
+    setLoc((prev) => {
+      const next = { ...prev, ...change, code: null }
+      window.history.replaceState(null, '', listUrl(next))
+      return next
+    })
+  }, [])
+
+  // 검색어는 입력을 멈추고 0.3초 뒤에 찾는다 (글자마다 서버를 부르지 않게)
+  useEffect(() => {
+    if (typed === loc.q) return undefined
+    const timer = setTimeout(() => changeList({ q: typed.trim() }), 300)
+    return () => clearTimeout(timer)
+  }, [typed, loc.q, changeList])
+
+  // 검색어를 빨리 바꾸면 앞선 응답이 늦게 와도 덮어쓰지 않게, 바뀐 뒤 도착한 옛 응답은 버린다
+  useEffect(() => {
+    if (loc.code) return undefined
+    let stale = false
+    fetchCatalog(loc, 1)
+      .then((data) => { if (!stale) { setList(data); setError('') } })
+      .catch((e) => { if (!stale) setError(e.message) })
+    return () => { stale = true }
+  }, [loc])
+
+  const open = (code, focusOn = null) => {
+    window.history.pushState(null, '', `/p/${encodeURIComponent(code)}`)
+    pushed.current += 1
+    setLoc((prev) => ({ ...prev, code }))
+    setFocus((prev) => ({ value: focusOn, n: prev.n + 1 }))
     window.scrollTo({ top: 0 })
   }
 
+  const back = () => {
+    if (pushed.current > 0) {
+      pushed.current -= 1
+      window.history.back()
+    } else {
+      window.history.pushState(null, '', listUrl(loc))
+      setLoc((prev) => ({ ...prev, code: null }))
+    }
+  }
+
+  async function more() {
+    setLoadingMore(true)
+    try {
+      const data = await fetchCatalog(loc, list.page + 1)
+      setList((prev) => ({ ...data, items: [...prev.items, ...data.items] }))
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  const browsing = !loc.q && loc.cat === '전체'
   return (
     <>
       {error && <p className="error">{error}</p>}
 
-      {selected ? (
-        <ProductDetail key={`${selected.code}-${selected.n}`} code={selected.code} focus={selected.focus} onBack={() => setSelected(null)} onOpen={open} />
+      {loc.code ? (
+        <ProductDetail key={`${loc.code}-${focus.n}`} code={loc.code} focus={focus.value} onBack={back} onOpen={open} />
       ) : (
         <>
-          <Featured onOpen={open} />
-          <Quiz onOpen={open} />
+          <form className="search" role="search" onSubmit={(e) => { e.preventDefault(); changeList({ q: typed.trim() }) }}>
+            <input type="search" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="사과, 선물, 달콤한, 농가 이름…" aria-label="상품 검색" maxLength={50} />
+            <select value={loc.sort} onChange={(e) => changeList({ sort: e.target.value })} aria-label="정렬">
+              {SORT_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+          </form>
+          {browsing && <Featured onOpen={open} />}
+          {browsing && <Quiz onOpen={open} />}
           <nav className="tabs">
             {CATEGORIES.map((c) => (
-              <button key={c} type="button" className={c === category ? 'on' : ''} onClick={() => setCategory(c)}>{c}</button>
+              <button key={c} type="button" className={c === loc.cat ? 'on' : ''} onClick={() => changeList({ cat: c })}>{c}</button>
             ))}
           </nav>
-          <ul className="grid">
-            {products.map((p) => (
-              <li key={p.product_code}>
-                <button type="button" className={`card${p.sold_out ? ' dim' : ''}`} onClick={() => open(p.product_code)}>
-                  {p.image_url && <img className="thumb" src={p.image_url} alt="" />}
-                  <span className="cat">{p.category}</span>
-                  <strong>{p.name}</strong>
-                  <span>{p.sold_out ? '품절' : won(p.price)}</span>
-                  <span className="muted">{p.seller_name}</span>
-                  {p.show_brix && p.brix && <span className="badge">당도 {p.brix}</span>}
-                  <RatingBadge rating={p.rating} count={p.review_count} />
+          {!list ? <p className="muted">불러오는 중…</p> : list.total === 0 ? (
+            <div className="box">
+              <p>{loc.q ? `'${loc.q}'에 맞는 상품이 없어요.` : '상품이 없어요.'}</p>
+              <p className="muted">다른 말로 찾아보거나, 오른쪽 아래 AI 상담에 원하는 걸 말해 보세요. (예: 부모님 선물로 달달한 거)</p>
+            </div>
+          ) : (
+            <>
+              {loc.q && <p className="muted">'{loc.q}' 검색 결과 {list.total}개</p>}
+              <ul className="grid">
+                {list.items.map((p) => (
+                  <li key={p.product_code}>
+                    <a href={`/p/${encodeURIComponent(p.product_code)}`} className={`card${p.sold_out ? ' dim' : ''}`} onClick={(e) => { e.preventDefault(); open(p.product_code) }}>
+                      {p.image_url && <img className="thumb" src={p.image_url} alt="" loading="lazy" width="160" height="160" />}
+                      <span className="cat">{p.category}</span>
+                      <strong>{p.name}</strong>
+                      <span>{p.sold_out ? '품절' : won(p.price)}</span>
+                      <span className="muted">{p.seller_name}</span>
+                      {p.show_brix && p.brix && <span className="badge">당도 {p.brix}</span>}
+                      <RatingBadge rating={p.rating} count={p.review_count} />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+              {list.page < list.pages && (
+                <button type="button" className="button ghost more" onClick={more} disabled={loadingMore}>
+                  {loadingMore ? '불러오는 중…' : `더 보기 (${list.items.length}/${list.total})`}
                 </button>
-              </li>
-            ))}
-          </ul>
+              )}
+            </>
+          )}
         </>
       )}
-      <Chat productCode={selected?.code ?? null} onOpenProduct={open} />
+      <Chat productCode={loc.code} onOpenProduct={open} />
     </>
   )
 }
