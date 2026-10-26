@@ -9,7 +9,7 @@ import express from 'express'
 import { cached } from './cache.js'
 import { pool } from './db.js'
 
-const SHOP_NAME = '농가 판매 자사몰'
+const SHOP_NAME = 'YOONJU MARKET'
 const PRIVATE_PAGES = /^\/(admin|seller|account|cart|checkout|order)(\/|$)/
 const PUBLIC_PAGES = ['/', '/policy/terms', '/policy/privacy', '/policy/refund']
 const CODE = /^[A-Za-z0-9_-]{1,64}$/

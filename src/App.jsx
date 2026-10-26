@@ -2,9 +2,10 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 import { Chat } from './Chat.jsx'
 import { B2bForm, QuestionForm } from './Inquiry.jsx'
-import { Featured, Quiz, Related } from './Recommend.jsx'
+import { Related } from './Recommend.jsx'
 import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
-import { addToCart, thumbUrl } from './shop/shared.js'
+import { addToCart, getPolicy, thumbUrl } from './shop/shared.js'
+import { CategoryRows, Faq, Hero, ProductSection, QuizDialog, SeasonCalendar, Story } from './shop/home/Home.jsx'
 import { ShopLayout } from './shop/ShopLayout.jsx'
 import { netFetch } from './net.js'
 
@@ -34,7 +35,6 @@ async function api(path) {
 }
 
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
-const CATEGORIES = ['전체', '과일', '채소', '가공품']
 
 // 대표 사진 + 상세 사진: 작은 사진을 누르면 큰 사진이 바뀐다
 function Gallery({ product }) {
@@ -237,7 +237,13 @@ function App() {
   return <ShopLayout><Suspense fallback={loading}>{shopPage(window.location.pathname)}</Suspense></ShopLayout>
 }
 
+// 첫 화면(/, /p/상품코드)은 섹션마다 폭이 다르고, 나머지 화면은 가운데 좁은 칸에 그린다
 function shopPage(path) {
+  const page = innerPage(path)
+  return page ? <div className="wrap page">{page}</div> : <Storefront />
+}
+
+function innerPage(path) {
   if (path === '/cart') return <Cart />
   if (path === '/checkout') return <Checkout />
   if (path === '/order/success') return <OrderSuccess />
@@ -249,10 +255,11 @@ function shopPage(path) {
   if (path === '/account/find') return <FindPasswordPage />
   if (path === '/account/reset') return <ResetPasswordPage />
   if (path === '/account') return <MyPage />
-  return <Storefront /> // / 와 /p/상품코드
+  return null
 }
 
 // 상품 목록 상태는 주소(?q=&cat=&sort=)에, 상품 상세는 /p/상품코드 에 둔다 → 새로고침·공유·뒤로 가기가 그대로 된다
+// cat 은 손님 화면 카테고리 키(fresh·base·processed…, server/shopGroups.js)
 const SORT_OPTIONS = [['recommended', '추천순'], ['popular', '인기순'], ['new', '신상품순'], ['rating', '별점순'], ['price_asc', '낮은 가격순'], ['price_desc', '높은 가격순']]
 
 function readLocation() {
@@ -261,7 +268,7 @@ function readLocation() {
   return {
     code: path.startsWith('/p/') ? decodeURIComponent(path.slice(3)) : null,
     q: params.get('q') ?? '',
-    cat: CATEGORIES.includes(params.get('cat')) ? params.get('cat') : '전체',
+    cat: /^[a-z]{2,20}$/.test(params.get('cat') ?? '') ? params.get('cat') : 'all',
     sort: SORT_OPTIONS.some(([key]) => key === params.get('sort')) ? params.get('sort') : 'recommended',
   }
 }
@@ -269,30 +276,48 @@ function readLocation() {
 function listUrl({ q, cat, sort }) {
   const params = new URLSearchParams()
   if (q) params.set('q', q)
-  if (cat !== '전체') params.set('cat', cat)
+  if (cat !== 'all') params.set('cat', cat)
   if (sort !== 'recommended') params.set('sort', sort)
   return `/${params.size ? `?${params}` : ''}`
 }
 
 function fetchCatalog({ q, cat, sort }, page) {
   const params = new URLSearchParams({ q, sort, page, size: 12 })
-  if (cat !== '전체') params.set('category', cat)
+  if (cat !== 'all') params.set('group', cat)
   return api(`/catalog?${params}`)
 }
+
+const scrollToId = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
 function Storefront() {
   const [loc, setLoc] = useState(readLocation)
   const [focus, setFocus] = useState({ value: null, n: 0 })
   const [typed, setTyped] = useState(loc.q)
   const [list, setList] = useState(null)
+  const [groups, setGroups] = useState(null)
+  const [policy, setPolicy] = useState(null)
+  const [quizOpen, setQuizOpen] = useState(() => window.location.hash === '#recommend')
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
   const pushed = useRef(0) // 이 화면에서 상품을 연 횟수 (뒤로 가기로 목록에 돌아갈 수 있는지)
+  const first = useRef(loc) // 처음 들어온 주소 (아래로 내려 줄 위치를 정할 때 한 번만 쓴다)
 
   useEffect(() => {
     const onPop = () => setLoc(readLocation())
+    const onQuiz = () => setQuizOpen(true)
     window.addEventListener('popstate', onPop)
-    return () => window.removeEventListener('popstate', onPop)
+    window.addEventListener('open-quiz', onQuiz)
+    api('/shop-groups').then(setGroups).catch(() => setGroups([]))
+    getPolicy().then(setPolicy).catch(() => {})
+    // 다른 화면에서 /#season 처럼 들어오거나, 검색·카테고리가 걸린 주소로 들어오면 그 부분으로 내린다
+    const start = first.current
+    const id = window.location.hash.slice(1) || (start.q || start.cat !== 'all' ? 'products' : '')
+    const timer = id && id !== 'recommend' && !start.code ? setTimeout(() => scrollToId(id), 300) : null
+    return () => {
+      window.removeEventListener('popstate', onPop)
+      window.removeEventListener('open-quiz', onQuiz)
+      clearTimeout(timer)
+    }
   }, [])
 
   const changeList = useCallback((change) => {
@@ -350,60 +375,33 @@ function Storefront() {
     }
   }
 
-  const browsing = !loc.q && loc.cat === '전체'
+  const pickGroup = (cat) => { changeList({ cat }); scrollToId('products') }
+  const pickSeason = (name) => { setTyped(name); changeList({ q: name, cat: 'all' }); scrollToId('products') }
+  const openQuiz = () => setQuizOpen(true)
+  const closeQuiz = () => {
+    setQuizOpen(false)
+    if (window.location.hash === '#recommend') window.history.replaceState(null, '', window.location.pathname + window.location.search)
+  }
   return (
     <>
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error wrap">{error}</p>}
 
       {loc.code ? (
-        <ProductDetail key={`${loc.code}-${focus.n}`} code={loc.code} focus={focus.value} onBack={back} onOpen={open} />
+        <div className="wrap section detail-wrap">
+          <ProductDetail key={`${loc.code}-${focus.n}`} code={loc.code} focus={focus.value} onBack={back} onOpen={open} />
+        </div>
       ) : (
         <>
-          <form className="search" role="search" onSubmit={(e) => { e.preventDefault(); changeList({ q: typed.trim() }) }}>
-            <input type="search" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="사과, 선물, 달콤한, 농가 이름…" aria-label="상품 검색" maxLength={50} />
-            <select value={loc.sort} onChange={(e) => changeList({ sort: e.target.value })} aria-label="정렬">
-              {SORT_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-            </select>
-          </form>
-          {browsing && <Featured onOpen={open} />}
-          {browsing && <Quiz onOpen={open} />}
-          <nav className="tabs">
-            {CATEGORIES.map((c) => (
-              <button key={c} type="button" className={c === loc.cat ? 'on' : ''} onClick={() => changeList({ cat: c })}>{c}</button>
-            ))}
-          </nav>
-          {!list ? <p className="muted">불러오는 중…</p> : list.total === 0 ? (
-            <div className="box">
-              <p>{loc.q ? `'${loc.q}'에 맞는 상품이 없어요.` : '상품이 없어요.'}</p>
-              <p className="muted">다른 말로 찾아보거나, 오른쪽 아래 AI 상담에 원하는 걸 말해 보세요. (예: 부모님 선물로 달달한 거)</p>
-            </div>
-          ) : (
-            <>
-              {loc.q && <p className="muted">'{loc.q}' 검색 결과 {list.total}개</p>}
-              <ul className="grid">
-                {list.items.map((p) => (
-                  <li key={p.product_code}>
-                    <a href={`/p/${encodeURIComponent(p.product_code)}`} className={`card${p.sold_out ? ' dim' : ''}`} onClick={(e) => { e.preventDefault(); open(p.product_code) }}>
-                      {p.image_url && <img className="thumb" src={thumbUrl(p.image_url)} alt="" loading="lazy" width="160" height="160" />}
-                      <span className="cat">{p.category}</span>
-                      <strong>{p.name}</strong>
-                      <span>{p.sold_out ? '품절' : won(p.price)}</span>
-                      <span className="muted">{p.seller_name}</span>
-                      {p.show_brix && p.brix && <span className="badge">당도 {p.brix}</span>}
-                      <RatingBadge rating={p.rating} count={p.review_count} />
-                    </a>
-                  </li>
-                ))}
-              </ul>
-              {list.page < list.pages && (
-                <button type="button" className="button ghost more" onClick={more} disabled={loadingMore}>
-                  {loadingMore ? '불러오는 중…' : `더 보기 (${list.items.length}/${list.total})`}
-                </button>
-              )}
-            </>
-          )}
+          <Hero onRecommend={openQuiz} />
+          <CategoryRows groups={groups} onPick={pickGroup} />
+          <ProductSection groups={groups} loc={loc} typed={typed} setTyped={setTyped} list={list} sorts={SORT_OPTIONS}
+            onChange={changeList} onOpen={open} onMore={more} loadingMore={loadingMore} />
+          <SeasonCalendar onPick={pickSeason} />
+          <Story />
+          <Faq policy={policy} onRecommend={openQuiz} />
         </>
       )}
+      <QuizDialog open={quizOpen} onClose={closeQuiz} onOpen={open} />
       <Chat productCode={loc.code} onOpenProduct={open} />
     </>
   )

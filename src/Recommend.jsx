@@ -53,9 +53,10 @@ const QUESTIONS = {
 }
 const BUDGETS = [['', '상관없어요'], ['20000', '2만 원 이하'], ['30000', '3만 원 이하'], ['50000', '5만 원 이하']]
 
-export function Quiz({ onOpen }) {
+// startOpen·onClose: 추천받기 창(대화상자) 안에서 쓸 때
+export function Quiz({ onOpen, startOpen = false, onClose }) {
   const [tags, setTags] = useState([])
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(startOpen)
   const [want, setWant] = useState([])
   const [budget, setBudget] = useState('')
   const [result, setResult] = useState(null)
@@ -110,7 +111,7 @@ export function Quiz({ onOpen }) {
         </div>
       </div>
       <div className="actions">
-        <button type="button" className="button ghost" onClick={() => { setOpen(false); setResult(null) }}>닫기</button>
+        <button type="button" className="button ghost" onClick={() => { setResult(null); if (onClose) onClose(); else setOpen(false) }}>닫기</button>
         <button type="button" className="button" onClick={submit}>추천 받기</button>
       </div>
       {error && <p className="error">{error}</p>}

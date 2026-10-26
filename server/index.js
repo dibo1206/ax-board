@@ -20,6 +20,7 @@ import { adminOrderRouter, memberOrderRouter, publicOrderRouter, sellerOrderRout
 import { recommendRouter } from './recommend.js'
 import { adminReviewRouter, reviewRouter } from './reviews.js'
 import { sellerRouter } from './seller.js'
+import { groupWhere, shopGroupRouter } from './shopGroups.js'
 import { seoRouter, serveDist } from './web.js'
 
 if (!process.env.PORT && process.env.BACKEND_PORT === undefined) {
@@ -133,6 +134,9 @@ app.get('/api/catalog', async (req, res) => {
     params.push(String(req.query.category))
     where += ` AND i.category = $${params.length}`
   }
+  // 손님 화면 카테고리(생과일·선물세트 등). 정해 둔 조건만 쓰고 손님이 보낸 글자는 SQL에 넣지 않는다
+  const group = groupWhere(String(req.query.group ?? ''))
+  if (group) where += ` AND ${group}`
   // 단어마다 상품 이름·품목·소개·농가·태그 중 하나에 들어 있어야 한다 (%·_는 글자 그대로 찾게)
   for (const word of q.split(/\s+/).filter(Boolean).slice(0, 5)) {
     params.push(`%${word.replace(/[\\%_]/g, (c) => `\\${c}`)}%`)
@@ -142,7 +146,7 @@ app.get('/api/catalog', async (req, res) => {
   }
   params.push(size, (page - 1) * size)
   // 같은 검색·정렬·페이지는 15초 동안 DB를 다시 읽지 않는다 (재고는 주문할 때 서버가 다시 확인)
-  res.json(await cached(`catalog:${JSON.stringify(params)}:${sort}`, 15_000, async () => {
+  res.json(await cached(`catalog:${JSON.stringify(params)}:${sort}:${group ? req.query.group : ''}`, 15_000, async () => {
     const { rows } = await pool.query(
       `SELECT x.*, count(*) OVER () AS total FROM (${PRODUCT_SELECT} ${where}) x
        ORDER BY (x.stock = 0), ${SORTS[sort]} LIMIT $${params.length - 1} OFFSET $${params.length}`,
@@ -208,6 +212,7 @@ app.use('/api', chatRouter)
 app.use('/api', recommendRouter)
 app.use('/api', publicOrderRouter)
 app.use('/api', reviewRouter)
+app.use('/api', shopGroupRouter)
 app.use('/api/account/orders', memberOrderRouter)
 app.use('/api/account', accountRouter)
 // 올린 사진은 그림으로만 쓰이게: 사진 주소를 직접 열어도 스크립트가 돌지 않는다

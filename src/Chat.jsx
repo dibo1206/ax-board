@@ -42,13 +42,13 @@ export function Chat({ productCode, onOpenProduct }) {
   }
 
   if (!open) {
-    return <button type="button" className="chat-open" onClick={() => setOpen(true)}>AI 상담</button>
+    return <button type="button" className="chat-open" onClick={() => setOpen(true)}>상담하기</button>
   }
 
   return (
-    <section className="chat" aria-label="AI 상담">
+    <section className="chat" aria-label="상담하기">
       <header>
-        <strong>AI 상담</strong>
+        <strong>상담하기</strong>
         <button type="button" className="link" onClick={() => setOpen(false)} aria-label="상담 창 닫기">닫기</button>
       </header>
       <ol className="chat-log">
