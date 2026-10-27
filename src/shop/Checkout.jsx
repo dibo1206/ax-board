@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Totals } from './Cart.jsx'
-import { getAccount, loadScript, post, readCart, savePending, won } from './shared.js'
+import { getAccount, loadScript, MAX_QTY, post, readCart, savePending, won } from './shared.js'
 import { useCartLines } from './useCartLines.js'
 
 // 주문서 → (주문 만들기: 서버가 금액 계산·재고 잡아 둠) → 결제 단계(토스 결제위젯)
@@ -11,7 +11,7 @@ function buyNowLine() {
   const params = new URLSearchParams(window.location.search)
   const code = params.get('item')
   const qty = Number(params.get('qty') || 1)
-  return code ? [{ productCode: code, quantity: Number.isInteger(qty) && qty > 0 ? Math.min(qty, 99) : 1 }] : null
+  return code ? [{ productCode: code, quantity: Number.isInteger(qty) && qty > 0 ? Math.min(qty, MAX_QTY) : 1 }] : null
 }
 
 function PaymentStep({ order, buyer }) {

@@ -28,7 +28,7 @@ const redact = (body) => body.replace(/token=[A-Za-z0-9_-]+/g, 'token=[보낸 �
 async function deliver(row) {
   if (!mailConfigured()) {
     await pool.query("UPDATE email_outbox SET status = 'skipped', body = $2 WHERE id = $1", [row.id, redact(row.body)])
-    if (row.kind === 'password_reset') console.log(`[mail] 메일 설정이 없어 보내지 않았어요 (개발용 링크): ${row.body.match(/https?:\/\/\S+/)?.[0] ?? ''}`)
+    if (row.kind === 'password_reset' && process.env.NODE_ENV !== 'production') console.log(`[mail] 메일 설정이 없어 보내지 않았어요 (개발용 링크): ${row.body.match(/https?:\/\/\S+/)?.[0] ?? ''}`)
     return
   }
   try {

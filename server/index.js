@@ -28,6 +28,9 @@ if (!process.env.PORT && process.env.BACKEND_PORT === undefined) {
   process.exit(1)
 }
 const SERVE = process.argv.includes('--serve') // 배포 모드: 화면까지 이 서버가 보낸다
+if (process.env.NODE_ENV === 'production' && !process.env.PUBLIC_URL) {
+  console.warn('[server] PUBLIC_URL 이 없어요. 운영에서는 꼭 넣어 주세요 (메일 링크·sitemap·요청 출처 확인에 쓰임)')
+}
 // BACKEND_PORT: 시험 스크립트가 빈 포트(0)로 따로 띄울 때만 쓴다
 const PORT = process.env.BACKEND_PORT !== undefined ? Number(process.env.BACKEND_PORT) : Number(process.env.PORT) + (SERVE ? 0 : 100)
 const app = express()
@@ -48,6 +51,7 @@ app.disable('x-powered-by')
 // 기본 보안 헤더: 파일 종류를 바꿔 해석하지 않기, 다른 사이트의 틀(iframe) 안에 넣지 않기
 app.use((req, res, next) => {
   res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin' })
+  if (req.secure) res.set('Strict-Transport-Security', 'max-age=31536000') // HTTPS로 들어온 손님은 1년 동안 HTTPS로만
   next()
 })
 
@@ -65,6 +69,22 @@ app.use((req, res, next) => {
 })
 
 app.use(express.json({ limit: '100kb' }))
+
+// 다른 사이트가 손님 브라우저를 시켜 몰래 주문 취소·정보 변경 요청을 보내지 못하게(CSRF):
+// 무언가 바꾸는 요청은 브라우저가 붙이는 Origin 이 우리 주소일 때만 받는다 (쿠키 SameSite=Lax 와 함께 이중으로)
+const OWN_HOST = process.env.PUBLIC_URL ? new URL(process.env.PUBLIC_URL).host : null
+app.use('/api', (req, res, next) => {
+  const origin = req.get('origin')
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || !origin) return next() // Origin 이 없으면 브라우저 요청이 아니다
+  let host = null
+  try {
+    host = new URL(origin).host
+  } catch {
+    // 잘못된 Origin 은 아래에서 거절
+  }
+  if (host && (host === req.host || host === OWN_HOST)) return next()
+  res.status(403).json({ error: '허용되지 않은 요청이에요.' })
+})
 
 // 무언가 바뀌면(관리자·판매자 수정, 주문, 후기·문의 남기기) 기억해 둔 상품 목록·상세를 지운다. AI 상담은 상품을 바꾸지 않아서 뺀다
 app.use((req, res, next) => {

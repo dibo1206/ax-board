@@ -15,6 +15,11 @@ import { adminEmail, publicUrl, queueMail, retryMails } from './mailer.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
 
 const PENDING_MINUTES = 30
+// 결제 전 주문은 재고를 잡아 두므로, 결제하지 않는 주문으로 재고를 묶어 두지 못하게 한도를 둔다
+// (더 많이 필요하면 기업 구매 문의로)
+export const MAX_QTY = 20 // 한 상품을 한 주문에
+const MAX_TOTAL_QTY = 60 // 한 주문 전체
+const MAX_PENDING_PER_PHONE = 3 // 결제 안 한 주문, 같은 휴대폰 번호로
 const text = (v) => (typeof v === 'string' ? v.trim() : '')
 const digits = (v) => text(v).replace(/[^0-9]/g, '')
 const isMobile = (v) => /^01[016789]\d{7,8}$/.test(v)
@@ -145,7 +150,8 @@ function publicOrder(order) {
 
 // ---------- 손님용 ----------
 export const publicOrderRouter = express.Router()
-const tooManyOrders = createLimiter({ limit: 10, windowMs: 10 * 60_000 })
+// 같은 곳(IP)에서 30분에 주문 6번. 개발 중에는 팀 모두가 같은 IP(SSH 터널)라 넉넉하게
+const tooManyOrders = createLimiter({ limit: process.env.NODE_ENV === 'production' ? 6 : 30, windowMs: 30 * 60_000 })
 const tooManyLookups = createLimiter({ limit: 10, windowMs: 10 * 60_000 })
 const tooManyPayments = createLimiter({ limit: 20, windowMs: 10 * 60_000 })
 
@@ -159,13 +165,17 @@ function readOrderInput(body) {
   for (const item of Array.isArray(body.items) ? body.items.slice(0, 20) : []) {
     const code = text(item?.productCode)
     const quantity = Number(item?.quantity)
-    if (!/^[a-z0-9_]{1,64}$/.test(code) || !Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
+    if (!/^[a-z0-9_]{1,64}$/.test(code) || !Number.isInteger(quantity) || quantity < 1) {
       errors.push('주문 상품 정보가 올바르지 않아요.')
       break
     }
-    merged.set(code, Math.min(99, (merged.get(code) ?? 0) + quantity))
+    merged.set(code, (merged.get(code) ?? 0) + quantity)
   }
   if (!merged.size && !errors.length) errors.push('주문할 상품이 없어요.')
+  const total = [...merged.values()].reduce((sum, n) => sum + n, 0)
+  if ([...merged.values()].some((n) => n > MAX_QTY) || total > MAX_TOTAL_QTY) {
+    errors.push(`한 번에 상품마다 ${MAX_QTY}개, 모두 합쳐 ${MAX_TOTAL_QTY}개까지 주문할 수 있어요. 더 많이 필요하면 상품 페이지의 [기업 구매 문의]를 이용해 주세요.`)
+  }
   const input = {
     buyerName: text(body.buyerName),
     buyerPhone: digits(body.buyerPhone),
@@ -198,6 +208,13 @@ publicOrderRouter.post('/orders', async (req, res) => {
   if (errors.length) return res.status(400).json({ error: errors.join(' '), errors })
   if (tooManyOrders(req)) return res.status(429).json({ error: '주문 시도가 너무 많아요. 잠시 후 다시 시도해 주세요.' })
   await expirePending()
+  const { rows: [{ n: pending }] } = await pool.query(
+    "SELECT count(*)::int AS n FROM orders WHERE buyer_phone = $1 AND status = 'pending' AND created_at > now() - make_interval(mins => $2)",
+    [input.buyerPhone, PENDING_MINUTES],
+  )
+  if (pending >= MAX_PENDING_PER_PHONE) {
+    return res.status(429).json({ error: `결제하지 않은 주문이 이미 ${pending}건 있어요. 먼저 결제하거나 ${PENDING_MINUTES}분 뒤에 다시 주문해 주세요.` })
+  }
   const customer = await currentCustomer(req) // 로그인한 회원이면 주문을 계정에 묶는다
 
   try {

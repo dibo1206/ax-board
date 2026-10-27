@@ -99,6 +99,11 @@ export function FindPasswordPage() {
 }
 
 export function ResetPasswordPage() {
+  // 링크의 토큰은 읽자마자 주소창에서 지운다 (방문 기록·화면 공유로 새지 않게)
+  const [token] = useState(() => new URLSearchParams(window.location.search).get('token') ?? '')
+  useEffect(() => {
+    if (window.location.search) window.history.replaceState(null, '', window.location.pathname)
+  }, [])
   const [password, setPassword] = useState('')
   const [password2, setPassword2] = useState('')
   const [errors, setErrors] = useState([])
@@ -106,7 +111,7 @@ export function ResetPasswordPage() {
     event.preventDefault()
     if (password !== password2) return setErrors(['비밀번호 확인이 맞지 않아요.'])
     try {
-      await post('/account/password-reset/confirm', { token: new URLSearchParams(window.location.search).get('token'), password })
+      await post('/account/password-reset/confirm', { token, password })
       window.location.href = '/account'
     } catch (e) {
       setErrors([e.message])

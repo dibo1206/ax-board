@@ -18,6 +18,13 @@ export async function hashPassword(password) {
   return `scrypt:${salt}:${hash.toString('hex')}`
 }
 
+// 없는 계정일 때도 같은 시간이 걸리게 가짜 해시로 한 번 계산한다 (응답 시간으로 가입 여부를 알아내지 못하게)
+const dummyHash = hashPassword(randomBytes(16).toString('hex'))
+export async function passwordMatches(password, stored) {
+  const ok = await verifyPassword(password, stored ?? (await dummyHash))
+  return ok && Boolean(stored)
+}
+
 export async function verifyPassword(password, stored) {
   const [kind, salt, hex] = stored.split(':')
   if (kind !== 'scrypt' || !salt || !hex) return false
@@ -115,7 +122,7 @@ export async function login(req, res) {
     'SELECT id, login_id, password_hash, role, seller_code, totp_secret_enc, totp_last_counter, session_version FROM admins WHERE login_id = $1',
     [loginId],
   )
-  const ok = rows.length === 1 && (await verifyPassword(password, rows[0].password_hash))
+  const ok = (await passwordMatches(password, rows[0]?.password_hash)) && rows.length === 1
   if (!ok) {
     addFail(fails, loginId)
     addFail(ipFails, req.ip)

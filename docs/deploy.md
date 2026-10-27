@@ -113,6 +113,7 @@ sudo systemctl restart farm-mall      # DB 구조 변경(schema.sql)은 켤 때 
 
 - [ ] `https://도메인` 접속, 자물쇠 표시, `http://` 는 https로 넘어감
 - [ ] 테스트 키로 주문 → 결제 → 관리자 [주문]에 보임 → 취소까지
+- [ ] 결제창(토스)이 콘텐츠 보안 정책(CSP)에 막히지 않는지: 브라우저 개발자 도구 콘솔에 `Content-Security-Policy` 오류가 없는지 (막히면 `server/web.js` 의 CSP 에 그 주소 추가)
 - [ ] 관리자 로그인이 사무실 IP + 2단계 인증에서만 됨
 - [ ] 주문 알림 메일이 손님·관리자에게 감
 - [ ] `/robots.txt`, `/sitemap.xml` 이 실제 도메인으로 나옴, 상품 주소를 카톡에 붙이면 사진·가격 미리보기

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { readCart, won, writeCart } from './shared.js'
+import { MAX_QTY, readCart, won, writeCart } from './shared.js'
 import { useCartLines } from './useCartLines.js'
 
 export function Totals({ itemsAmount, fee, total, policy }) {
@@ -24,7 +24,7 @@ export function Cart() {
   }, [])
 
   const change = (code, quantity) => writeCart(quantity > 0
-    ? lines.map((l) => (l.productCode === code ? { ...l, quantity: Math.min(99, quantity) } : l))
+    ? lines.map((l) => (l.productCode === code ? { ...l, quantity: Math.min(MAX_QTY, quantity) } : l))
     : lines.filter((l) => l.productCode !== code))
 
   if (cart.error) return <p className="error">{cart.error}</p>

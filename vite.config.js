@@ -1,8 +1,24 @@
+import { statSync } from 'node:fs'
+import { resolve, sep } from 'node:path'
 import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv } from 'vite'
 
 // 개발 서버는 프로젝트 폴더의 파일을 주소로 그대로 보여 준다. 화면에 필요 없는 서버 코드·데이터·문서·키 파일은 404로 막는다
 const PRIVATE = /^\/(\.env|\.git|server\/|scripts\/|data\/|docs\/|package(-lock)?\.json$|README\.md$|CLAUDE\.md$)/
+
+// Vite 는 /@fs/절대경로 로도 파일을 보여 준다(같은 서버의 다른 사용자도 이 포트에 접속할 수 있다).
+// 그래서 주소를 실제 파일 위치로 바꿔 보고, 화면용 폴더(src·public·node_modules)와 index.html 밖의 파일이면 막는다
+const ROOT = process.cwd()
+const SERVABLE = ['src', 'public', 'node_modules'].map((dir) => resolve(ROOT, dir) + sep)
+function exposesFile(path) {
+  const target = path.startsWith('/@fs/') ? resolve(path.slice(4)) : resolve(ROOT, `.${path}`)
+  if (target === resolve(ROOT, 'index.html') || SERVABLE.some((dir) => target.startsWith(dir))) return false
+  try {
+    return statSync(target).isFile()
+  } catch {
+    return false // 없는 파일 = 화면 주소(/cart 등)라서 Vite 가 index.html 을 보낸다
+  }
+}
 
 function blockPrivateFiles() {
   return {
@@ -16,7 +32,8 @@ function blockPrivateFiles() {
           res.statusCode = 400
           return res.end()
         }
-        if (PRIVATE.test(path.replace(/\/{2,}/g, '/'))) {
+        const clean = path.replace(/\/{2,}/g, '/')
+        if (PRIVATE.test(clean) || exposesFile(clean)) {
           res.statusCode = 404
           return res.end()
         }

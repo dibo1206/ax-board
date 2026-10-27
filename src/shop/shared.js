@@ -1,3 +1,6 @@
+// 한 상품을 한 주문에 담을 수 있는 수 (서버 server/orders.js 의 MAX_QTY 와 같게)
+export const MAX_QTY = 20
+
 // 쇼핑 화면 공통: API 호출, 장바구니(브라우저에 저장), 외부 스크립트 불러오기, 주문 상태 이름
 import { netFetch } from '../net.js'
 
@@ -66,7 +69,7 @@ export function writeCart(items) {
 export function addToCart(productCode, quantity) {
   const items = readCart()
   const found = items.find((i) => i.productCode === productCode)
-  if (found) found.quantity = Math.min(99, found.quantity + quantity)
+  if (found) found.quantity = Math.min(MAX_QTY, found.quantity + quantity)
   else items.push({ productCode, quantity })
   writeCart(items)
 }

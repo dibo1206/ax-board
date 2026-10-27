@@ -2,7 +2,7 @@
 // 비회원 주문은 그대로 되고, 로그인한 손님의 주문은 계정에 묶여 마이페이지에서 본다.
 import { createHash, randomBytes } from 'node:crypto'
 import express from 'express'
-import { clearFails, hashPassword, isLocked, noteFail, readCookie, setCookie, signToken, verifyPassword, verifyToken } from './auth.js'
+import { clearFails, hashPassword, isLocked, noteFail, passwordMatches, readCookie, setCookie, signToken, verifyPassword, verifyToken } from './auth.js'
 import { pool } from './db.js'
 import { createLimiter } from './limit.js'
 import { publicUrl, queueMail } from './mailer.js'
@@ -87,7 +87,7 @@ accountRouter.post('/login', async (req, res) => {
   const key = `c:${email}`
   if (isLocked(key, req.ip)) return res.status(429).json({ error: '로그인을 여러 번 틀렸어요. 10분 뒤에 다시 시도해 주세요.' })
   const { rows } = await pool.query('SELECT * FROM customers WHERE email = $1 AND deleted_at IS NULL', [email])
-  if (!rows.length || !(await verifyPassword(password, rows[0].password_hash))) {
+  if (!(await passwordMatches(password, rows[0]?.password_hash))) {
     noteFail(key, req.ip)
     return res.status(401).json({ error: '이메일 또는 비밀번호가 맞지 않아요.' })
   }
@@ -127,6 +127,8 @@ accountRouter.patch('/me', requireCustomer, async (req, res) => {
 
 // 비밀번호 변경: 지금 비밀번호 확인 → 바꾸면 다른 기기의 로그인은 모두 끊긴다
 accountRouter.post('/password', requireCustomer, async (req, res) => {
+  // 로그인 쿠키를 훔친 사람이 지금 비밀번호를 맞춰 보지 못하게 로그인과 같은 잠금을 쓴다
+  if (isLocked(`c:${req.customer.email}`, req.ip)) return res.status(429).json({ error: '여러 번 틀렸어요. 10분 뒤에 다시 시도해 주세요.' })
   if (!(await verifyPassword(String(req.body.current ?? ''), req.customer.password_hash))) {
     noteFail(`c:${req.customer.email}`, req.ip)
     return res.status(401).json({ error: '지금 비밀번호가 맞지 않아요.' })
@@ -144,7 +146,9 @@ accountRouter.post('/password', requireCustomer, async (req, res) => {
 
 // 탈퇴: 비밀번호 확인 → 계정 개인정보를 지운다. 주문 기록은 전자상거래법에 따라 5년 보관(주문에 담긴 배송 정보만)
 accountRouter.delete('/me', requireCustomer, async (req, res) => {
+  if (isLocked(`c:${req.customer.email}`, req.ip)) return res.status(429).json({ error: '여러 번 틀렸어요. 10분 뒤에 다시 시도해 주세요.' })
   if (!(await verifyPassword(String(req.body.password ?? ''), req.customer.password_hash))) {
+    noteFail(`c:${req.customer.email}`, req.ip)
     return res.status(401).json({ error: '비밀번호가 맞지 않아요.' })
   }
   await pool.query(

@@ -13,6 +13,20 @@ const SHOP_NAME = 'YOONJU MARKET'
 const PRIVATE_PAGES = /^\/(admin|seller|account|cart|checkout|order)(\/|$)/
 const PUBLIC_PAGES = ['/', '/policy/terms', '/policy/privacy', '/policy/refund']
 const CODE = /^[A-Za-z0-9_-]{1,64}$/
+// 화면에서 불러도 되는 곳: 우리 서버, 토스페이먼츠(결제창), 구글·jsDelivr 글꼴. 나머지 스크립트·틀(iframe)은 막는다
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' https://js.tosspayments.com https://*.tosspayments.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
+  "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net",
+  "img-src 'self' data: blob: https:",
+  "connect-src 'self' https://*.tosspayments.com",
+  "frame-src https://*.tosspayments.com https://*.toss.im",
+  "form-action 'self' https://*.tosspayments.com",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+].join('; ')
 
 // 사이트 주소: 배포 때는 .env 의 PUBLIC_URL, 없으면 요청이 들어온 주소
 // (req.host 는 믿을 수 있는 앞단 프록시가 붙인 X-Forwarded-Host 를 먼저 본다)
@@ -140,7 +154,7 @@ export async function serveDist(app) {
     if ((req.method !== 'GET' && req.method !== 'HEAD') || req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) return next()
     try {
       const { status, head } = await pageHead(req, html)
-      res.status(status).set('Cache-Control', 'no-cache').type('html').send(renderHead(html, head))
+      res.status(status).set({ 'Cache-Control': 'no-cache', 'Content-Security-Policy': CSP }).type('html').send(renderHead(html, head))
     } catch (error) {
       next(error)
     }
