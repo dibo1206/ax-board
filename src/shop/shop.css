@@ -1,0 +1,215 @@
+/* ==========================================================================
+   손님 화면 디자인 (시안: YOONJU MARKET) — .shop 안에서만 적용, 관리자·판매자 화면은 그대로
+   ========================================================================== */
+.shop {
+  color-scheme: light; /* 시안은 밝은 화면 하나 */
+  --bg: #f6f4ee;
+  --surface: #fbfaf6;
+  --border: #dedad0;
+  --line: #22261f;
+  --text: #1e221f;
+  --muted: #6b6b64;
+  --accent: #344a3b;
+  --accent-ink: #ffffff;
+  --gold: #e3bd52;
+  --chat: #3f7a46;
+  --display: 'Gowun Batang', 'Noto Serif KR', serif;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Pretendard Variable', Pretendard, system-ui, -apple-system, 'Malgun Gothic', sans-serif;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.shop a { color: inherit; }
+.shop .wrap { max-width: 1200px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 40px); box-sizing: border-box; }
+.shop .section { padding-block: clamp(56px, 8vw, 104px); }
+.shop .page { padding-block: 40px 80px; max-width: 820px; }
+.shop .muted { color: var(--muted); }
+.shop .skip { position: absolute; left: -999px; top: 8px; z-index: 100; padding: 8px 12px; background: var(--accent); color: #fff; }
+.shop .skip:focus { left: 8px; }
+.shop :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* 글자 */
+.shop .display { margin: 0; font-family: var(--display); font-weight: 700; font-size: clamp(2.6rem, 6.4vw, 5rem); line-height: 1.12; letter-spacing: -0.01em; }
+.shop .display span, .shop .display-sm span { display: block; }
+.shop .display-sm { margin: 0; font-family: var(--display); font-weight: 700; font-size: clamp(2rem, 4.2vw, 3.4rem); line-height: 1.15; }
+.shop .eyebrow { margin: 0 0 clamp(20px, 4vw, 44px); font-size: 0.85rem; font-weight: 600; color: var(--muted); letter-spacing: 0.02em; }
+.shop .lead { margin: 12px 0 0; color: var(--muted); font-size: clamp(1rem, 1.4vw, 1.15rem); line-height: 1.7; }
+.shop .note { margin: 12px 0 0; font-size: 0.8rem; color: var(--muted); }
+.shop .rule-label { margin: 0; padding-bottom: 8px; border-bottom: 1.5px solid var(--line); font-size: 0.85rem; font-weight: 600; }
+
+/* 버튼 */
+.shop .btn-dark, .shop .button { display: inline-flex; align-items: center; gap: 10px; padding: 16px 28px; border: none; border-radius: 0; background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+.shop .btn-dark:hover, .shop .button:hover { filter: brightness(1.12); }
+.shop .button { padding: 12px 20px; }
+.shop .button.ghost, .shop .btn-line { background: transparent; color: var(--text); border: 1px solid var(--line); font-weight: 600; padding: 11px 20px; }
+.shop .btn-line { display: inline-block; cursor: pointer; font: inherit; }
+.shop .link { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.shop .underline { text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 1px; }
+
+/* 위쪽 */
+.shop .dev-bar { margin: 0; padding: 6px 16px; background: #efe7c9; color: #5c4b12; font-size: 0.78rem; text-align: center; }
+.shop .site-head { position: sticky; top: 0; z-index: 40; background: rgb(246 244 238 / 0.94); backdrop-filter: blur(6px); border-bottom: 1.5px solid var(--line); }
+.shop .site-head-inner { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; min-height: 76px; }
+.shop .logo { font-size: 1.15rem; letter-spacing: 0.2em; text-decoration: none; white-space: nowrap; color: #2f3b33; }
+.shop .logo b { font-weight: 800; color: var(--text); }
+.shop .site-menu { display: flex; gap: clamp(16px, 2.6vw, 40px); }
+.shop .site-menu a, .shop .site-tools a { text-decoration: none; white-space: nowrap; font-size: 1rem; }
+.shop .site-menu a:hover, .shop .site-tools a:hover { text-decoration: underline; text-underline-offset: 6px; }
+.shop .site-tools { display: flex; justify-content: flex-end; align-items: center; gap: clamp(12px, 2vw, 24px); }
+.shop .count-box { display: inline-grid; place-items: center; min-width: 1.6em; height: 1.6em; margin-left: 4px; padding: 0 4px; background: var(--text); color: #fff; font-size: 0.8rem; font-weight: 700; }
+@media (max-width: 900px) {
+  .shop .site-head-inner { grid-template-columns: 1fr auto; min-height: 60px; }
+  .shop .site-menu { grid-column: 1 / -1; grid-row: 2; overflow-x: auto; padding-bottom: 10px; gap: 20px; scrollbar-width: none; }
+  .shop .logo { font-size: 1rem; }
+}
+
+/* 첫 화면 큰 제목 */
+.shop .home-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); align-items: center; min-height: min(86vh, 860px); padding-top: 56px; }
+.shop .hero-text { padding: 40px clamp(16px, 4vw, 40px) 64px max(clamp(16px, 4vw, 40px), calc((100vw - 1200px) / 2 + 40px)); }
+.shop .hero-text .lead { max-width: 30em; margin: clamp(24px, 4vw, 48px) 0 clamp(28px, 4vw, 44px); }
+.shop .hero-photo { width: 100%; height: 100%; min-height: 420px; max-height: 860px; object-fit: cover; object-position: 30% center; display: block;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 9%); mask-image: linear-gradient(to right, transparent 0, #000 9%); }
+@media (max-width: 860px) {
+  .shop .home-hero { grid-template-columns: 1fr; padding-top: 0; min-height: 0; }
+  .shop .hero-text { padding: 40px 16px 32px; }
+  .shop .hero-photo { min-height: 0; aspect-ratio: 4 / 3; -webkit-mask-image: none; mask-image: none; }
+}
+
+/* 사진 자리표시 (빗금) */
+.shop .photo-need { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; color: #7a776c; font-size: 0.9rem;
+  background: repeating-linear-gradient(135deg, #e9e5d8 0 18px, #e1dccb 18px 36px); }
+.shop .photo-need small { font-size: 0.78rem; }
+
+/* 카테고리 */
+.shop .cat-rows { list-style: none; margin: 0; padding: 0; }
+.shop .cat-rows li { border-bottom: 1px solid var(--border); }
+.shop .cat-rows button { width: 100%; display: grid; grid-template-columns: 64px minmax(0, 1.25fr) minmax(0, 1.2fr) 90px minmax(200px, 1fr); align-items: center; gap: 24px;
+  padding: 28px 0; border: none; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: background 0.2s; }
+.shop .cat-rows button:hover { background: var(--surface); }
+.shop .cat-rows button:hover .cat-name { text-decoration: underline; text-underline-offset: 8px; text-decoration-thickness: 1px; }
+.shop .cat-no { color: var(--muted); padding-left: 4px; }
+.shop .cat-name { font-family: var(--display); font-weight: 700; font-size: clamp(1.6rem, 2.8vw, 2.4rem); }
+.shop .cat-desc { color: var(--muted); }
+.shop .cat-count { text-align: right; font-size: 0.95rem; }
+.shop .cat-photo { width: 100%; aspect-ratio: 2.8 / 1; object-fit: cover; display: flex; }
+@media (max-width: 860px) {
+  .shop .cat-rows button { grid-template-columns: 40px 1fr auto; grid-template-areas: 'no name count' 'no desc desc' 'photo photo photo'; gap: 6px 12px; padding: 22px 0; }
+  .shop .cat-no { grid-area: no; }
+  .shop .cat-name { grid-area: name; }
+  .shop .cat-desc { grid-area: desc; }
+  .shop .cat-count { grid-area: count; }
+  .shop .cat-photo { grid-area: photo; margin-top: 10px; }
+}
+
+/* 이달의 상품 */
+.shop .products-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; }
+.shop .underline-search { display: flex; flex-direction: column; gap: 6px; width: min(340px, 100%); }
+.shop .underline-search label { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+.shop .underline-search input { padding: 10px 0; border: none; border-bottom: 1.5px solid var(--line); border-radius: 0; background: transparent; font: inherit; font-size: 1.05rem; color: var(--text); }
+.shop .underline-search input:focus { outline: none; border-bottom-color: var(--gold); }
+.shop .products-bar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin: 28px 0 32px; }
+.shop .text-tabs { display: flex; gap: clamp(16px, 2.4vw, 34px); flex-wrap: wrap; }
+.shop .text-tabs button { padding: 6px 0; border: none; border-bottom: 3px solid transparent; background: none; font: inherit; font-size: 1.05rem; color: var(--muted); cursor: pointer; }
+.shop .text-tabs button.on { color: var(--text); font-weight: 700; border-bottom-color: var(--gold); }
+.shop .sort { padding: 8px 4px; border: none; border-bottom: 1px solid var(--border); background: transparent; font: inherit; color: var(--text); }
+.shop .empty p { margin: 6px 0; font-size: 1.05rem; }
+.shop .result-count { margin: -16px 0 20px; }
+.shop .pgrid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 40px 24px; }
+.shop .pcard { display: flex; flex-direction: column; gap: 6px; text-decoration: none; }
+.shop .pcard-img { position: relative; display: block; aspect-ratio: 4 / 5; overflow: hidden; background: #ebe7dc; margin-bottom: 10px; }
+.shop .pcard-img img, .shop .pcard-img .photo-need { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s; }
+.shop .pcard:hover .pcard-img img { transform: scale(1.04); }
+.shop .pcard-flag { position: absolute; left: 0; top: 0; padding: 6px 10px; background: var(--text); color: #fff; font-size: 0.8rem; font-weight: 700; }
+.shop .pcard.soldout .pcard-img img { filter: grayscale(0.6); opacity: 0.75; }
+.shop .pcard-seller { font-size: 0.8rem; color: var(--muted); }
+.shop .pcard-name { font-size: 1.05rem; line-height: 1.4; }
+.shop .pcard:hover .pcard-name { text-decoration: underline; text-underline-offset: 4px; }
+.shop .pcard-price { font-weight: 700; font-size: 1.05rem; }
+.shop .pcard-price small { font-weight: 400; color: var(--muted); font-size: 0.8rem; }
+.shop .pcard-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.8rem; }
+.shop .tag { padding: 2px 8px; border: 1px solid var(--border); color: var(--accent); }
+.shop .more { display: block; margin: 48px auto 0; }
+@media (max-width: 560px) { .shop .pgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 12px; } }
+
+/* 제철 달력 */
+.shop .season-section { border-top: 1px solid var(--border); }
+.shop .season { display: grid; grid-template-columns: minmax(0, 0.72fr) minmax(0, 1fr); gap: clamp(32px, 6vw, 80px); align-items: center; }
+.shop .season-photo { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; }
+.shop .season-chart { margin-top: 40px; border-top: 1.5px solid var(--line); }
+.shop .season-row { width: 100%; display: grid; grid-template-columns: minmax(64px, 1.4fr) repeat(12, minmax(0, 1fr)); align-items: center; min-height: 64px;
+  padding: 0; border: none; border-bottom: 1px solid var(--border); background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.shop button.season-row:hover { background: var(--surface); }
+.shop button.season-row:hover .season-name { text-decoration: underline; text-underline-offset: 6px; }
+.shop .season-months { min-height: 48px; cursor: default; font-size: 0.85rem; color: var(--muted); }
+.shop .season-months span { text-align: center; padding: 10px 0 8px; }
+.shop .season-months .now { color: var(--text); font-weight: 800; box-shadow: inset 0 -3px 0 var(--gold); }
+.shop .season-name { grid-column: 1; grid-row: 1; font-family: var(--display); font-weight: 700; font-size: 1.35rem; }
+.shop .season-bar { grid-row: 1; height: 18px; background: var(--accent); }
+@media (max-width: 860px) {
+  .shop .season { grid-template-columns: 1fr; }
+  .shop .season-photo { aspect-ratio: 16 / 9; }
+}
+
+/* 이야기 */
+.shop .story-section { background: var(--accent); color: #f4f1e8; }
+.shop .story { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: clamp(32px, 6vw, 80px); }
+.shop .story h2 { color: #f6f3ea; margin-bottom: 44px; }
+.shop .story-photo { width: 100%; aspect-ratio: 16 / 11; object-fit: cover; }
+.shop .story-photo.tall { aspect-ratio: 3 / 2; margin-top: 28px; }
+.shop .story-points { list-style: none; margin: 0; padding: 0; border-top: 1px solid rgb(255 255 255 / 0.25); }
+.shop .story-points li { padding: 30px 0; border-bottom: 1px solid rgb(255 255 255 / 0.25); }
+.shop .story-no { font-size: 0.8rem; font-weight: 700; color: var(--gold); }
+.shop .story-points h3 { margin: 10px 0 8px; font-family: var(--display); font-weight: 700; font-size: 1.6rem; color: #fff; }
+.shop .story-points p { margin: 0; color: #dfe6dc; line-height: 1.6; }
+@media (max-width: 860px) { .shop .story { grid-template-columns: 1fr; } }
+
+/* 자주 묻는 질문 */
+.shop .faq { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.6fr); gap: clamp(32px, 6vw, 80px); }
+.shop .faq-list { border-top: 1.5px solid var(--line); border-bottom: 1.5px solid var(--line); }
+.shop .faq-list details { border-bottom: 1px solid var(--border); }
+.shop .faq-list details:last-child { border-bottom: none; }
+.shop .faq-list summary { display: flex; justify-content: space-between; gap: 16px; padding: 24px 0; font-weight: 700; font-size: 1.1rem; cursor: pointer; list-style: none; }
+.shop .faq-list summary::-webkit-details-marker { display: none; }
+.shop .faq-list summary::after { content: '+'; font-weight: 700; }
+.shop .faq-list details[open] summary::after { content: '−'; }
+.shop .faq-list details p { margin: -8px 0 20px; color: var(--muted); line-height: 1.7; }
+.shop .faq-list details .btn-line { margin-bottom: 20px; }
+@media (max-width: 860px) { .shop .faq { grid-template-columns: 1fr; } }
+
+/* 아래쪽 */
+.shop .site-foot { border-top: 1.5px solid var(--line); padding: 40px 0 96px; font-size: 0.9rem; }
+.shop .foot-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 36px; }
+.shop .foot-links { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 20px; font-size: 0.82rem; }
+.shop .foot-biz, .shop .foot-copy { margin: 10px 0 0; font-size: 0.78rem; color: var(--muted); line-height: 1.7; }
+
+/* 상담하기 (오른쪽 아래) */
+.shop .chat-open { z-index: 30; background: var(--chat); padding: 14px 24px; font-size: 1.05rem; font-weight: 600; box-shadow: 0 6px 18px rgb(0 0 0 / 0.18); }
+.shop .chat { z-index: 50; border-radius: 4px; }
+.shop .bubble.user { background: var(--accent); }
+
+/* 추천받기 창 */
+.shop .quiz-dialog { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 0; border: none; background: var(--bg); color: var(--text); box-shadow: 0 20px 60px rgb(0 0 0 / 0.3); }
+.shop .quiz-dialog::backdrop { background: rgb(20 24 20 / 0.45); }
+.shop .quiz-dialog .quiz { margin: 0; border: none; border-radius: 0; padding: 28px; background: var(--bg); }
+.shop .quiz-dialog .quiz h3 { font-family: var(--display); font-size: 1.8rem; }
+.shop .chips button { border-radius: 0; }
+.shop .chips button.on { background: var(--accent); border-color: var(--accent); }
+
+/* 상세·장바구니·주문 화면도 같은 느낌으로 */
+.shop .detail-wrap { padding-top: 32px; max-width: 980px; }
+.shop .detail h2 { font-family: var(--display); font-weight: 700; font-size: clamp(1.8rem, 3.4vw, 2.6rem); margin: 20px 0 8px; }
+.shop .page h1, .shop .page h2 { font-family: var(--display); font-weight: 700; }
+.shop .page h2 { font-size: clamp(1.8rem, 3vw, 2.4rem); }
+.shop .box, .shop .buy { border-radius: 0; background: var(--surface); }
+.shop .box h3 { font-family: var(--display); font-weight: 700; font-size: 1.2rem; }
+.shop .hero { border-radius: 0; }
+.shop .form input, .shop .form select, .shop .form textarea { border-radius: 0; background: #fff; }
+.shop .badge { border-radius: 0; }
+@media (max-width: 480px) {
+  .shop .logo { font-size: 0.92rem; letter-spacing: 0.12em; }
+  .shop .site-tools { gap: 12px; }
+  .shop .site-tools a { font-size: 0.92rem; }
+  .shop .tool-search { display: none; } /* 휴대폰: 검색은 메뉴의 [상품]에서 */
+}
