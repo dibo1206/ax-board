@@ -7,6 +7,10 @@
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  // gh codespace ssh·logs 로 터미널에서 접속할 수 있게
+  "features": {
+    "ghcr.io/devcontainers/features/sshd:1": {}
+  },
   "forwardPorts": [3066],
   "portsAttributes": {
     "3066": { "label": "쇼핑몰 화면", "onAutoForward": "openBrowser" },
