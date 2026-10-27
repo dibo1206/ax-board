@@ -55,8 +55,12 @@ export default defineConfig(({ mode }) => {
     server: {
       port,
       strictPort: true,
-      // Codespaces 는 https://<이름>-3066.app.github.dev 주소로 들어온다 (Vite 는 모르는 주소를 막으므로 허용)
-      allowedHosts: process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN ? [`.${process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}`] : [],
+      // Vite 는 모르는 주소로 들어온 요청을 막는다. Codespaces 처럼 https://<이름>-3066.app.github.dev 로 들어오는 경우
+      // npm run setup 이 .env 에 적어 둔 PUBLIC_URL 의 주소를 허용한다 (환경변수가 안 넘어오는 터미널에서도 되게)
+      allowedHosts: [
+        env.PUBLIC_URL && new URL(env.PUBLIC_URL).hostname,
+        process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN && `.${process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}`,
+      ].filter((host) => host && host !== 'localhost'),
       proxy: {
         '/api': { target, changeOrigin: true, xfwd: true, headers },
         '/uploads': { target, changeOrigin: true, headers },
