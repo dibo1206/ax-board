@@ -1,0 +1,23 @@
+# Codespaces 안에서 쓰는 컴퓨터 2대: app(Node 22, 코드 실행) + db(PostgreSQL 16)
+# app 은 db 와 네트워크를 같이 써서 DB 주소가 localhost:5432 가 된다 (실습서버·집과 같은 설정)
+# DB 비밀번호는 이 클라우드 안에서만 쓰는 시험용 값 (밖에서 접속할 수 없음)
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm
+    volumes:
+      - ../..:/workspaces:cached
+    command: sleep infinity
+    network_mode: service:db
+
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: farm_mall
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
