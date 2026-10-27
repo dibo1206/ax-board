@@ -1,0 +1,15 @@
+tag_code,group,label
+gift,용도,선물용
+home,용도,집에서 먹을 것
+cafe,용도,카페·가게용
+raw,먹는 방식,바로 생으로
+cook,먹는 방식,요리해서
+drink,먹는 방식,마시는 것
+spread,먹는 방식,발라 먹는 것
+sweet,맛,달콤한
+sour,맛,새콤한
+mild,맛,담백한
+keep_long,보관,오래 두고 먹기
+eat_soon,보관,빨리 먹어야 함
+season,기타,제철
+kids,기타,아이 간식

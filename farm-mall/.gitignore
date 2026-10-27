@@ -1,0 +1,13 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# 비밀 값 (DB 주소, API 키) — 커밋하지 않음
+.env
+.env.local
+*.key
+*.pem
+
+# 관리자가 올린 상품 사진 (운영 데이터)
+uploads/

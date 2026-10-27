@@ -1,0 +1,282 @@
+-- 농가 판매 자사몰 DB 구조. 실습서버 PostgreSQL의 farm 스키마에 만든다 (수업 실습 ideas 테이블과 분리).
+CREATE SCHEMA IF NOT EXISTS farm;
+SET search_path TO farm;
+
+-- 판매 농가 (지금은 회사가 대신 등록, 나중에 샵인샵으로 커질 때를 대비해 분리)
+CREATE TABLE IF NOT EXISTS sellers (
+  seller_code TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  region TEXT,
+  intro TEXT,
+  story TEXT,
+  is_company BOOLEAN NOT NULL DEFAULT false,
+  source TEXT
+);
+
+-- 품목 기준표 (식품팀 작성). 상품을 등록할 때 품목만 고르면 이 정보가 붙는다
+CREATE TABLE IF NOT EXISTS items (
+  item_code TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL CHECK (category IN ('과일', '채소', '가공품')),
+  show_brix BOOLEAN NOT NULL DEFAULT false,
+  storage_method TEXT,
+  fresh_days_stage1 INTEGER,
+  fresh_days_stage2 INTEGER,
+  stage1_uses TEXT[],
+  stage2_uses TEXT[],
+  stage3_uses TEXT[],
+  opened_note TEXT,
+  allergens TEXT[],
+  danger_signs TEXT[],
+  recipes JSONB NOT NULL DEFAULT '[]',
+  source TEXT,
+  reviewed_by TEXT
+);
+
+-- 추천·검색용 태그 목록
+CREATE TABLE IF NOT EXISTS tags (
+  tag_code TEXT PRIMARY KEY,
+  tag_group TEXT NOT NULL,
+  label TEXT NOT NULL
+);
+
+-- 상품. 품절은 따로 저장하지 않고 stock = 0 이면 품절로 계산한다
+CREATE TABLE IF NOT EXISTS products (
+  product_code TEXT PRIMARY KEY,
+  seller_code TEXT NOT NULL REFERENCES sellers(seller_code),
+  item_code TEXT NOT NULL REFERENCES items(item_code),
+  name TEXT NOT NULL,
+  price INTEGER NOT NULL CHECK (price > 0),
+  unit TEXT NOT NULL,
+  stock INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0),
+  weight_g INTEGER,
+  count_per_box INTEGER,
+  brix NUMERIC(4, 1),
+  brix_measured_at DATE,
+  harvest_date DATE,
+  summary TEXT,
+  external_url TEXT,
+  b2b_available BOOLEAN NOT NULL DEFAULT false,
+  tags TEXT[] NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('draft', 'active')),
+  source TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 2단계: 상품 사진 경로
+ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
+
+-- 상품 Q&A
+CREATE TABLE IF NOT EXISTS questions (
+  id SERIAL PRIMARY KEY,
+  product_code TEXT NOT NULL REFERENCES products(product_code),
+  author TEXT NOT NULL,
+  question TEXT NOT NULL,
+  answer TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  answered_at TIMESTAMPTZ,
+  UNIQUE (product_code, question)
+);
+
+-- 기업(B2B) 대량 구매 문의
+CREATE TABLE IF NOT EXISTS b2b_inquiries (
+  id SERIAL PRIMARY KEY,
+  company TEXT NOT NULL,
+  contact_name TEXT NOT NULL,
+  contact TEXT NOT NULL,
+  product_code TEXT REFERENCES products(product_code),
+  quantity INTEGER,
+  message TEXT,
+  status TEXT NOT NULL DEFAULT '접수' CHECK (status IN ('접수', '확인', '완료')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 4단계: 질문 연락처(관리자만 봄)·숨김, 기업 문의 개인정보 동의 시각
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS contact TEXT;
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS hidden BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE b2b_inquiries ADD COLUMN IF NOT EXISTS privacy_agreed_at TIMESTAMPTZ;
+
+-- AI 상담 기록 (못 답한 질문을 모아 FAQ를 보강하는 데 쓴다)
+CREATE TABLE IF NOT EXISTS chat_logs (
+  id SERIAL PRIMARY KEY,
+  question TEXT NOT NULL,
+  answer TEXT,
+  sources TEXT[],
+  handed_off BOOLEAN NOT NULL DEFAULT false,
+  blocked BOOLEAN NOT NULL DEFAULT false,
+  model TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 관리자 (비밀번호는 해시로만 저장)
+CREATE TABLE IF NOT EXISTS admins (
+  id SERIAL PRIMARY KEY,
+  login_id TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 판매자 화면: 계정은 관리자(admin)와 농가 판매자(seller) 두 종류. 판매자는 자기 농가(seller_code) 것만 다룬다
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'admin';
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS seller_code TEXT REFERENCES sellers(seller_code);
+ALTER TABLE admins DROP CONSTRAINT IF EXISTS admins_role_check;
+ALTER TABLE admins ADD CONSTRAINT admins_role_check
+  CHECK ((role = 'admin' AND seller_code IS NULL) OR (role = 'seller' AND seller_code IS NOT NULL));
+-- 판매자가 올린 새 상품은 '검토 대기(pending)' → 관리자 승인 시 판매(active). 반려하면 사유를 남긴다
+ALTER TABLE products DROP CONSTRAINT IF EXISTS products_status_check;
+ALTER TABLE products ADD CONSTRAINT products_status_check CHECK (status IN ('draft', 'pending', 'active'));
+ALTER TABLE products ADD COLUMN IF NOT EXISTS review_note TEXT;
+
+-- API 아끼기: 하루 전체 AI 호출 수(상한 확인용)와 같은 질문의 답 저장
+CREATE TABLE IF NOT EXISTS ai_usage (
+  day DATE PRIMARY KEY,
+  calls INT NOT NULL DEFAULT 0
+);
+-- key = 질문 + AI에게 준 자료의 해시. 상품 정보가 바뀌면 자료가 달라져 key도 달라진다
+CREATE TABLE IF NOT EXISTS chat_cache (
+  key TEXT PRIMARY KEY,
+  reply JSONB NOT NULL,
+  model TEXT,
+  hits INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 7단계: 자체 주문·결제 (토스페이먼츠). 금액은 서버가 DB 가격으로 계산하고, 결제 승인 때 다시 확인한다
+-- 상태: pending(결제 전, 재고 잡아 둠) → paid → preparing → shipping → delivered
+--       pending → failed / expired(30분 지나면 재고 돌려놓음), paid·preparing → cancelled(결제 취소·재고 복구)
+CREATE TABLE IF NOT EXISTS orders (
+  id SERIAL PRIMARY KEY,
+  order_no TEXT UNIQUE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'paid', 'preparing', 'shipping', 'delivered', 'cancelled', 'failed', 'expired')),
+  buyer_name TEXT NOT NULL,
+  buyer_phone TEXT NOT NULL,
+  receiver_name TEXT NOT NULL,
+  receiver_phone TEXT NOT NULL,
+  zipcode TEXT NOT NULL,
+  address1 TEXT NOT NULL,
+  address2 TEXT,
+  memo TEXT,
+  items_amount INT NOT NULL CHECK (items_amount > 0),
+  shipping_fee INT NOT NULL CHECK (shipping_fee >= 0),
+  total_amount INT NOT NULL CHECK (total_amount > 0),
+  payment_key TEXT,
+  payment_method TEXT,
+  paid_at TIMESTAMPTZ,
+  courier TEXT,
+  tracking_no TEXT,
+  cancel_reason TEXT,
+  cancelled_at TIMESTAMPTZ,
+  fail_reason TEXT,
+  is_test BOOLEAN NOT NULL DEFAULT false,
+  agreed_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS orders_status_idx ON orders (status, created_at);
+
+-- 주문 당시의 상품 이름·가격을 그대로 남긴다 (나중에 상품 가격이 바뀌어도 주문 내역은 그대로)
+CREATE TABLE IF NOT EXISTS order_items (
+  id SERIAL PRIMARY KEY,
+  order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  product_code TEXT NOT NULL REFERENCES products(product_code),
+  seller_code TEXT NOT NULL REFERENCES sellers(seller_code),
+  name TEXT NOT NULL,
+  unit TEXT NOT NULL,
+  price INT NOT NULL CHECK (price > 0),
+  quantity INT NOT NULL CHECK (quantity BETWEEN 1 AND 99),
+  subtotal INT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS order_items_order_idx ON order_items (order_id);
+CREATE INDEX IF NOT EXISTS order_items_seller_idx ON order_items (seller_code);
+
+-- 관리자 페이지 보호: 2단계 인증 비밀값(암호화해서 저장), 같은 코드를 두 번 못 쓰게 마지막으로 쓴 시간칸
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS totp_secret_enc TEXT;
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS totp_last_counter BIGINT NOT NULL DEFAULT 0;
+-- 비밀번호·2단계 인증을 바꾸면 1 올린다 → 그 전에 받은 로그인 쿠키는 모두 끊긴다
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS session_version INT NOT NULL DEFAULT 1;
+
+-- 관리자·판매자 접속 기록 (개인정보 안전성 확보조치: 계정·일시·IP·한 일을 1년 이상 보관). 요청 내용(본문)은 남기지 않는다
+CREATE TABLE IF NOT EXISTS access_logs (
+  id BIGSERIAL PRIMARY KEY,
+  login_id TEXT,
+  role TEXT,
+  action TEXT NOT NULL,
+  method TEXT,
+  path TEXT,
+  status INT,
+  ip TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS access_logs_created_idx ON access_logs (created_at DESC);
+
+-- 손님 회원 (비회원 주문도 그대로 받는다). 비밀번호는 해시로만, 탈퇴하면 개인정보를 지우고 주문 기록은 법정 기간 보관
+CREATE TABLE IF NOT EXISTS customers (
+  id SERIAL PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  zipcode TEXT,
+  address1 TEXT,
+  address2 TEXT,
+  session_version INT NOT NULL DEFAULT 1, -- 비밀번호를 바꾸거나 탈퇴하면 올려서 예전 로그인을 모두 끊는다
+  agreed_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_login_at TIMESTAMPTZ,
+  deleted_at TIMESTAMPTZ
+);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id INT REFERENCES customers(id) ON DELETE SET NULL;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS buyer_email TEXT;
+CREATE INDEX IF NOT EXISTS orders_customer_idx ON orders (customer_id, created_at DESC);
+
+-- 비밀번호 찾기: 메일로 보낸 링크의 토큰은 해시만 저장, 30분 유효, 한 번만 사용
+CREATE TABLE IF NOT EXISTS password_resets (
+  token_hash TEXT PRIMARY KEY,
+  customer_id INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ
+);
+
+-- 보낼 메일 목록: 먼저 여기에 저장하고 보낸다. 실패하면 정리 때 다시 보낸다 (메일 서버가 잠깐 끊겨도 알림이 사라지지 않게)
+CREATE TABLE IF NOT EXISTS email_outbox (
+  id SERIAL PRIMARY KEY,
+  kind TEXT NOT NULL,
+  to_email TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'sent', 'failed', 'skipped')),
+  attempts INT NOT NULL DEFAULT 0,
+  last_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  sent_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS email_outbox_status_idx ON email_outbox (status, created_at);
+
+-- 구매 후기: 배송 완료된 주문의 상품만, 주문·상품마다 한 번. 공개 화면에는 이름 첫 글자만
+CREATE TABLE IF NOT EXISTS reviews (
+  id SERIAL PRIMARY KEY,
+  order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  product_code TEXT NOT NULL REFERENCES products(product_code),
+  customer_id INT REFERENCES customers(id) ON DELETE SET NULL,
+  author TEXT NOT NULL,
+  rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  content TEXT NOT NULL,
+  reply TEXT,
+  replied_at TIMESTAMPTZ,
+  hidden BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (order_id, product_code)
+);
+CREATE INDEX IF NOT EXISTS reviews_product_idx ON reviews (product_code, created_at DESC);
+
+-- 신상품순 정렬용 등록 시각, 상품 찾기·주문 집계용 색인
+ALTER TABLE products ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+CREATE INDEX IF NOT EXISTS products_status_item_idx ON products (status, item_code);
+CREATE INDEX IF NOT EXISTS products_seller_idx ON products (seller_code);
+CREATE INDEX IF NOT EXISTS order_items_product_idx ON order_items (product_code);
+CREATE INDEX IF NOT EXISTS questions_product_idx ON questions (product_code, created_at DESC);
+
+-- 상품 상세: 긴 설명(글만, HTML 아님)과 사진 여러 장(최대 8장). 대표 사진은 image_url
+ALTER TABLE products ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS images TEXT[] NOT NULL DEFAULT '{}';

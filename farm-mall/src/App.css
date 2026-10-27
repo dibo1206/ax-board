@@ -1,0 +1,213 @@
+/* 1단계 데이터 확인용 최소 스타일. 시안이 나오면 3단계에서 바꾼다. */
+:root {
+  color-scheme: light dark;
+  --bg: #f6f7f4;
+  --surface: #ffffff;
+  --border: #dde2d8;
+  --text: #1f2a1f;
+  --muted: #5f6b5f;
+  --accent: #2f7d32;
+  --chart-bar: #2f7d32;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141814;
+    --surface: #1d231d;
+    --border: #2e372e;
+    --text: #e6ece6;
+    --muted: #a3b0a3;
+    --accent: #6fbf73;
+    --chart-bar: #57a85c;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Malgun Gothic', sans-serif;
+}
+
+.app { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { margin: 0 0 8px; font-size: 1.6rem; }
+.notice { margin: 0 0 16px; padding: 8px 12px; border-radius: 8px; background: #fff5d6; color: #6b5400; font-size: 0.85rem; }
+.muted { color: var(--muted); }
+.error { color: #c62828; }
+.warn { color: #9a6700; }
+
+.tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.tabs button { padding: 6px 14px; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; }
+.tabs button.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+
+.grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.card { width: 100%; display: flex; flex-direction: column; gap: 4px; padding: 12px; font: inherit; text-align: left; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; }
+.card.dim { opacity: 0.55; }
+.cat { font-size: 0.75rem; color: var(--muted); }
+.badge { align-self: flex-start; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent); font-size: 0.75rem; }
+.badge.soldout { border-color: #c62828; color: #c62828; }
+
+.detail h2 { margin: 8px 0 4px; }
+.price { font-size: 1.2rem; font-weight: 700; margin: 0 0 8px; }
+.detail dl { display: grid; grid-template-columns: 90px 1fr; gap: 6px; margin: 12px 0; }
+.detail dt { color: var(--muted); }
+.detail dd { margin: 0; }
+.box { margin: 12px 0; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.box h3 { margin: 0 0 8px; font-size: 1rem; }
+.box p, .box li { margin: 4px 0; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.button { display: inline-block; padding: 10px 16px; border-radius: 10px; background: var(--accent); color: #fff; text-decoration: none; font-weight: 700; }
+.button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); font-weight: 400; }
+.link { padding: 0; font: inherit; color: var(--accent); background: none; border: none; cursor: pointer; }
+
+/* ---------- 2단계: 관리자 화면 ---------- */
+.success { color: var(--accent); font-weight: 700; }
+.admin-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.admin-head h2 { margin: 0; }
+.table { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 0.9rem; }
+.table th, .table td { padding: 8px 6px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.table tr.dim { opacity: 0.6; }
+.row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.row-actions button { padding: 4px 10px; font: inherit; font-size: 0.85rem; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.form { display: flex; flex-direction: column; gap: 10px; }
+.form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; }
+.form input, .form select { padding: 8px 10px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+.form .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.form label.check { flex-direction: row; align-items: center; gap: 6px; }
+.preview { padding: 10px 12px; border-radius: 8px; background: var(--bg); border: 1px dashed var(--border); font-size: 0.85rem; }
+.preview p { margin: 4px 0; }
+.tags { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.tag-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 4px 0; }
+.thumb { width: 100%; max-width: 160px; border-radius: 8px; object-fit: cover; aspect-ratio: 1; }
+.hero { width: 100%; max-height: 320px; object-fit: cover; border-radius: 12px; }
+button.button { border: none; cursor: pointer; font: inherit; font-weight: 700; }
+button.button.ghost { border: 1px solid var(--border); font-weight: 400; }
+button:disabled { opacity: 0.6; cursor: wait; }
+
+/* ---------- 4단계: 문의 ---------- */
+.form textarea { padding: 8px 10px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; resize: vertical; }
+.form label.check { flex-wrap: wrap; }
+.inbox { list-style: none; margin: 0; padding: 0; }
+.box.dim { opacity: 0.6; }
+.admin-head .tabs { margin-bottom: 0; }
+.table select { padding: 4px 6px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+
+/* ---------- 5단계: AI 상담 ---------- */
+.chat-open { position: fixed; right: 16px; bottom: 16px; padding: 12px 18px; border: none; border-radius: 999px; background: var(--accent); color: #fff; font: inherit; font-weight: 700; box-shadow: 0 4px 14px rgb(0 0 0 / 0.2); cursor: pointer; }
+.chat { position: fixed; right: 16px; bottom: 16px; width: min(380px, calc(100vw - 32px)); height: min(560px, calc(100vh - 32px)); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 8px 28px rgb(0 0 0 / 0.25); overflow: hidden; }
+.chat header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.chat-log { flex: 1; list-style: none; margin: 0; padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.bubble { max-width: 88%; padding: 8px 12px; border-radius: 12px; background: var(--bg); font-size: 0.92rem; }
+.bubble p { margin: 0; white-space: pre-wrap; }
+.bubble.user { align-self: flex-end; background: var(--accent); color: #fff; }
+.bubble.failed { border: 1px solid #c62828; }
+.bubble .button { margin-top: 6px; padding: 6px 10px; font-size: 0.85rem; }
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; font-size: 0.8rem; }
+.chips button { padding: 3px 8px; font: inherit; color: var(--accent); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; }
+.chips.starters { padding: 0 12px 8px; }
+.chat form { display: flex; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--border); }
+.chat form input { flex: 1; min-width: 0; padding: 8px 10px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+.chat-note { margin: 0; padding: 0 12px 8px; font-size: 0.75rem; }
+
+/* ---------- 6단계: 추천 ---------- */
+.picks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.picks .card { height: 100%; }
+.reasons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.quiz-open { display: block; width: 100%; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+.quiz-row { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
+.quiz .chips button.on, .chips button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.quiz .chips { margin-top: 0; font-size: 0.85rem; }
+
+/* ---------- 판매자 화면 ---------- */
+.badge.pending { border-color: #9a6700; color: #9a6700; }
+.form textarea { min-height: 3em; }
+
+/* ---------- 7단계: 주문·결제 ---------- */
+.shop-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; margin-bottom: 8px; }
+.brand { font-size: 1.4rem; font-weight: 800; color: var(--text); text-decoration: none; word-break: keep-all; }
+.shop-nav { display: flex; gap: 16px; white-space: nowrap; }
+.shop-nav a { color: var(--text); text-decoration: none; font-weight: 600; }
+.count { display: inline-block; min-width: 1.4em; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 0.8rem; text-align: center; }
+.shop-foot { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--muted); }
+.shop-foot nav { display: flex; gap: 16px; margin-bottom: 8px; }
+.shop-foot a { color: var(--muted); }
+.buy { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.buy .qty select { margin-left: 8px; padding: 6px 8px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+.cart { list-style: none; margin: 0; padding: 0; }
+.cart li { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 12px; }
+.qty { display: flex; align-items: center; gap: 8px; }
+.qty button { width: 32px; height: 32px; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.totals { display: grid; grid-template-columns: 1fr auto; gap: 6px; max-width: 360px; margin: 16px 0 16px auto; }
+.totals dd { margin: 0; text-align: right; }
+.totals .sum { font-weight: 800; font-size: 1.1rem; }
+.totals .full { grid-column: 1 / -1; }
+.checkout { display: flex; flex-direction: column; gap: 4px; }
+.checkout .row { align-items: end; }
+.detail-list { display: grid; grid-template-columns: 90px 1fr; gap: 6px; }
+.detail-list dt { color: var(--muted); }
+.detail-list dd { margin: 0; }
+.order-items { padding-left: 18px; }
+.policy section { margin: 16px 0; }
+.policy p { line-height: 1.6; }
+#payment-method, #payment-agreement { margin: 8px 0; }
+@media (max-width: 560px) { .cart li { grid-template-columns: 1fr auto; } }
+
+/* ---------- 관리자 보안 ---------- */
+.warn-row td { color: #c62828; }
+
+/* ---------- 회원 ---------- */
+.narrow { max-width: 440px; margin: 16px auto; }
+.notice-new { padding: 10px 14px; border-radius: 10px; background: var(--accent); color: #fff; font-weight: 700; }
+.notice-new .link { color: #fff; text-decoration: underline; }
+.mail-body { white-space: pre-wrap; font: inherit; font-size: 0.85rem; background: var(--bg); padding: 8px; border-radius: 8px; }
+
+/* ---------- 구매 후기 ---------- */
+.stars { color: #e0a100; letter-spacing: 1px; }
+.stars .off { color: var(--border); }
+.rating { font-size: 0.9rem; }
+.reviews { list-style: none; padding: 0; margin: 0; }
+.reviews li { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.reply { margin-left: 12px; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--bg); font-size: 0.9rem; }
+.star-pick { display: flex; gap: 2px; }
+.star-pick button { font-size: 1.6rem; line-height: 1; color: var(--border); background: none; border: none; cursor: pointer; padding: 0 2px; }
+.star-pick button.on { color: #e0a100; }
+.review-form { margin: 8px 0 12px; }
+
+/* ---------- 상품 찾기 ---------- */
+.search { display: flex; gap: 8px; margin-bottom: 12px; }
+.search input { flex: 1; min-width: 0; padding: 10px 12px; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.search select { padding: 8px; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+a.card { text-decoration: none; height: 100%; box-sizing: border-box; }
+.more { display: block; margin: 16px auto; }
+
+/* ---------- 상품 사진·설명 ---------- */
+.hero { height: auto; aspect-ratio: 4 / 3; background: var(--bg); }
+.gallery-thumbs { display: flex; gap: 6px; margin-top: 6px; overflow-x: auto; }
+.gallery-thumbs button { padding: 0; border: 2px solid transparent; border-radius: 8px; background: none; cursor: pointer; }
+.gallery-thumbs button.on { border-color: var(--accent); }
+.gallery-thumbs img { display: block; width: 64px; height: 64px; object-fit: cover; border-radius: 6px; }
+.para { white-space: pre-wrap; line-height: 1.6; }
+.photo-manage { display: flex; flex-wrap: wrap; gap: 8px; }
+.photo-manage figure { margin: 0; font-size: 0.8rem; text-align: center; }
+.photo-manage img { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; display: block; }
+
+/* ---------- 관리자 매출 화면 ---------- */
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.filters button { padding: 6px 12px; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; }
+.filters button.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.tile { display: flex; flex-direction: column; gap: 4px; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.tile b { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.tasks { list-style: none; padding: 0; margin: 0; }
+.tasks li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.chart { position: relative; }
+.chart svg { width: 100%; height: auto; display: block; }
+.chart .grid { stroke: var(--border); stroke-width: 1; }
+.chart .axis { fill: var(--muted); font-size: 12px; }
+.chart .bar { fill: var(--chart-bar); }
+.chart .bar.on { opacity: 0.75; }
+.chart .hit { fill: transparent; cursor: default; }
+.chart .hit:focus { outline: 2px solid var(--accent); }
+.chart-tip { position: absolute; top: 0; transform: translateX(-50%); padding: 6px 10px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; font-size: 0.85rem; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 8px rgb(0 0 0 / 0.12); }
+.nowrap { white-space: nowrap; }
