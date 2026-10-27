@@ -22,7 +22,29 @@ B2B·B2C를 함께 하는 브랜드 자사몰. 상품을 등록하면 AI 상담�
 - [x] 관리자 매출 화면(오늘·이번 달 매출, 날짜별 매출 그래프, 많이 팔린 상품, 재고 부족, 할 일), 택배사 고르기
 - [ ] 8단계: 배포·인수인계
 
-## 실행
+## 가장 쉬운 실행: GitHub Codespaces (설치 없이 브라우저만)
+
+1. 깃허브 저장소 → 초록색 **Code** 버튼 → **Codespaces** 탭 → **Create codespace on main**
+2. 2~3분 기다리면 자동으로 DB 설치 → `.env` 만들기 → 예시 데이터 넣기 → 쇼핑몰 실행까지 끝나고, **새 탭에 쇼핑몰 화면이 열린다**
+   (안 열리면 아래쪽 **PORTS** 탭에서 '쇼핑몰 화면(3066)'의 지구본 아이콘)
+3. 관리자 화면을 보려면 아래쪽 터미널에서 `npm run create-admin -- 아이디` → 주소 뒤에 `/admin`
+4. 다 쓰면 깃허브 → Codespaces 목록에서 **Stop** (무료 사용량 아끼기, 개인 계정은 한 달 약 60시간 무료)
+
+- 결제는 테스트 결제(실제 돈 안 나감), 상담은 AI 없이 답하는 기능까지 된다 (AI 버튼은 각자 OpenRouter 키를 `.env`에 넣어야 함)
+- Codespace 안의 데이터는 각자 따로라서 마음껏 주문·등록해 봐도 된다
+- 다시 켤 때는 Codespaces 목록에서 같은 것을 열면 된다. 서버가 꺼져 있으면 터미널에 `npm run demo`
+
+## 집 컴퓨터에서 실행 (Node.js 22 + PostgreSQL 16 설치)
+
+```bash
+git clone https://github.com/dibo1206/ax-board.git && cd ax-board
+npm install
+npm run setup        # .env 자동 생성 (DB 주소는 .env 의 DATABASE_URL 을 내 PostgreSQL 비밀번호로 고치기)
+npm run load-data    # 예시 데이터 넣기 (DB farm_mall 을 먼저 만들어 두기: CREATE DATABASE farm_mall;)
+npm run demo         # 화면 + 백엔드 한 번에 → http://localhost:3066
+```
+
+## 실행 (실습서버)
 
 ```bash
 npm install

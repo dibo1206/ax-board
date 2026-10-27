@@ -1,0 +1,20 @@
+// GitHub Codespaces(깃허브 안의 클라우드 개발 컴퓨터)로 설치 없이 바로 실행하기
+// 저장소 → Code → Codespaces → Create codespace on main → 2~3분 뒤 브라우저에 쇼핑몰이 열린다
+// 1) 처음 만들 때: 라이브러리 설치 → .env 자동 생성 → 예시 데이터 넣기
+// 2) 열 때마다: 화면 + 백엔드 실행 (터미널에서 Ctrl+C 로 끄고, npm run demo 로 다시 켜기)
+{
+  "name": "YOONJU MARKET (farm-mall)",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "forwardPorts": [3066],
+  "portsAttributes": {
+    "3066": { "label": "쇼핑몰 화면", "onAutoForward": "openBrowser" },
+    "3166": { "label": "백엔드 (직접 열지 않아도 됨)", "onAutoForward": "silent" }
+  },
+  "postCreateCommand": "npm ci && npm run setup && npm run load-data",
+  "postAttachCommand": "npm run demo",
+  "customizations": {
+    "codespaces": { "openFiles": ["README.md"] }
+  }
+}

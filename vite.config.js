@@ -47,7 +47,7 @@ function blockPrivateFiles() {
 // 넘길 때 .env의 PROXY_SECRET을 머리글로 붙인다 (백엔드는 이게 없는 직접 접속을 막는다). 이 값은 화면 코드에 들어가지 않는다.
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const port = Number(process.env.PORT || 3066)
+  const port = Number(process.env.PORT || env.PORT || 3066) // 집 컴퓨터는 .env 의 PORT
   const target = `http://127.0.0.1:${port + 100}`
   const headers = env.PROXY_SECRET ? { 'x-proxy-secret': env.PROXY_SECRET } : {}
   return {
@@ -55,6 +55,8 @@ export default defineConfig(({ mode }) => {
     server: {
       port,
       strictPort: true,
+      // Codespaces 는 https://<이름>-3066.app.github.dev 주소로 들어온다 (Vite 는 모르는 주소를 막으므로 허용)
+      allowedHosts: process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN ? [`.${process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}`] : [],
       proxy: {
         '/api': { target, changeOrigin: true, xfwd: true, headers },
         '/uploads': { target, changeOrigin: true, headers },
