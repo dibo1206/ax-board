@@ -123,9 +123,22 @@ export async function expirePending() {
 }
 
 // 5분마다: 결제 안 된 주문 정리 + 못 보낸 메일 다시 보내기
+// 배송 완료 7일 뒤 자동 구매 확정 (판매자 정산 기준). 손님은 그 전에 직접 확정할 수 있다
+export const CONFIRM_DAYS = 7
+export async function autoConfirm() {
+  const { rowCount } = await pool.query(
+    `UPDATE orders SET confirmed_at = now() WHERE status = 'delivered' AND confirmed_at IS NULL
+       AND COALESCE(delivered_at, updated_at) < now() - make_interval(days => $1)`,
+    [CONFIRM_DAYS],
+  )
+  if (rowCount) console.log(`[order] 자동 구매 확정 ${rowCount}건`)
+  return rowCount
+}
+
 export function startOrderSweeper() {
   setInterval(() => {
     expirePending().catch((e) => console.error(`[order] 만료 처리 실패 · ${e.message}`))
+    autoConfirm().catch((e) => console.error(`[order] 구매 확정 실패 · ${e.message}`))
     retryMails().catch((e) => console.error(`[mail] 다시 보내기 실패 · ${e.message}`))
   }, 5 * 60_000).unref()
 }
@@ -378,6 +391,20 @@ publicOrderRouter.post('/orders/lookup/cancel', async (req, res) => {
   res.json(publicOrder(await loadOrder(order.order_no)))
 })
 
+// 손님이 직접 구매 확정 (배송 완료된 주문만, 한 번만)
+async function confirmPurchase(order, res) {
+  if (order.status !== 'delivered') return res.status(409).json({ error: '배송이 끝난 주문만 구매 확정할 수 있어요.' })
+  await pool.query('UPDATE orders SET confirmed_at = COALESCE(confirmed_at, now()) WHERE id = $1', [order.id])
+  res.json(publicOrder(await loadOrder(order.order_no)))
+}
+
+publicOrderRouter.post('/orders/lookup/purchase-confirm', async (req, res) => {
+  if (tooManyLookups(req)) return res.status(429).json({ error: '요청이 너무 많아요. 10분 뒤에 다시 시도해 주세요.' })
+  const order = await findMyOrder(req)
+  if (!order) return res.status(404).json({ error: '주문을 찾지 못했어요.' })
+  await confirmPurchase(order, res)
+})
+
 // 결제 취소 + 재고 복구 (손님·회원·관리자 공통). allowed: 취소할 수 있는 상태
 async function cancelOrder(orderNo, reason, allowed) {
   const result = await cancelOrderTx(orderNo, reason, allowed)
@@ -459,7 +486,8 @@ function advanceTx(orderNo, body, who, onlySeller) {
     if (NEXT[order.status] !== status) return { status: 409, error: '지금 상태에서 그 단계로 바꿀 수 없어요.' }
     if (status === 'shipping' && (!courier || trackingNo.length < 6)) return { status: 400, error: '택배사와 송장 번호를 넣어 주세요.' }
     await client.query(
-      `UPDATE orders SET status = $2, courier = COALESCE(NULLIF($3, ''), courier), tracking_no = COALESCE(NULLIF($4, ''), tracking_no), updated_at = now()
+      `UPDATE orders SET status = $2, courier = COALESCE(NULLIF($3, ''), courier), tracking_no = COALESCE(NULLIF($4, ''), tracking_no), updated_at = now(),
+         delivered_at = CASE WHEN $2 = 'delivered' THEN now() ELSE delivered_at END
        WHERE id = $1`,
       [order.id, status, courier, trackingNo],
     )
@@ -489,7 +517,7 @@ sellerOrderRouter.use(requireSeller)
 sellerOrderRouter.get('/', async (req, res) => {
   const seller = req.seller.sellerCode
   const { rows } = await pool.query(`
-    SELECT o.id, o.order_no, o.status, o.created_at, o.paid_at, o.courier, o.tracking_no, o.memo, o.is_test,
+    SELECT o.id, o.order_no, o.status, o.created_at, o.paid_at, o.courier, o.tracking_no, o.memo, o.is_test, o.confirmed_at,
            o.receiver_name, o.receiver_phone, o.zipcode, o.address1, o.address2,
            NOT EXISTS (SELECT 1 FROM order_items x WHERE x.order_id = o.id AND x.seller_code <> $1) AS only_mine
     FROM orders o
@@ -509,6 +537,22 @@ sellerOrderRouter.get('/', async (req, res) => {
       receiver: shipper ? { name: receiver_name, phone: receiver_phone, zipcode, address1, address2, memo } : null,
     }
   }))
+})
+
+// 정산 요약: 이번 달 구매 확정된 내 상품 매출(정산 예정)과 확정 기다리는 매출 (테스트 결제 포함, 표시는 화면에서)
+sellerOrderRouter.get('/settlement', async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT
+       COALESCE(sum(oi.subtotal) FILTER (WHERE o.confirmed_at >= date_trunc('month', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul'), 0)::int AS confirmed_amount,
+       count(DISTINCT o.id) FILTER (WHERE o.confirmed_at >= date_trunc('month', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul')::int AS confirmed_orders,
+       COALESCE(sum(oi.subtotal) FILTER (WHERE o.confirmed_at IS NULL), 0)::int AS waiting_amount,
+       count(DISTINCT o.id) FILTER (WHERE o.confirmed_at IS NULL)::int AS waiting_orders,
+       bool_or(o.is_test) AS has_test
+     FROM order_items oi JOIN orders o ON o.id = oi.order_id
+     WHERE oi.seller_code = $1 AND o.status = 'delivered'`,
+    [req.seller.sellerCode],
+  )
+  res.json({ ...rows[0], confirmDays: CONFIRM_DAYS })
 })
 
 sellerOrderRouter.patch('/:orderNo', async (req, res) => {
@@ -560,6 +604,11 @@ async function myOrder(req, res) {
 memberOrderRouter.get('/:orderNo', async (req, res) => {
   const order = await myOrder(req, res)
   if (order) res.json(publicOrder(order))
+})
+
+memberOrderRouter.post('/:orderNo/purchase-confirm', async (req, res) => {
+  const order = await myOrder(req, res)
+  if (order) await confirmPurchase(order, res)
 })
 
 memberOrderRouter.post('/:orderNo/cancel', async (req, res) => {

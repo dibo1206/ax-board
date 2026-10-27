@@ -5,6 +5,8 @@ import { mkdir, unlink, writeFile } from 'node:fs/promises'
 import express from 'express'
 import sharp from 'sharp'
 import { requireAdmin } from './auth.js'
+import { findBanned } from './banned.js'
+import { fillItem, listTemplates, productDraft } from './content.js'
 import { pool } from './db.js'
 import { validateProduct } from './validate.js'
 
@@ -25,6 +27,7 @@ export async function codeSets() {
     itemCodes: new Set(items.rows.map((r) => r.item_code)),
     sellerCodes: new Set(sellers.rows.map((r) => r.seller_code)),
     tagCodes: new Set(tags.rows.map((r) => r.tag_code)),
+    findBanned, // 관리자가 고치는 금지어 사전으로 검사
   }
 }
 
@@ -48,7 +51,8 @@ adminRouter.get('/products', async (req, res) => {
 })
 
 const PRODUCT_FIELDS = ['seller_code', 'item_code', 'name', 'price', 'unit', 'stock', 'weight_g', 'count_per_box',
-  'brix', 'brix_measured_at', 'harvest_date', 'summary', 'description', 'external_url', 'b2b_available', 'tags', 'status', 'review_note']
+  'brix', 'brix_measured_at', 'harvest_date', 'summary', 'description', 'external_url', 'b2b_available', 'tags', 'status', 'review_note', 'faq']
+const value = (product, column) => (column === 'faq' ? JSON.stringify(product.faq ?? []) : product[column])
 
 // 검사를 통과한 상품을 넣는다. 같은 코드가 있으면 null
 export async function insertProduct(product, source) {
@@ -58,19 +62,26 @@ export async function insertProduct(product, source) {
   const { rows } = await pool.query(
     `INSERT INTO products (${columns.join(', ')}, source)
      VALUES (${columns.map((_, i) => `$${i + 1}`).join(', ')}, $${columns.length + 1}) RETURNING *`,
-    [...columns.map((c) => product[c]), source],
+    [...columns.map((c) => value(product, c)), source],
   )
   return rows[0]
 }
 
 export async function updateProduct(code, product) {
   const { rows } = await pool.query(
-    `UPDATE products SET ${PRODUCT_FIELDS.map((c, i) => `${c} = $${i + 1}`).join(', ')}, updated_at = now()
+    // 가격이 바뀌면 가격 기준일을 오늘로 (오른쪽의 price 는 바꾸기 전 값)
+    `UPDATE products SET ${PRODUCT_FIELDS.map((c, i) => `${c} = $${i + 1}`).join(', ')}, updated_at = now(),
+       price_updated_at = CASE WHEN price IS DISTINCT FROM $${PRODUCT_FIELDS.indexOf('price') + 1}::int THEN now() ELSE price_updated_at END
      WHERE product_code = $${PRODUCT_FIELDS.length + 1} RETURNING *`,
-    [...PRODUCT_FIELDS.map((c) => product[c]), code],
+    [...PRODUCT_FIELDS.map((c) => value(product, c)), code],
   )
   return rows[0]
 }
+
+// AI 상세 내용 초안 · 상세페이지 패턴 · 품목 빈 칸 채우기 (content.js)
+adminRouter.get('/ai/templates', listTemplates)
+adminRouter.post('/ai/product-draft', productDraft)
+adminRouter.post('/items/:code/fill', fillItem)
 
 adminRouter.post('/products', async (req, res) => {
   const { product, errors } = validateProduct(req.body, { ...(await codeSets()), isNew: true })

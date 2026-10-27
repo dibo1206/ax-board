@@ -3,13 +3,20 @@
 import express from 'express'
 import { codeSets, insertProduct, rawImage, removeImage, storeImage, updateProduct } from './admin.js'
 import { requireSeller } from './auth.js'
+import { bannedMessage, findBanned } from './banned.js'
+import { fillItem, listTemplates, productDraft } from './content.js'
 import { pool } from './db.js'
-import { FORBIDDEN, validateProduct } from './validate.js'
+import { validateProduct } from './validate.js'
 
 export const sellerRouter = express.Router()
 sellerRouter.use(requireSeller)
 
 const text = (v) => (typeof v === 'string' ? v.trim() : '')
+
+// AI 상세 내용 초안 (농가는 자기 농가로 고정) · 상세페이지 패턴 · 품목 빈 칸 채우기
+sellerRouter.get('/ai/templates', listTemplates)
+sellerRouter.post('/ai/product-draft', productDraft)
+sellerRouter.post('/items/:code/fill', fillItem)
 const mine = (req) => req.seller.sellerCode
 
 // 상품이 내 농가 것인지 확인하고 req.product에 담는다
@@ -38,8 +45,8 @@ sellerRouter.patch('/profile', async (req, res) => {
   const errors = []
   if (intro.length > 100) errors.push('한 줄 소개는 100자 안으로 적어 주세요.')
   if (story.length > 1500) errors.push('농가 이야기는 1500자 안으로 적어 주세요.')
-  const bad = FORBIDDEN.filter((w) => `${intro} ${story}`.includes(w))
-  if (bad.length) errors.push(`효능 표현은 쓰지 않아요: ${bad.join(', ')}`)
+  const bad = findBanned(`${intro} ${story}`)
+  if (bad.length) errors.push(bannedMessage(bad))
   if (errors.length) return res.status(400).json({ error: errors.join(' '), errors })
   const { rows } = await pool.query(
     'UPDATE sellers SET intro = $1, story = $2 WHERE seller_code = $3 RETURNING seller_code, name, region, intro, story',
@@ -106,8 +113,8 @@ sellerRouter.patch('/questions/:id', async (req, res) => {
   if (!/^\d{1,9}$/.test(req.params.id)) return res.status(404).json({ error: '질문을 찾지 못했어요.' })
   const answer = text(req.body.answer)
   if (answer.length < 2 || answer.length > 1000) return res.status(400).json({ error: '답변을 2~1000자로 적어 주세요.' })
-  const bad = FORBIDDEN.filter((w) => answer.includes(w))
-  if (bad.length) return res.status(400).json({ error: `효능 표현은 쓰지 않아요: ${bad.join(', ')}` })
+  const bad = findBanned(answer)
+  if (bad.length) return res.status(400).json({ error: bannedMessage(bad) })
   const { rows } = await pool.query(
     `UPDATE questions q SET answer = $1, answered_at = now()
      FROM products p

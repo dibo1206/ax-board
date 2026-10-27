@@ -46,7 +46,9 @@ async function takeCall() {
 
 // skip: 방금 답이 규칙에 걸린 모델은 다시 쓰지 않고 다음 모델로 (같은 실수를 되풀이하는 경우가 많다)
 // maxTries: 이번에 시도할 모델 수. 질문 하나가 호출을 많이 쓰지 않게 부르는 쪽에서 정한다
-export async function complete(messages, { skip = [], maxTries = MODELS.length } = {}) {
+// maxTokens: 답 길이 한도. 상담은 짧게(1200), 상품 상세 초안처럼 긴 글은 부르는 쪽에서 늘린다
+// timeoutMs: 한 모델을 기다리는 시간 (긴 글은 늘린다), lightThinking: 생각하는 모델에게 짧게 생각하라고(토큰 아끼기)
+export async function complete(messages, { skip = [], maxTries = MODELS.length, maxTokens = 1200, timeoutMs = 30_000, lightThinking = false } = {}) {
   let lastError
   const models = MODELS.filter((m) => !skip.some((s) => s.startsWith(m)))
   for (const model of (models.length ? models : MODELS).slice(0, maxTries)) {
@@ -57,10 +59,11 @@ export async function complete(messages, { skip = [], maxTries = MODELS.length }
       const completion = await getClient().chat.completions.create({
         model,
         messages,
-        max_tokens: 1200, // 일부 모델은 답 전에 생각하는 데 토큰을 써서 넉넉히 둔다
+        max_tokens: maxTokens, // 일부 모델은 답 전에 생각하는 데 토큰을 써서 넉넉히 둔다
         temperature: 0.2,
         response_format: { type: 'json_object' },
-      })
+        ...(lightThinking ? { reasoning: { effort: 'low' } } : {}), // OpenRouter: 지원 안 하는 모델은 무시
+      }, { timeout: timeoutMs })
       const text = completion.choices?.[0]?.message?.content
       if (!text) throw Object.assign(new Error('빈 답'), { status: 502 })
       const usage = completion.usage ?? {}

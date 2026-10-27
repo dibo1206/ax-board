@@ -6,6 +6,18 @@ import { netFetch } from '../net.js'
 
 export const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
 
+// 판매 단위에서 전체 양을 읽어 100g·100ml당 가격을 낸다 (비싸지 않다는 걸 비교해 보이게)
+// 예: '5kg 1박스' → 100g당 900원, '100ml × 30포' → 100ml당 1,067원, 양을 못 읽으면 null
+export function unitPrice(price, unit) {
+  const found = String(unit ?? '').replace(/,/g, '').match(/(\d+(?:\.\d+)?)\s*(kg|g|ml|l)(?![a-z])/i)
+  if (!found || !Number(price)) return null
+  const times = Number(String(unit).match(/[×x*]\s*(\d+)/i)?.[1] ?? 1)
+  const big = /^(kg|l)$/i.test(found[2])
+  const amount = Number(found[1]) * (big ? 1000 : 1) * times
+  if (!amount) return null
+  return `${/g/i.test(found[2]) ? '100g' : '100ml'}당 ${won(Math.round((Number(price) / amount) * 100))}`
+}
+
 // 목록에는 서버가 만든 400px 썸네일을 쓴다 (예전 png·jpg 사진은 그대로)
 export const thumbUrl = (url) => (url?.endsWith('.webp') ? url.replace(/\.webp$/, '-thumb.webp') : url)
 

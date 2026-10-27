@@ -213,3 +213,7 @@
   .shop .site-tools a { font-size: 0.92rem; }
   .shop .tool-search { display: none; } /* 휴대폰: 검색은 메뉴의 [상품]에서 */
 }
+
+/* 100g·100ml당 가격 */
+.shop .pcard-unit { font-size: 0.78rem; color: var(--muted); margin-top: -4px; }
+.shop .detail .para-title { font-family: var(--display); font-weight: 700; font-size: 1.15rem; }

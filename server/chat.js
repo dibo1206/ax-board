@@ -18,7 +18,7 @@ import { maskPersonal } from './privacy.js'
 import { describeRecommendation, loadActive, readWish, recommend } from './recommend.js'
 import { SHIPPING } from './policy.js'
 import { mostSimilar, similarity } from './similar.js'
-import { FORBIDDEN } from './validate.js'
+import { findBanned } from './banned.js'
 
 const RULES_FILE = new URL('./chat_rules.md', import.meta.url)
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
@@ -405,8 +405,11 @@ async function loadSimilarCandidates() {
       [CACHE_DAYS],
     ),
     pool.query(
-      `SELECT q.question, q.answer, q.product_code, p.name, p.item_code FROM questions q JOIN products p ON p.product_code = q.product_code
-       WHERE q.answer IS NOT NULL AND NOT q.hidden AND p.status = 'active' ORDER BY q.answered_at DESC LIMIT 300`,
+      `(SELECT q.question, q.answer, q.product_code, p.name, p.item_code, 'staff' AS source FROM questions q JOIN products p ON p.product_code = q.product_code
+        WHERE q.answer IS NOT NULL AND NOT q.hidden AND p.status = 'active' ORDER BY q.answered_at DESC LIMIT 300)
+       UNION ALL
+       (SELECT f->>'q', f->>'a', p.product_code, p.name, p.item_code, 'faq' FROM products p, jsonb_array_elements(p.faq) f
+        WHERE p.status = 'active' LIMIT 500)`,
     ),
   ])
   return { logs: logs.rows, qna: qna.rows }
@@ -422,7 +425,7 @@ async function answerSimilar(message, catalog, ctx, fallbackProduct) {
   if (staff) {
     return {
       ...base,
-      answer: `담당자가 비슷한 질문에 답한 내용이에요. 질문: "${staff.question}" → 답: ${staff.answer}`,
+      answer: `${staff.source === 'faq' ? '상품 페이지의 자주 묻는 질문 답이에요.' : '담당자가 비슷한 질문에 답한 내용이에요.'} 질문: "${staff.question}" → 답: ${staff.answer}`,
       sources: [{ code: staff.product_code, name: staff.name }],
       productCode: staff.product_code,
       model: 'similar:qna',
@@ -502,8 +505,8 @@ function findProblem(answer, catalog) {
   if (latin) return `영어 조각("${latin[0]}")이 섞였어요. 한국어로만 써 주세요`
   const foreign = answer.match(/[぀-ヿ㐀-鿿]+/) // 한자·일본 글자 (통通风되는)
   if (foreign) return `한자·외국 글자("${foreign[0]}")가 섞였어요. 한국어로만 써 주세요`
-  const bad = FORBIDDEN.filter((w) => answer.includes(w))
-  if (bad.length) return `효능 표현(${bad.join(', ')})은 쓰면 안 돼요`
+  const bad = findBanned(answer)
+  if (bad.length) return `금지어(${bad.join(', ')})는 쓰면 안 돼요`
   if (/(먹어도|드셔도|마셔도|섭취해도)\s*(돼|되요|됩니다|괜찮아요|괜찮습니다)/.test(answer)) return '먹어도 된다고 판단하면 안 돼요'
   // "먹지 않는 것이 안전해요"는 괜찮고, "주스로 쓰는 것이 안전해요"처럼 안전하다고 판단하는 말은 막는다
   if (/안전(합니다|해요|하다)/.test(answer.replace(/(않는|말고|않으시는|버리는)\s*(것이|게)\s*안전/g, ''))) return '안전하다고 판단하면 안 돼요. 확인할 신호만 알려 주세요'

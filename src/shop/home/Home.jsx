@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Quiz } from '../../Recommend.jsx'
 import { RatingBadge } from '../Reviews.jsx'
-import { thumbUrl, won } from '../shared.js'
+import { thumbUrl, unitPrice, won } from '../shared.js'
 import { FAQ, GROUP_PHOTOS, HERO, SEASON, STORY } from './content.js'
 
 // 첫 화면 (디자인 시안): 큰 제목 → 카테고리 → 이달의 상품 → 제철 달력 → 이야기 → 자주 묻는 질문
@@ -67,6 +67,7 @@ function ProductCard({ p, onOpen }) {
       <span className="pcard-seller">{p.seller_name.replace(/\[예시\]\s*/g, '')}</span>
       <strong className="pcard-name">{p.name}</strong>
       <span className="pcard-price">{won(p.price)} <small>/ {p.unit}</small></span>
+      {unitPrice(p.price, p.unit) && <span className="pcard-unit">{unitPrice(p.price, p.unit)}</span>}
       <span className="pcard-meta">
         {p.tags?.includes('season') && <span className="tag">제철</span>}
         {p.show_brix && p.brix && <span className="tag">당도 {p.brix}Brix</span>}

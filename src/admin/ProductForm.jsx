@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { thumbUrl } from '../shop/shared.js'
+import { thumbUrl, unitPrice } from '../shop/shared.js'
+import { AiDraft } from './AiDraft.jsx'
 import { adminApi } from './api.js'
 
 const EMPTY = {
   product_code: '', seller_code: '', item_code: '', name: '', price: '', unit: '', stock: '',
   weight_g: '', count_per_box: '', brix: '', brix_measured_at: '', harvest_date: '', summary: '', description: '',
-  external_url: '', b2b_available: false, tags: [],
+  external_url: '', b2b_available: false, tags: [], faq: [],
 }
 
 function toForm(product) {
@@ -45,6 +46,8 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
   const [gallery, setGallery] = useState([]) // 새로 올릴 상세 사진들
   const [photos, setPhotos] = useState(() => ({ main: product?.image_url ?? null, list: product?.images ?? [] }))
   const [saving, setSaving] = useState(false)
+  const [itemDraft, setItemDraft] = useState(null) // AI가 만든 품목(원물) 초안 — 품목 정보가 비어 있을 때만
+  const [fillItem, setFillItem] = useState(true)
 
   const item = options.items.find((i) => i.item_code === form.item_code)
   const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
@@ -52,6 +55,20 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
     ...prev,
     tags: prev.tags.includes(code) ? prev.tags.filter((t) => t !== code) : [...prev.tags, code],
   }))
+
+  // AI 초안을 받으면: 소개는 비어 있을 때만, 설명은 물어보고 바꾸고, 자주 묻는 질문은 채운다
+  function applyDraft(draft) {
+    const replace = !form.description || window.confirm('지금 적힌 상품 설명을 AI 초안으로 바꿀까요?')
+    setForm((prev) => ({
+      ...prev,
+      summary: prev.summary || draft.summary,
+      description: replace ? draft.description : prev.description,
+      faq: draft.faq?.length ? draft.faq : prev.faq,
+    }))
+    const it = draft.item
+    setItemDraft(it && (it.storage_method || it.opened_note || it.danger_signs?.length || it.recipes?.length) ? it : null)
+  }
+  const setFaq = (index, key) => (e) => setForm((prev) => ({ ...prev, faq: prev.faq.map((f, i) => (i === index ? { ...f, [key]: e.target.value } : f)) }))
 
   async function save(status) {
     setSaving(true)
@@ -70,6 +87,10 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
       }
       for (const file of gallery) {
         await api(`/products/${saved.product_code}/image?role=gallery`, { method: 'POST', headers: { 'Content-Type': file.type }, body: file })
+      }
+      if (itemDraft && fillItem) {
+        // 같은 원물 상품들이 함께 쓰는 품목 정보는 비어 있는 칸만 채운다 (이미 있는 내용은 덮어쓰지 않음)
+        await api(`/items/${form.item_code}/fill`, { method: 'POST', body: itemDraft })
       }
       onSaved(saved, SAVED[saved.status] ?? '저장했어요')
     } catch (e) {
@@ -115,6 +136,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
         <label>판매 단위*<input value={form.unit} onChange={set('unit')} placeholder="예: 5kg 1박스" /></label>
         <label>재고*<input value={form.stock} onChange={set('stock')} inputMode="numeric" placeholder="없으면 0" /></label>
       </div>
+      {unitPrice(form.price, form.unit) && <p className="muted">손님 화면에 {unitPrice(form.price, form.unit)} 로 함께 보여요 (가격을 바꾸면 가격 기준일도 오늘로)</p>}
       <div className="row">
         <label>1개 무게(g)<input value={form.weight_g} onChange={set('weight_g')} inputMode="numeric" /></label>
         <label>박스당 개수<input value={form.count_per_box} onChange={set('count_per_box')} inputMode="numeric" /></label>
@@ -128,10 +150,33 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
       {item && item.category !== '가공품' && (
         <label>수확일<input type="date" value={form.harvest_date} onChange={set('harvest_date')} /></label>
       )}
+      <AiDraft form={form} api={api} onDraft={applyDraft} />
       <label>한 줄 소개<input value={form.summary} onChange={set('summary')} maxLength={200} /></label>
       <label>상품 설명 <span className="muted">(선택) 빈 줄로 문단을 나눠요. 효능 표현은 쓰지 않아요</span>
         <textarea value={form.description} onChange={set('description')} rows={6} maxLength={3000} placeholder="재배 방법, 맛, 크기, 포장 방법 등" />
       </label>
+      <fieldset className="tags faq-edit">
+        <legend>자주 묻는 질문 (선택, 6개까지) — 상품 페이지에 보이고 상담 챗봇도 AI 없이 이 답을 써요</legend>
+        {form.faq.map((f, i) => (
+          <div key={i} className="row">
+            <label>질문<input value={f.q} onChange={setFaq(i, 'q')} maxLength={100} /></label>
+            <label>답<input value={f.a} onChange={setFaq(i, 'a')} maxLength={300} /></label>
+            <button type="button" className="link" onClick={() => setForm((prev) => ({ ...prev, faq: prev.faq.filter((_, j) => j !== i) }))}>빼기</button>
+          </div>
+        ))}
+        {form.faq.length < 6 && <button type="button" className="link" onClick={() => setForm((prev) => ({ ...prev, faq: [...prev.faq, { q: '', a: '' }] }))}>+ 질문 추가</button>}
+      </fieldset>
+      {itemDraft && (
+        <div className="preview">
+          <label className="check"><input type="checkbox" checked={fillItem} onChange={(e) => setFillItem(e.target.checked)} />
+            <strong>{item?.name} 품목 정보가 비어 있어서 AI 초안으로 같이 채우기</strong></label>
+          {itemDraft.storage_method && <p>보관: {itemDraft.storage_method}</p>}
+          {itemDraft.opened_note && <p>개봉 후: {itemDraft.opened_note}</p>}
+          {itemDraft.danger_signs?.length > 0 && <p>먹지 말아야 할 상태: {itemDraft.danger_signs.join(', ')}</p>}
+          {itemDraft.recipes?.length > 0 && <p>레시피: {itemDraft.recipes.map((r) => r.title).join(', ')}</p>}
+          <p className="muted">같은 원물의 다른 상품도 이 정보를 같이 써요. 비어 있는 칸만 채우고 이미 있는 내용은 바꾸지 않아요.</p>
+        </div>
+      )}
       <label>판매 링크 (스마트스토어·쿠팡, 없으면 비우기)<input value={form.external_url} onChange={set('external_url')} placeholder="https://" /></label>
       <label className="check"><input type="checkbox" checked={form.b2b_available} onChange={set('b2b_available')} />기업(B2B) 구매 문의 받기</label>
 

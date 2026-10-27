@@ -10,6 +10,7 @@ import { accountRouter } from './account.js'
 import { accessLogger, adminAccessLogRouter } from './accessLog.js'
 import { dashboardRouter } from './dashboard.js'
 import { adminRouter, UPLOAD_DIR } from './admin.js'
+import { bannedRouter, loadBanned } from './banned.js'
 import { cached, clearCache } from './cache.js'
 import { currentStaff, login, logout, requireAdmin } from './auth.js'
 import { listMails } from './mailer.js'
@@ -223,6 +224,7 @@ app.use('/api/admin/orders', adminOrderRouter)
 app.use('/api/admin/access-logs', adminAccessLogRouter)
 app.use('/api/admin/reviews', adminReviewRouter)
 app.use('/api/admin/dashboard', dashboardRouter)
+app.use('/api/admin/banned-words', bannedRouter)
 app.get('/api/admin/notifications', requireAdmin, async (req, res) => res.json(await listMails()))
 app.use('/api/admin', adminRouter)
 app.use('/api/seller/orders', sellerOrderRouter)
@@ -257,6 +259,7 @@ app.use((error, req, res, _next) => {
 })
 
 await initDb()
+await loadBanned()
 startOrderSweeper()
 const server = app.listen(PORT, '127.0.0.1', () => {
   console.log(`[server] http://127.0.0.1:${server.address().port}${SERVE ? ' (배포 모드: 화면 + API)' : ''}`)
