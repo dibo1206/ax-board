@@ -177,7 +177,7 @@
 /* 이야기 */
 .shop .story-section { background: #344a3b; color: #f4f1e8; } /* 이야기 섹션만 기존 짙은 색 유지 */
 .shop .story { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: round(clamp(32px, 6vw, 80px), 1px); }
-.shop .story h2 { color: #f6f5f2; margin-bottom: 32px; }
+.shop .story h2 { color: #f6f5f2; margin-bottom: 32px; font-size: round(clamp(26px, 2.8vw, 38px), 1px); font-weight: 500; }
 /* 왼쪽 열 사진이 남는 높이를 채워, 아래 끝이 오른쪽 사진과 같은 줄에 오게 한다 */
 .shop .story > div:first-child { display: flex; flex-direction: column; }
 .shop .story-photo:not(.tall) { flex: 1 1 auto; height: 0; min-height: 300px; }
