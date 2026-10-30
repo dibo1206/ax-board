@@ -163,7 +163,14 @@ function MyOrders() {
     return (
       <div className="box">
         <button type="button" className="link" onClick={() => setOpen(null)}>← 주문 내역</button>
-        <OrderDetail order={open} />
+        <OrderDetail order={open} onConfirm={async () => {
+          if (!window.confirm('상품을 잘 받으셨나요? 구매를 확정해요.')) return
+          try {
+            setOpen(await post(`/account/orders/${open.order_no}/purchase-confirm`, {}))
+          } catch (e) {
+            setError(e.message)
+          }
+        }} />
         {open.status === 'paid' && <button type="button" className="button ghost" onClick={cancel}>주문 취소하기</button>}
       </div>
     )

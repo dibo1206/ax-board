@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Quiz } from '../../Recommend.jsx'
 import { RatingBadge } from '../Reviews.jsx'
-import { thumbUrl, won } from '../shared.js'
+import { thumbUrl, unitPrice, won } from '../shared.js'
 import { FAQ, GROUP_PHOTOS, HERO, SEASON, STORY } from './content.js'
 
 // 첫 화면 (디자인 시안): 큰 제목 → 카테고리 → 이달의 상품 → 제철 달력 → 이야기 → 자주 묻는 질문
@@ -19,16 +19,57 @@ export function Photo({ photo, className = '', eager = false }) {
   return <img className={className} src={photo.src} alt={photo.alt ?? ''} loading={eager ? 'eager' : 'lazy'} fetchPriority={eager ? 'high' : undefined} />
 }
 
+// 배너 사진이 5초마다 부드럽게 넘어간다. 마우스를 올리거나 키보드로 조작 중이면 멈추고, [정지] 버튼으로 끌 수 있다.
+// 움직임을 줄이는 설정(prefers-reduced-motion)이면 처음부터 멈춰 있다. 글(제목·버튼)은 사진이 바뀌어도 그대로다
 export function Hero({ onRecommend }) {
+  const slides = HERO.slides ?? []
+  const many = slides.length > 1
+  const [index, setIndex] = useState(0)
+  const [stopped, setStopped] = useState(() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false)
+  const [hold, setHold] = useState(false) // 마우스를 올렸거나 포커스가 있는 동안
+  const go = (i) => setIndex((i + slides.length) % slides.length)
+
+  useEffect(() => {
+    if (!many || stopped || hold) return undefined
+    const timer = setInterval(() => setIndex((i) => (i + 1) % slides.length), HERO.interval ?? 5000)
+    return () => clearInterval(timer)
+  }, [many, stopped, hold, slides.length])
+
   return (
-    <section className="home-hero">
+    <section className="home-hero" aria-roledescription={many ? 'carousel' : undefined} aria-label="이달의 추천"
+      onMouseEnter={() => setHold(true)} onMouseLeave={() => setHold(false)} onFocus={() => setHold(true)} onBlur={() => setHold(false)}>
+      {slides.length ? slides.map((s, i) => (
+        <div key={s.src} className={`hero-slide${i === index ? ' on' : ''}${s.cover ? ' is-cover' : ''}`} aria-hidden={i === index ? undefined : true}>
+          {/* 사진 높이를 배너에 딱 맞추면 가로가 남는다: 남는 왼쪽은 같은 사진을 흐리게 깔아 이어 붙인다 */}
+          <img className="hero-backdrop" src={s.src} alt="" aria-hidden="true" />
+          <img className="hero-photo" src={s.src} alt={i === index ? s.alt : ''} loading={i === 0 ? 'eager' : 'lazy'} fetchPriority={i === 0 ? 'high' : undefined} style={{ objectPosition: s.position }} />
+        </div>
+      )) : <Photo photo={HERO.photo} className="hero-photo" eager />}
+      <div className={`hero-scrim${slides[index]?.scrim ? ' on' : ''}`} aria-hidden="true" />
       <div className="hero-text">
         <p className="eyebrow">{HERO.eyebrow}</p>
         <h1 className="display">{HERO.title.map((line) => <span key={line}>{line}</span>)}</h1>
         <p className="lead">{HERO.lead}</p>
         <button type="button" className="btn-dark" onClick={onRecommend}>{HERO.cta} <span aria-hidden="true">→</span></button>
       </div>
-      <Photo photo={HERO.photo} className="hero-photo" eager />
+      {many && (
+        <div className="hero-ctrl-wrap">
+          <div className="hero-ctrl" role="group" aria-label="배너 조작">
+            <span className="hero-count" aria-live={stopped ? 'polite' : 'off'}>{index + 1} / {slides.length}</span>
+            <button type="button" aria-label="이전 배너" onClick={() => go(index - 1)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6" /></svg>
+            </button>
+            <button type="button" aria-label={stopped ? '자동 넘김 시작' : '자동 넘김 정지'} aria-pressed={stopped} onClick={() => setStopped((v) => !v)}>
+              {stopped
+                ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" className="fill" /></svg>
+                : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12" /></svg>}
+            </button>
+            <button type="button" aria-label="다음 배너" onClick={() => go(index + 1)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6" /></svg>
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
@@ -37,16 +78,13 @@ export function CategoryRows({ groups, onPick }) {
   if (!groups?.length) return null
   return (
     <section className="wrap section cat-section" aria-labelledby="cat-title">
-      <h2 id="cat-title" className="rule-label">카테고리</h2>
+      <h2 id="cat-title" className="sr-only">카테고리</h2>
       <ul className="cat-rows">
-        {groups.map((g, i) => (
+        {groups.map((g) => (
           <li key={g.key}>
             <button type="button" onClick={() => onPick(g.key)}>
-              <span className="cat-no">{String(i + 1).padStart(2, '0')}</span>
-              <span className="cat-name">{g.name}</span>
-              <span className="cat-desc">{g.desc}</span>
-              <span className="cat-count">{g.count}개 상품</span>
               <Photo photo={GROUP_PHOTOS[g.key]} className="cat-photo" />
+              <span className="cat-name">{g.name}</span>
             </button>
           </li>
         ))}
@@ -62,14 +100,17 @@ function ProductCard({ p, onOpen }) {
         {p.image_url
           ? <img src={thumbUrl(p.image_url)} alt="" loading="lazy" width="400" height="400" />
           : <span className="photo-need"><span>사진 준비 중</span></span>}
+        <span className="pcard-tags">
+          {p.show_brix && p.brix && <span className={`ptag ${p.brix >= 14 ? 'brix-high' : p.brix >= 12 ? 'brix-mid' : ''}`}>당도 {p.brix}</span>}
+          {p.tags?.includes('season') && <span className="ptag ptag-season">제철</span>}
+        </span>
         {p.sold_out && <span className="pcard-flag">품절</span>}
       </span>
       <span className="pcard-seller">{p.seller_name.replace(/\[예시\]\s*/g, '')}</span>
       <strong className="pcard-name">{p.name}</strong>
       <span className="pcard-price">{won(p.price)} <small>/ {p.unit}</small></span>
+      {unitPrice(p.price, p.unit) && <span className="pcard-unit">{unitPrice(p.price, p.unit)}</span>}
       <span className="pcard-meta">
-        {p.tags?.includes('season') && <span className="tag">제철</span>}
-        {p.show_brix && p.brix && <span className="tag">당도 {p.brix}Brix</span>}
         <RatingBadge rating={p.rating} count={p.review_count} />
       </span>
     </a>
@@ -187,6 +228,15 @@ export function Story() {
   )
 }
 
+// 질문 분류 태그: 이름과 작은 아이콘
+const FAQ_TAGS = {
+  order: ['주문·결제', 'M5 4h2l1.6 9h9L19 7H7.2M9 18a1 1 0 1 0 0 .01M16 18a1 1 0 1 0 0 .01'],
+  delivery: ['배송', 'M3 7h11v9H3zM14 10h4l3 3v3h-7zM7 19a1.6 1.6 0 1 0 0 .01M17 19a1.6 1.6 0 1 0 0 .01'],
+  keep: ['보관', 'M12 3v18M4.5 7.5l15 9M19.5 7.5l-15 9'],
+  pick: ['추천', 'M12 3l2.2 5.6L20 9.3l-4.4 3.8 1.4 5.9L12 16l-5 3 1.4-5.9L4 9.3l5.8-.7z'],
+  bulk: ['대량 구매', 'M3 8l9-4 9 4-9 4zM3 8v8l9 4 9-4V8M12 12v8'],
+}
+
 export function Faq({ policy, onRecommend }) {
   const fill = (text) => text
     .replace('{출고}', policy?.shipping.leadTime ?? '결제 후 1~3일 안에 출고해요')
@@ -197,12 +247,30 @@ export function Faq({ policy, onRecommend }) {
       <div>
         <h2 id="faq-title" className="display-sm">자주 묻는 질문</h2>
         <p className="lead">{FAQ.lead}</p>
+        {policy?.shop?.phone && (
+          <div className="faq-help">
+            <p className="faq-help-title">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h3.5l1.7 4.3-2.2 1.4a11 11 0 0 0 5.3 5.3l1.4-2.2L19 14.5V18a2 2 0 0 1-2 2A13 13 0 0 1 3 6a2 2 0 0 1 2-2z" /></svg>
+              전화 문의
+            </p>
+            <a href={`tel:${policy.shop.phone.replace(/\D/g, '')}`} className="faq-help-phone">{policy.shop.phone}</a>
+            {policy.shop.hours && <p className="faq-help-hours">{policy.shop.hours}</p>}
+          </div>
+        )}
       </div>
       <div>
         <div className="faq-list">
           {FAQ.items.map((item) => (
             <details key={item.q}>
-              <summary>{item.q}</summary>
+              <summary>
+                {FAQ_TAGS[item.tag] && (
+                  <span className="faq-tag">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d={FAQ_TAGS[item.tag][1]} /></svg>
+                    {FAQ_TAGS[item.tag][0]}
+                  </span>
+                )}
+                <span className="faq-q">{item.q}</span>
+              </summary>
               <p>{fill(item.a)}</p>
               {item.action === 'recommend' && <button type="button" className="btn-line" onClick={onRecommend}>추천받기</button>}
             </details>

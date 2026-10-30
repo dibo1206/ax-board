@@ -2,12 +2,14 @@
 import { netFetch } from '../net.js'
 function makeApi(base) {
   return async function call(path, options = {}) {
-    const isJson = options.body !== undefined && !(options.body instanceof Blob)
+    // timeoutMs: 기다리는 시간 (AI 초안처럼 오래 걸리는 요청만 늘린다, 기본 20초)
+    const { timeoutMs, ...rest } = options
+    const isJson = rest.body !== undefined && !(rest.body instanceof Blob)
     const response = await netFetch(`${base}${path}`, {
-      ...options,
-      headers: isJson ? { 'Content-Type': 'application/json' } : options.headers,
-      body: isJson ? JSON.stringify(options.body) : options.body,
-    })
+      ...rest,
+      headers: isJson ? { 'Content-Type': 'application/json' } : rest.headers,
+      body: isJson ? JSON.stringify(rest.body) : rest.body,
+    }, timeoutMs)
     if (response.status === 204) return null
     const data = await response.json().catch(() => ({}))
     if (!response.ok) {

@@ -4,7 +4,8 @@ import { getPolicy, ORDER_STATUS, post, readCart, takePending, when, won, writeC
 
 // 주문 결과(성공·실패) · 비회원 주문 조회 · 약관 페이지
 // phone: 비회원 후기 쓰기에 쓰는 주문자 휴대폰 (회원은 로그인으로 확인)
-export function OrderDetail({ order, phone = '' }) {
+// onConfirm: 배송 완료된 주문의 [구매 확정] (비회원 조회·마이페이지가 각자 주소로 넘겨준다)
+export function OrderDetail({ order, phone = '', onConfirm = null }) {
   const [writing, setWriting] = useState(null)
   const [written, setWritten] = useState([])
   const canReview = (i) => order.status === 'delivered' && !i.reviewed && !written.includes(i.product_code)
@@ -18,6 +19,11 @@ export function OrderDetail({ order, phone = '' }) {
         <dt>받는 분</dt><dd>{order.receiver_name} · ({order.zipcode}) {order.address1} {order.address2 ?? ''}</dd>
         {order.tracking_no && <><dt>송장</dt><dd>{order.courier} {order.tracking_no} {order.tracking_url && <a href={order.tracking_url} target="_blank" rel="noreferrer">배송 조회</a>}</dd></>}
         {order.cancel_reason && <><dt>취소</dt><dd>{when(order.cancelled_at)} · {order.cancel_reason}</dd></>}
+        {order.status === 'delivered' && (
+          <><dt>구매 확정</dt><dd>{order.confirmed_at
+            ? `${when(order.confirmed_at)} 확정했어요`
+            : <>{onConfirm && <button type="button" className="link" onClick={onConfirm}>지금 구매 확정하기</button>} <span className="muted">배송 완료 7일 뒤 자동으로 확정돼요</span></>}</dd></>
+        )}
       </dl>
       <ul className="order-items">
         {order.items.map((i) => (
@@ -157,6 +163,15 @@ export function OrderLookup() {
     }
   }
 
+  async function confirmPurchase() {
+    if (!window.confirm('상품을 잘 받으셨나요? 구매를 확정해요.')) return
+    try {
+      setOrder(await post('/orders/lookup/purchase-confirm', { orderNo: order.order_no, phone }))
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
   async function cancel() {
     const reason = window.prompt('취소 이유를 적어 주세요 (선택)') ?? null
     if (reason === null) return
@@ -184,7 +199,7 @@ export function OrderLookup() {
       {error && <p className="error">{error}</p>}
       {order && (
         <div className="box">
-          <OrderDetail order={order} phone={phone} />
+          <OrderDetail order={order} phone={phone} onConfirm={confirmPurchase} />
           {order.status === 'paid' && (
             <div className="actions">
               <button type="button" className="button ghost" onClick={cancel} disabled={busy}>주문 취소하기</button>

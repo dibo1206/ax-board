@@ -7,7 +7,7 @@ import { pool } from './db.js'
 import { maskName } from './inquiry.js'
 import { createLimiter } from './limit.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
-import { FORBIDDEN } from './validate.js'
+import { bannedMessage, findBanned } from './banned.js'
 
 const text = (v) => (typeof v === 'string' ? v.trim() : '')
 const PAGE = 10
@@ -38,8 +38,10 @@ reviewRouter.post('/reviews', async (req, res) => {
   const errors = []
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) errors.push('별점을 1~5개 골라 주세요.')
   if (content.length < 10 || content.length > 1000) errors.push('후기는 10~1000자로 적어 주세요.')
-  const bad = FORBIDDEN.filter((w) => content.includes(w))
-  if (bad.length) errors.push(`효능·건강 효과 표현(${bad.join(', ')})은 후기에 쓸 수 없어요. 맛·신선도·포장처럼 직접 느낀 점을 적어 주세요.`)
+  const effect = findBanned(content, ['효능'])
+  if (effect.length) errors.push(`효능·건강 효과 표현(${effect.join(', ')})은 후기에 쓸 수 없어요. 맛·신선도·포장처럼 직접 느낀 점을 적어 주세요.`)
+  const abuse = findBanned(content, ['욕설', '광고', '기타'])
+  if (abuse.length) errors.push(`욕설·광고 같은 표현(${abuse.join(', ')})은 후기에 쓸 수 없어요.`)
   const sensitive = findSensitive(content)
   if (sensitive) errors.push(SENSITIVE_MESSAGE(sensitive))
   if (errors.length) return res.status(400).json({ error: errors.join(' '), errors })
@@ -81,8 +83,8 @@ adminReviewRouter.patch('/:id', async (req, res) => {
   const reply = text(req.body.reply)
   if (hasReply) {
     if (reply.length < 2 || reply.length > 1000) return res.status(400).json({ error: '답글을 2~1000자로 적어 주세요.' })
-    const bad = FORBIDDEN.filter((w) => reply.includes(w))
-    if (bad.length) return res.status(400).json({ error: `효능 표현은 쓰지 않아요: ${bad.join(', ')}` })
+    const bad = findBanned(reply)
+    if (bad.length) return res.status(400).json({ error: bannedMessage(bad) })
   }
   const hidden = typeof req.body.hidden === 'boolean' ? req.body.hidden : null
   if (!hasReply && hidden === null) return res.status(400).json({ error: '바꿀 내용이 없어요.' })

@@ -6,7 +6,9 @@ const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(
 const text = (v) => (typeof v === 'string' ? v.trim() : v == null ? '' : String(v).trim())
 
 // 통과하면 { product }, 아니면 { errors: [사람이 읽을 문장] }
-export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew }) {
+// findBanned: 서버는 금지어 사전(banned.js), 데이터 불러오기 스크립트는 기본 목록
+const defaultFindBanned = (value) => FORBIDDEN.filter((w) => value.includes(w))
+export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew, findBanned = defaultFindBanned }) {
   const errors = []
   const p = {
     product_code: text(input.product_code),
@@ -28,6 +30,8 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
     tags: Array.isArray(input.tags) ? input.tags.map(text).filter(Boolean) : [],
     status: ['draft', 'pending'].includes(input.status) ? input.status : 'active',
     review_note: text(input.review_note) || null,
+    // 자주 묻는 질문 [{q, a}] (AI 초안을 판매자가 고쳐서 저장)
+    faq: (Array.isArray(input.faq) ? input.faq : []).slice(0, 7).map((f) => ({ q: text(f?.q), a: text(f?.a) })).filter((f) => f.q || f.a),
   }
 
   if (isNew && !isCode(p.product_code)) errors.push('상품 코드는 영문 소문자·숫자·밑줄만 쓸 수 있어요.')
@@ -54,8 +58,10 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
   if (p.external_url && !/^https?:\/\//.test(p.external_url)) errors.push('판매 링크는 http로 시작해야 해요.')
   const unknown = p.tags.filter((t) => !tagCodes.has(t))
   if (unknown.length) errors.push(`없는 태그예요: ${unknown.join(', ')}`)
-  const all = `${p.name} ${p.summary} ${p.description}`
-  const bad = FORBIDDEN.filter((w) => all.includes(w))
+  if (p.faq.length > 6) errors.push('자주 묻는 질문은 6개까지 적어 주세요.')
+  if (p.faq.some((f) => !f.q || !f.a || f.q.length > 100 || f.a.length > 300)) errors.push('자주 묻는 질문은 질문(100자)과 답(300자)을 모두 적어 주세요.')
+  const all = `${p.name} ${p.summary} ${p.description} ${p.faq.map((f) => `${f.q} ${f.a}`).join(' ')}`
+  const bad = findBanned(all)
   if (bad.length) errors.push(`효능 표현은 쓰지 않아요: ${bad.join(', ')}`)
   if (p.review_note && p.review_note.length > 300) errors.push('반려 사유는 300자 안으로 적어 주세요.')
 

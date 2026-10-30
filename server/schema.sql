@@ -280,3 +280,31 @@ CREATE INDEX IF NOT EXISTS questions_product_idx ON questions (product_code, cre
 -- 상품 상세: 긴 설명(글만, HTML 아님)과 사진 여러 장(최대 8장). 대표 사진은 image_url
 ALTER TABLE products ADD COLUMN IF NOT EXISTS description TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS images TEXT[] NOT NULL DEFAULT '{}';
+
+-- 상품 상세: 자주 묻는 질문(AI 초안 → 판매자 검토 후 저장), 가격 기준일(가격을 바꾼 날)
+ALTER TABLE products ADD COLUMN IF NOT EXISTS faq JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS price_updated_at TIMESTAMPTZ;
+UPDATE products SET price_updated_at = COALESCE(updated_at, created_at, now()) WHERE price_updated_at IS NULL;
+ALTER TABLE products ALTER COLUMN price_updated_at SET DEFAULT now();
+
+-- 구매 확정: 배송 완료 7일 뒤 자동 (손님이 먼저 눌러도 됨). 판매자 정산 기준
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS orders_confirm_idx ON orders (status, confirmed_at);
+
+-- 금지어 사전 (관리자 화면 [금지어]에서 고침). 기본 단어는 표가 비어 있을 때 한 번만 넣는다 (지운 단어가 다시 생기지 않게)
+CREATE TABLE IF NOT EXISTS banned_words (
+  word TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('효능', '욕설', '광고', '기타')),
+  note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO banned_words (word, kind)
+SELECT w, k FROM (VALUES
+  ('면역력', '효능'), ('다이어트', '효능'), ('치료', '효능'), ('예방', '효능'), ('해독', '효능'), ('항암', '효능'),
+  ('혈압', '효능'), ('혈당', '효능'), ('기관지', '효능'), ('피로회복', '효능'), ('숙취해소', '효능'), ('변비', '효능'),
+  ('씨발', '욕설'), ('시발', '욕설'), ('병신', '욕설'), ('개새끼', '욕설'), ('지랄', '욕설'),
+  ('오픈채팅', '광고'), ('텔레그램', '광고'), ('바카라', '광고'), ('카지노', '광고'), ('수익보장', '광고'), ('대출문의', '광고')
+) AS v(w, k)
+WHERE NOT EXISTS (SELECT 1 FROM banned_words);
+

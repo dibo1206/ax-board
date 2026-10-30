@@ -211,3 +211,12 @@ a.card { text-decoration: none; height: 100%; box-sizing: border-box; }
 .chart .hit:focus { outline: 2px solid var(--accent); }
 .chart-tip { position: absolute; top: 0; transform: translateX(-50%); padding: 6px 10px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; font-size: 0.85rem; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 8px rgb(0 0 0 / 0.12); }
 .nowrap { white-space: nowrap; }
+
+/* AI 초안 · 자주 묻는 질문 · 단위 가격 */
+.ai-draft { display: flex; flex-direction: column; gap: 8px; border-style: solid; border-color: var(--accent); }
+.faq-edit .row { align-items: end; }
+.unit-price { margin: -4px 0 8px; font-size: 0.85rem; }
+.para-title { margin: 16px 0 4px; font-size: 1.02rem; }
+.faq-box details { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.faq-box summary { cursor: pointer; font-weight: 600; }
+.faq-box details p { margin: 6px 0 0; color: var(--muted); }

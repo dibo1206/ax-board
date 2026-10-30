@@ -4,7 +4,7 @@ import { Chat } from './Chat.jsx'
 import { B2bForm, QuestionForm } from './Inquiry.jsx'
 import { Related } from './Recommend.jsx'
 import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
-import { addToCart, getPolicy, thumbUrl } from './shop/shared.js'
+import { addToCart, getPolicy, thumbUrl, unitPrice } from './shop/shared.js'
 import { CategoryRows, Faq, Hero, ProductSection, QuizDialog, SeasonCalendar, Story } from './shop/home/Home.jsx'
 import { ShopLayout } from './shop/ShopLayout.jsx'
 import { netFetch } from './net.js'
@@ -63,7 +63,13 @@ function Description({ text }) {
   return (
     <section className="box">
       <h3>상품 설명</h3>
-      {text.split(/\n{2,}/).map((para, i) => <p key={i} className="para">{para}</p>)}
+      {/* "■ 제목" 줄은 섹션 제목으로 (AI 초안의 상세페이지 패턴) */}
+      {text.split(/\n{2,}/).map((para, i) => {
+        const [first, ...rest] = para.split('\n')
+        return /^■\s/.test(first)
+          ? <div key={i}><h4 className="para-title">{first.replace(/^■\s*/, '')}</h4>{rest.length > 0 && <p className="para">{rest.join('\n')}</p>}</div>
+          : <p key={i} className="para">{para}</p>
+      })}
     </section>
   )
 }
@@ -138,6 +144,10 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
       <Gallery product={product} />
       <h2>{product.name}</h2>
       <p className="price">{won(product.price)} <span className="muted">/ {product.unit}</span></p>
+      <p className="unit-price muted">
+        {unitPrice(product.price, product.unit) && <>{unitPrice(product.price, product.unit)} · </>}
+        {product.price_updated_at && <>가격 기준 {product.price_updated_at.slice(0, 10)}</>}
+      </p>
       <RatingBadge rating={product.rating} count={product.review_count} />
       {product.sold_out && <p className="badge soldout">품절</p>}
 
@@ -153,6 +163,12 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
       <BuyBox product={product} onAsk={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })} />
 
       <Description text={product.description} />
+      {product.faq?.length > 0 && (
+        <section className="box faq-box">
+          <h3>자주 묻는 질문</h3>
+          {product.faq.map((f) => <details key={f.q}><summary>{f.q}</summary><p>{f.a}</p></details>)}
+        </section>
+      )}
       <section className="box">
         <h3>보관·섭취 안내</h3>
         <p>{item.storage_method}</p>

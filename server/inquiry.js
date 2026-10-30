@@ -6,7 +6,7 @@ import { pool } from './db.js'
 import { createLimiter } from './limit.js'
 import { adminEmail, publicUrl, queueMail } from './mailer.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
-import { FORBIDDEN } from './validate.js'
+import { bannedMessage, findBanned } from './banned.js'
 
 const text = (v) => (typeof v === 'string' ? v.trim() : '')
 const isPhone = (v) => /^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(v)
@@ -33,6 +33,8 @@ publicInquiryRouter.post('/products/:code/questions', async (req, res) => {
   if (question.length < 5 || question.length > 500) errors.push('질문은 5~500자로 적어 주세요.')
   if (contact && !isPhone(contact) && !isEmail(contact)) errors.push('연락처는 전화번호나 이메일 형식으로 적어 주세요.')
   if (contact && !req.body.privacyAgreed) errors.push('연락처를 남기려면 개인정보 수집에 동의해 주세요.')
+  const abuse = findBanned(`${author} ${question}`, ['욕설', '광고'])
+  if (abuse.length) errors.push(`쓸 수 없는 표현이 있어요: ${abuse.join(', ')}`)
   const sensitive = findSensitive(author, question)
   if (sensitive) errors.push(SENSITIVE_MESSAGE(sensitive))
   if (errors.length) return res.status(400).json({ error: errors.join(' '), errors })
@@ -118,8 +120,8 @@ adminInquiryRouter.patch('/questions/:id', async (req, res) => {
   const answer = text(req.body.answer)
   if (hasAnswer) {
     if (answer.length < 2 || answer.length > 1000) return res.status(400).json({ error: '답변을 2~1000자로 적어 주세요.' })
-    const bad = FORBIDDEN.filter((w) => answer.includes(w))
-    if (bad.length) return res.status(400).json({ error: `효능 표현은 쓰지 않아요: ${bad.join(', ')}` })
+    const bad = findBanned(answer)
+    if (bad.length) return res.status(400).json({ error: bannedMessage(bad) })
   }
   const hidden = typeof req.body.hidden === 'boolean' ? req.body.hidden : null
   if (!hasAnswer && hidden === null) return res.status(400).json({ error: '바꿀 내용이 없어요.' })

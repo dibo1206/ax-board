@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from './api.js'
+import { BannedWords } from './BannedWords.jsx'
 import { ChatLogs } from './ChatLogs.jsx'
 import { Inbox } from './Inbox.jsx'
 import { AccessLogs } from './AccessLogs.jsx'
@@ -123,7 +124,8 @@ function Admin() {
   }
 
   if (me === undefined) return <p className="muted">확인 중…</p>
-  if (!me) return <Login onLogin={setMe} />
+  // 다시 로그인하면 전 계정(예: 판매자)으로 났던 오류 문구는 지운다
+  if (!me) return <Login onLogin={(next) => { setError(''); setMe(next) }} />
   if (me.role === 'seller') {
     return (
       <div className="box">
@@ -152,6 +154,7 @@ function Admin() {
           <button type="button" className={tab === 'orders' ? 'on' : ''} onClick={() => { setTab('orders'); setEditing(null); setMessage('') }}>주문{newOrders > 0 && ` (${newOrders})`}</button>
           <button type="button" className={tab === 'reviews' ? 'on' : ''} onClick={() => { setTab('reviews'); setEditing(null); setMessage('') }}>후기</button>
           <button type="button" className={tab === 'chat' ? 'on' : ''} onClick={() => { setTab('chat'); setEditing(null); setMessage('') }}>상담 기록</button>
+          <button type="button" className={tab === 'banned' ? 'on' : ''} onClick={() => { setTab('banned'); setEditing(null); setMessage('') }}>금지어</button>
           <button type="button" className={tab === 'access' ? 'on' : ''} onClick={() => { setTab('access'); setEditing(null); setMessage('') }}>접속 기록</button>
           <button type="button" className={tab === 'mail' ? 'on' : ''} onClick={() => { setTab('mail'); setEditing(null); setMessage('') }}>알림 기록</button>
         </nav>
@@ -173,6 +176,8 @@ function Admin() {
         <AdminReviews />
       ) : tab === 'mail' ? (
         <Notifications />
+      ) : tab === 'banned' ? (
+        <BannedWords />
       ) : tab === 'access' ? (
         <AccessLogs />
       ) : tab === 'chat' ? (

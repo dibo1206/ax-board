@@ -108,6 +108,22 @@ function MyQuestions({ onMessage, onError }) {
 }
 
 // 내 농가 상품이 들어 있는 주문. 내 상품만 있는 주문은 직접 배송 처리(송장 입력)할 수 있다
+// 정산 요약: 배송 완료 7일 뒤(또는 손님이 먼저) 구매 확정된 매출이 정산 대상
+function Settlement() {
+  const [s, setS] = useState(null)
+  useEffect(() => {
+    sellerApi('/orders/settlement').then(setS).catch(() => setS(null))
+  }, [])
+  if (!s) return null
+  return (
+    <div className="box">
+      <h3>정산 <span className="muted">구매 확정된 내 상품 매출 기준{s.has_test ? ' · 테스트 결제 포함' : ''}</span></h3>
+      <p>이번 달 정산 예정 <b>{won(s.confirmed_amount)}</b> ({s.confirmed_orders}건) · 구매 확정 기다리는 중 {won(s.waiting_amount)} ({s.waiting_orders}건)</p>
+      <p className="muted">배송 완료 {s.confirmDays}일 뒤 자동으로 구매 확정돼요. 손님이 먼저 확정할 수도 있어요.</p>
+    </div>
+  )
+}
+
 function MyOrders({ onMessage, onError }) {
   const [orders, setOrders] = useState(null)
   const [tracking, setTracking] = useState({})
@@ -130,12 +146,14 @@ function MyOrders({ onMessage, onError }) {
   const setT = (no, key) => (e) => setTracking((prev) => ({ ...prev, [no]: { ...prev[no], [key]: e.target.value } }))
 
   if (!orders) return <p className="muted">불러오는 중…</p>
-  if (!orders.length) return <p className="muted">아직 내 상품 주문이 없어요.</p>
+  if (!orders.length) return <><Settlement /><p className="muted">아직 내 상품 주문이 없어요.</p></>
   return (
+    <>
+    <Settlement />
     <ul className="inbox">
       {orders.map((o) => (
         <li key={o.order_no} className={`box${o.status === 'cancelled' ? ' dim' : ''}`}>
-          <p><b>{o.order_no}</b> · {ORDER_STATUS[o.status]} · {when(o.created_at)}{o.is_test && ' · 테스트'}</p>
+          <p><b>{o.order_no}</b> · {ORDER_STATUS[o.status]}{o.confirmed_at && ' · 구매 확정'} · {when(o.created_at)}{o.is_test && ' · 테스트'}</p>
           <ul>{o.items.map((i) => <li key={i.name}>{i.name} ({i.unit}) × {i.quantity}</li>)}</ul>
           {o.receiver && <p className="muted">받는 분 {o.receiver.name} · {o.receiver.phone} · ({o.receiver.zipcode}) {o.receiver.address1} {o.receiver.address2 ?? ''}{o.receiver.memo && ` · 메모: ${o.receiver.memo}`}</p>}
           {o.tracking_no && <p className="muted">송장 {o.courier} {o.tracking_no}</p>}
@@ -152,6 +170,7 @@ function MyOrders({ onMessage, onError }) {
         </li>
       ))}
     </ul>
+    </>
   )
 }
 
