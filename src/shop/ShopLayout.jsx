@@ -22,7 +22,7 @@ function openQuiz(e) {
 }
 
 export function Logo() {
-  return <a href="/" className="logo" aria-label={`${BRAND.strong} ${BRAND.light} 처음으로`}><b>{BRAND.strong}</b> {BRAND.light}</a>
+  return <a href="/" className="logo" aria-label={`${BRAND.strong} ${BRAND.light} 처음으로`}><img src="/home/logo.webp" alt={BRAND.company} width="320" height="56" /></a>
 }
 
 export function ShopLayout({ children }) {
@@ -60,9 +60,14 @@ export function ShopLayout({ children }) {
             <a href="/#recommend" onClick={openQuiz}>추천받기</a>
           </nav>
           <nav className="site-tools" aria-label="내 메뉴">
-            <a href="/#products" className="tool-search" onClick={(e) => goSection(e, 'products')}>검색</a>
+            <a href="/#products" className="icon-link tool-search" aria-label="검색" onClick={(e) => goSection(e, 'products')}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+            </a>
             {account ? <a href="/account">{account.name}님</a> : <a href="/account/login">로그인</a>}
-            <a href="/cart" className="cart-link">장바구니 <span className="count-box" aria-label={`${count}개`}>{count}</span></a>
+            <a href="/cart" className="icon-link cart-link" aria-label={`장바구니 ${count}개`}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2.5l2.2 10.5h10.1L20 7H6.3" /><circle cx="9" cy="19" r="1.3" /><circle cx="17" cy="19" r="1.3" /></svg>
+              {count > 0 && <span className="count-box" aria-hidden="true">{count}</span>}
+            </a>
           </nav>
         </div>
       </header>
