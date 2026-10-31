@@ -1,5 +1,5 @@
 // Codespaces 에서 편집기 창이 붙을 때마다 (postAttachCommand): 쇼핑몰이 켜질 때까지 기다렸다가 주소와 여는 방법을 보여 준다
-// 쇼핑몰은 Codespace 가 켜질 때(postStartCommand) 이미 뒤에서 켜 둔다 → 터미널을 닫아도 꺼지지 않는다
+// 쇼핑몰은 컨테이너 지킴이(.devcontainer/docker-compose.yml 의 app command)가 뒤에서 켜 둔다 → 터미널을 닫아도 꺼지지 않는다
 // 브라우저 새 창이 팝업 차단으로 안 열려도 [포트] 탭에서 열 수 있게 안내한다. 1분 넘게 안 켜지면 여기서 직접 켠다
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'

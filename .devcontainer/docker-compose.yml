@@ -6,7 +6,17 @@ services:
     image: mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm
     volumes:
       - ../..:/workspaces:cached
-    command: sleep infinity
+    # 쇼핑몰 지킴이: 처음 설치(.env·라이브러리)가 끝나면 쇼핑몰을 켜고, 꺼지면 5초 뒤 다시 켠다
+    # → 편집기 창이 붙었는지, 터미널을 닫았는지와 상관없이 Codespace 가 켜져 있는 동안 쇼핑몰도 켜져 있다 (기록 /tmp/farm-mall-demo.log)
+    command: >-
+      bash -c 'while true; do
+        for d in /workspaces/*/; do
+          if [ -f "$$d.env" ] && [ -f "$$d/node_modules/.package-lock.json" ] && [ -f "$$d/scripts/demo.js" ]; then
+            cd "$$d" && su node -c "npm run demo" >> /tmp/farm-mall-demo.log 2>&1; break;
+          fi;
+        done;
+        sleep 5;
+      done'
     network_mode: service:db
 
   db:
