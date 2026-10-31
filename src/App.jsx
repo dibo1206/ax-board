@@ -172,12 +172,23 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
       <section className="box">
         <h3>보관·섭취 안내</h3>
         <p>{item.storage_method}</p>
-        {fresh && item.fresh_days_stage1 && (
+        {item.keep_period && <p>보관 기간 참고: {item.keep_period}</p>}
+        {/* 신선도는 날짜가 아니라 지금 상태로 판단한다 (팀 식품 기준표). 옛 데이터(며칠)도 그대로 보여 준다 */}
+        {fresh && item.stage1_state && (
+          <ul className="fresh-stages">
+            <li><strong>신선</strong> {item.stage1_state} → {item.stage1_uses.join(', ')}</li>
+            <li><strong>품질 저하</strong> {item.stage2_state} → {item.stage2_uses.join(', ')}</li>
+            <li><strong>섭취 부적합</strong> 아래 신호가 보이면 → 조리하지 말고 폐기</li>
+          </ul>
+        )}
+        {fresh && !item.stage1_state && item.fresh_days_stage1 && (
           <p>받은 날부터 {item.fresh_days_stage1}일까지: {item.stage1_uses.join(', ')} → {item.fresh_days_stage2}일까지: {item.stage2_uses.join(', ')} → 그 뒤: {item.stage3_uses.join(', ')}</p>
         )}
         {item.opened_note && <p>{item.opened_note}</p>}
         {item.allergens.length > 0 && <p className="warn">알레르기: {item.allergens.join(', ')}</p>}
-        {item.danger_signs.length > 0 && <p className="muted">이런 상태면 드시지 마세요: {item.danger_signs.join(', ')}</p>}
+        {item.danger_signs.length > 0 && <p className="muted">이런 상태면 드시지 마세요: {item.danger_signs.join(' / ')}</p>}
+        {item.danger_note && <p className="muted">{item.danger_note}</p>}
+        {item.reviewed_by && item.source && <p className="note">출처: {item.source}</p>}
       </section>
 
       <section className="box">

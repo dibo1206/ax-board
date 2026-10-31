@@ -26,7 +26,9 @@ function ItemPreview({ item }) {
     <div className="preview">
       <strong>{item.name} 품목 기준 정보가 자동으로 붙어요</strong>
       <p>보관: {item.storage_method}</p>
-      {item.fresh_days_stage1 && <p>신선도: {item.fresh_days_stage1}일까지 {item.stage1_uses.join('·')} → {item.fresh_days_stage2}일까지 {item.stage2_uses.join('·')}</p>}
+      {item.stage1_state
+        ? <p>신선도: 신선 {item.stage1_uses.join('·')} → 품질 저하 {item.stage2_uses.join('·')} (상태로 판단{item.keep_period ? ` · 보관 기간 참고 ${item.keep_period}` : ''})</p>
+        : item.fresh_days_stage1 && <p>신선도: {item.fresh_days_stage1}일까지 {item.stage1_uses.join('·')} → {item.fresh_days_stage2}일까지 {item.stage2_uses.join('·')}</p>}
       {item.opened_note && <p>개봉 후: {item.opened_note}</p>}
       <p>레시피 {item.recipes.length}개{item.allergens.length > 0 && ` · 알레르기: ${item.allergens.join(', ')}`}</p>
       {!item.reviewed_by && <p className="warn">식품팀 검수 전 정보예요</p>}

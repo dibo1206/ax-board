@@ -32,6 +32,12 @@ CREATE TABLE IF NOT EXISTS items (
   source TEXT,
   reviewed_by TEXT
 );
+-- 팀 식품 기준표(2026-10-31): 신선도는 날짜가 아니라 상태로 나눈다 (신선 → 품질 저하 → 섭취 부적합)
+-- 보관 기간은 품질 유지 참고값일 뿐이라 따로 적고, 먹으면 안 되는 신호의 예외(단순 갈변 등)도 함께 적는다
+ALTER TABLE items ADD COLUMN IF NOT EXISTS stage1_state TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS stage2_state TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS keep_period TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS danger_note TEXT;
 
 -- 추천·검색용 태그 목록
 CREATE TABLE IF NOT EXISTS tags (

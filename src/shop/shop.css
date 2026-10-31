@@ -374,3 +374,6 @@
 /* 100g·100ml당 가격 */
 .shop .pcard-unit { font-size: 0.78rem; color: var(--muted); margin-top: -4px; }
 .shop .detail .para-title { font-family: var(--display); font-weight: 700; font-size: 1.15rem; }
+/* 보관·섭취 안내의 신선도 단계 (신선 → 품질 저하 → 섭취 부적합) */
+.shop .fresh-stages { margin: 8px 0; padding-left: 18px; }
+.shop .fresh-stages li { margin: 4px 0; line-height: 1.6; }

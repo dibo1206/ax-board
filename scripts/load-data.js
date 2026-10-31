@@ -24,7 +24,7 @@ const COLUMNS = {
   'sellers.csv': ['seller_code', 'name', 'region', 'intro', 'story', 'is_company', 'source'],
   'items.csv': ['item_code', 'name', 'category', 'show_brix', 'storage_method', 'fresh_days_stage1',
     'fresh_days_stage2', 'stage1_uses', 'stage2_uses', 'stage3_uses', 'opened_note', 'allergens',
-    'danger_signs', 'recipes', 'source', 'reviewed_by'],
+    'danger_signs', 'recipes', 'source', 'reviewed_by', 'stage1_state', 'stage2_state', 'keep_period', 'danger_note'],
   'tags.csv': ['tag_code', 'group', 'label'],
   'products.csv': ['product_code', 'seller_code', 'item_code', 'name', 'price', 'unit', 'stock', 'weight_g',
     'count_per_box', 'brix', 'brix_measured_at', 'harvest_date', 'summary', 'external_url', 'b2b_available',
@@ -97,7 +97,10 @@ function validate(sheets, issues) {
     for (const k of ['fresh_days_stage1', 'fresh_days_stage2']) {
       if (r[k] && !isInt(r[k])) issues.error('items.csv', line, `${k}는 숫자(일)만`)
     }
-    if (r.category !== '가공품' && (!r.fresh_days_stage1 || !r.fresh_days_stage2)) issues.warn('items.csv', line, '신선 농산물인데 신선도 단계(며칠)가 비어 있어요')
+    // 신선도는 상태(stage1_state·stage2_state)로 적는다. 옛 방식(며칠)만 있어도 받는다
+    if (r.category !== '가공품' && !(r.stage1_state && r.stage2_state) && !(r.fresh_days_stage1 && r.fresh_days_stage2)) {
+      issues.warn('items.csv', line, '신선 농산물인데 신선도 단계(신선·품질 저하 상태)가 비어 있어요')
+    }
     if (r.category === '가공품' && !r.opened_note) issues.warn('items.csv', line, '가공품인데 개봉 후 안내가 비어 있어요')
     if (!r.danger_signs) issues.warn('items.csv', line, '먹으면 안 되는 신호가 비어 있어요')
     list(r.recipes).forEach((recipe) => {
@@ -170,15 +173,18 @@ async function load(sheets) {
     for (const r of sheets['items.csv']) {
       await client.query(
         `INSERT INTO items (item_code, name, category, show_brix, storage_method, fresh_days_stage1, fresh_days_stage2,
-           stage1_uses, stage2_uses, stage3_uses, opened_note, allergens, danger_signs, recipes, source, reviewed_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+           stage1_uses, stage2_uses, stage3_uses, opened_note, allergens, danger_signs, recipes, source, reviewed_by,
+           stage1_state, stage2_state, keep_period, danger_note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
          ON CONFLICT (item_code) DO UPDATE SET name=$2, category=$3, show_brix=$4, storage_method=$5,
            fresh_days_stage1=$6, fresh_days_stage2=$7, stage1_uses=$8, stage2_uses=$9, stage3_uses=$10,
-           opened_note=$11, allergens=$12, danger_signs=$13, recipes=$14, source=$15, reviewed_by=$16`,
+           opened_note=$11, allergens=$12, danger_signs=$13, recipes=$14, source=$15, reviewed_by=$16,
+           stage1_state=$17, stage2_state=$18, keep_period=$19, danger_note=$20`,
         [r.item_code, r.name, r.category, yes(r.show_brix), nullable(r.storage_method), nullable(r.fresh_days_stage1),
           nullable(r.fresh_days_stage2), list(r.stage1_uses), list(r.stage2_uses), list(r.stage3_uses),
           nullable(r.opened_note), list(r.allergens), list(r.danger_signs), recipesJson(r.recipes),
-          nullable(r.source), nullable(r.reviewed_by)],
+          nullable(r.source), nullable(r.reviewed_by),
+          nullable(r.stage1_state), nullable(r.stage2_state), nullable(r.keep_period), nullable(r.danger_note)],
       )
     }
     for (const r of sheets['tags.csv']) {

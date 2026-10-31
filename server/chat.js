@@ -156,12 +156,15 @@ function describeItem(item) {
     `[품목 코드 ${item.item_code}] ${item.name} (${item.category}) 기준 정보`,
     `- 보관: ${item.storage_method || '정보 없음'}`,
   ]
-  if (item.fresh_days_stage1) {
+  if (item.stage1_state) {
+    lines.push(`- 신선도는 날짜가 아니라 상태로 판단: 신선(${item.stage1_state}) → ${list(item.stage1_uses)} / 품질 저하(${item.stage2_state}) → ${list(item.stage2_uses)} / 먹으면 안 되는 신호가 있으면 폐기`)
+  } else if (item.fresh_days_stage1) {
     lines.push(`- 받은 날부터 ${item.fresh_days_stage1}일까지: ${list(item.stage1_uses)} / ${item.fresh_days_stage2}일까지: ${list(item.stage2_uses)} / 그 뒤: ${list(item.stage3_uses)}`)
   }
+  if (item.keep_period) lines.push(`- 보관 기간 참고값: ${item.keep_period}`)
   if (item.opened_note) lines.push(`- 개봉 후: ${item.opened_note}`)
   lines.push(`- 알레르기 표시: ${list(item.allergens)}`)
-  lines.push(`- 먹으면 안 되는 신호: ${list(item.danger_signs)}`)
+  lines.push(`- 먹으면 안 되는 신호: ${list(item.danger_signs)}${item.danger_note ? ` (${item.danger_note})` : ''}`)
   lines.push(`- 레시피: ${item.recipes?.length ? item.recipes.map((r) => `${r.title}(재료 ${r.ingredients} / 방법 ${r.method})`).join('; ') : '정보 없음'}`)
   if (!item.reviewed_by) lines.push('- (식품팀 검수 전 정보)')
   return lines.join('\n')
@@ -343,9 +346,18 @@ const label = (p) => p.name.replace(/\[예시\]\s*/g, '')
 
 const opened = (item) => (item.opened_note ? `개봉 후에는 ${sentence(item.opened_note.replace(/^개봉\s?후(에는|엔)?\s*/, ''))}` : '')
 
+// 신선도 안내: 팀 식품 기준표는 날짜가 아니라 상태로 나눈다. 옛 데이터(며칠)만 있는 품목은 날짜로 안내한다
 function timeline(item) {
+  if (item.stage1_state) {
+    return `신선한 상태(${item.stage1_state})면 ${list(item.stage1_uses)}, 품질이 떨어진 상태(${item.stage2_state})면 ${list(item.stage2_uses)} 용도로 안내하고 있어요.`
+  }
   if (!item.fresh_days_stage1) return ''
   return `받은 날부터 ${item.fresh_days_stage1}일까지는 ${list(item.stage1_uses)}, ${item.fresh_days_stage2}일까지는 ${list(item.stage2_uses)}, 그 뒤에는 ${list(item.stage3_uses)} 용도로 안내하고 있어요.`
+}
+function keepPeriod(item) {
+  if (!item.keep_period) return ''
+  const text = item.keep_period.replace(/\s*\(.*\)$/, '')
+  return /없어요$/.test(text) ? `${text}. 날짜보다 지금 상태로 판단해 주세요.` : `보관 기간 참고값은 ${josa(text, '이에요', '예요')}.`
 }
 
 // "산 지 2주 됐는데", "받은 지 10일" 같은 지난 날짜. 있으면 먹어도 되나 질문으로 보고, 그 날짜의 용도를 알려 준다
@@ -359,16 +371,14 @@ function elapsedDays(message) {
 }
 
 // 품목의 "먹으면 안 되는 신호"(예: 탁해지거나 거품이 계속 생김)를 손님이 말하면 바로 드시지 말라고 안내한다
-// 신호 문장을 "거나"로 나눠 핵심 낱말을 뽑고, 한 갈래의 낱말이 모두 질문에 있으면 그 신호로 본다
-const GENERIC_WORDS = new Set(['계속', '생김', '생기는', '생긴', '변한', '변함', '이상한', '있는', '나는', '같은', '상태', '부분'])
-function signWords(sign) {
-  return sign.split(/거나|,|·/).map((part) => part.trim().split(/\s+/)
-    .map((w) => w.replace(/(으로|이|가|을|를|은|는|로|짐|함|됨|지)$/, ''))
-    .filter((w) => w.length >= 2 && !GENERIC_WORDS.has(w))).filter((words) => words.length)
-}
+// 부패를 뜻하는 낱말을 손님이 말했고 그 품목의 신호 문장에도 같은 낱말이 있을 때만 그 신호로 본다
+// ("시큼한가요?" 같은 맛 질문이나 "껍질 벗겨요?"에 경고하지 않게, 흔한 낱말(냄새·껍질)은 넣지 않는다)
+const DANGER_WORDS = ['곰팡', '썩', '점액', '끈적', '미끈', '거품', '탁해', '초록색', '술 냄새', '발효 냄새', '시큼한 냄새', '즙이 흐']
 function dangerSign(message, items) {
+  const said = DANGER_WORDS.filter((w) => message.includes(w))
+  if (!said.length) return null
   for (const item of findItems(message, items)) {
-    const sign = (item.danger_signs ?? []).find((s) => signWords(s).some((words) => words.every((w) => message.includes(w))))
+    const sign = (item.danger_signs ?? []).find((s) => said.some((w) => s.includes(w)))
     if (sign) return { item, sign }
   }
   return null
@@ -376,7 +386,7 @@ function dangerSign(message, items) {
 
 // 위에서부터 먼저 맞는 주제 하나로 답한다 ("먹어도 돼요?"가 "보관"보다 먼저)
 const TOPICS = [
-  { kind: 'safety', word: '먹어도 되는지', re: new RegExp(`(먹어|드셔|마셔|섭취해)도|싹(이|\\s?났)|상했|상한\\s?(것|거)|변했|변색|곰팡|이상한\\s?냄새|냄새가\\s?(나|이상)|물렀|물러졌|썩|${ELAPSED.source}`) },
+  { kind: 'safety', word: '먹어도 되는지', re: new RegExp(`(먹어|드셔|마셔|섭취해)도|싹(이|\\s?났)|상했|상한\\s?(것|거)|변했|변색|곰팡|이상한\\s?냄새|냄새가\\s?(나|이상)|(술|발효|시큼한|썩은)\\s?냄새|물렀|물러졌|썩|끈적|미끈|점액|쭈글|초록색으로|${ELAPSED.source}`) },
   { kind: 'compare', word: '차이', re: /차이|비교|뭐가\s?달라|다른\s?점|뭐가\s?나아|어떤\s?게\s?나아/ },
   { kind: 'recipe', word: '레시피', re: /레시피|만들|만드|요리|활용|먹는\s?(법|방법)|어떻게\s?먹|해\s?먹|비율|음료|에이드/ },
   { kind: 'storage', word: '보관법', re: /보관|냉장|냉동|상온|실온|어디에?\s?(둬|두|놔)|(같이|함께)\s?(둬|두|놔|넣)|(둬|두어|놔)도|넣어도|개봉|뜯(은|으면|고)|언제까지|며칠|유통\s?기한|얼마나\s?(가|두|오래)/ },
@@ -387,11 +397,21 @@ const TOPICS = [
 ]
 
 // 품목 하나로 답하는 주제
-// 받은 지 days일이면 어느 단계 용도인지 (신호가 없을 때만이라는 말을 꼭 붙인다)
+// 받은 지 days일이면 어느 단계 용도인지 (옛 데이터: 며칠 기준. 신호가 없을 때만이라는 말을 꼭 붙인다)
 function stageOf(item, days) {
   if (!item.fresh_days_stage1 || days == null) return ''
   const uses = days <= item.fresh_days_stage1 ? item.stage1_uses : days <= item.fresh_days_stage2 ? item.stage2_uses : item.stage3_uses
   return `받은 지 ${days}일이면, ${item.danger_signs.length ? '위 신호가 없을 때 ' : ''}${list(uses)} 용도로 안내하고 있어요.`
+}
+
+// "배숙 만드는 법", "고구마 맛탕 레시피"처럼 요리 이름을 말했는지 (품목 이름이 든 낱말이나 그 다음 낱말)
+const NOT_DISH = /^(레시피|요리|만드|만들|활용|어떻게|뭐|무엇|알려|해|먹|법|방법|비율|음료|간단|쉬운)/
+function askedDish(item, message) {
+  const words = message.split(/\s+/).map((w) => w.replace(/[?!.,~]/g, '').replace(/(으로|로|은|는|이|가|을|를|에|도|랑|하고)$/, ''))
+  const at = words.findIndex((w) => w.includes(item.name))
+  if (at < 0) return null
+  const dish = words[at] !== item.name ? words[at] : words[at + 1]
+  return dish && !NOT_DISH.test(dish) ? dish : null
 }
 
 const SAY_ITEM = {
@@ -399,20 +419,31 @@ const SAY_ITEM = {
     const days = elapsedDays(message)
     return [
       `${josa(item.name, '을', '를')} 드셔도 되는지는 제가 판단할 수 없어요.`,
-      item.danger_signs.length ? `상품 정보에서는 ${item.danger_signs.join(', ')} 같은 상태라면 드시지 말라고 안내해요.` : '',
-      stageOf(item, days) || (item.fresh_days_stage1 ? `참고로 ${timeline(item)}` : opened(item)),
+      item.danger_signs.length ? `상품 정보에서는 ${item.danger_signs.join(' / ')} 같은 상태라면 드시지 말라고 안내해요.` : '',
+      item.danger_note ? sentence(item.danger_note) : '',
+      // 상태 기준 품목: 날짜를 말해도 단계를 정하지 않고, 보관 기간 참고값과 상태별 용도를 알려 준다
+      item.stage1_state ? [days != null ? keepPeriod(item) : '', timeline(item)].filter(Boolean).join(' ')
+        : stageOf(item, days) || (item.fresh_days_stage1 ? `참고로 ${timeline(item)}` : opened(item)),
       '애매하면 드시지 마시고, 사진과 함께 상품 Q&A나 고객센터로 알려 주세요.',
     ].filter(Boolean).join(' ')
   },
-  storage: (item, message) => [
-    `${item.name} 보관법은 이래요: ${sentence(item.storage_method || '보관 방법 정보가 아직 없어요')}`,
-    (item.storage_method ?? '').includes('개봉 후') ? '' : opened(item),
-    /언제까지|며칠|유통|얼마나/.test(message) || !item.opened_note ? timeline(item) : '',
-    /유통/.test(message) && !item.fresh_days_stage1 ? '유통기한은 상품 포장에 적힌 날짜를 확인해 주세요.' : '',
-  ].filter(Boolean).join(' '),
-  recipe: (item) => (item.recipes?.length
-    ? `${josa(item.name, '은', '는')} 이렇게 즐겨 보세요. ${item.recipes.slice(0, 3).map((r, i) => `${i + 1}) ${r.title}: ${r.ingredients} — ${r.method}`).join(' ')}`
-    : `${item.name} 레시피 정보는 아직 없어요.`),
+  storage: (item, message) => {
+    const asksHowLong = /언제까지|며칠|유통|얼마나/.test(message)
+    return [
+      `${item.name} 보관법은 이래요: ${sentence(item.storage_method || '보관 방법 정보가 아직 없어요')}`,
+      (item.storage_method ?? '').includes('개봉 후') ? '' : opened(item),
+      asksHowLong ? keepPeriod(item) : '',
+      asksHowLong || (!item.opened_note && !item.stage1_state) ? timeline(item) : '',
+      /유통/.test(message) && !item.fresh_days_stage1 && !item.keep_period ? '유통기한은 상품 포장에 적힌 날짜를 확인해 주세요.' : '',
+    ].filter(Boolean).join(' ')
+  },
+  recipe: (item, message) => {
+    if (!item.recipes?.length) return `${item.name} 레시피 정보는 아직 없어요.`
+    const dish = askedDish(item, message)
+    const known = !dish || item.recipes.some((r) => r.title.replace(/\s/g, '').includes(dish) || dish.includes(r.title.replace(/\s/g, '')))
+    const dishName = dish && (dish.includes(item.name) ? dish : `${item.name} ${dish}`)
+    return `${known ? '' : `${dishName} 레시피는 아직 등록돼 있지 않아요. 대신 `}${josa(item.name, '은', '는')} 이렇게 즐겨 보세요. ${item.recipes.slice(0, 3).map((r, i) => `${i + 1}) ${r.title}: ${r.ingredients} — ${r.method}`).join(' ')}`
+  },
   allergy: (item) => (item.allergens.length
     ? `${item.name} 상품 정보에 표시된 알레르기 성분은 ${item.allergens.join(', ')}예요.`
     : `${josa(item.name, '은', '는')} 상품 정보에 표시된 알레르기 성분이 없어요. 정확한 성분이 필요하면 상품 Q&A로 물어봐 주세요.`),
