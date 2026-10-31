@@ -2,13 +2,20 @@ import { useEffect, useState } from 'react'
 import { MAX_QTY, readCart, won, writeCart } from './shared.js'
 import { useCartLines } from './useCartLines.js'
 
-export function Totals({ itemsAmount, fee, total, policy }) {
+// 농가가 여럿이면 농가마다 따로 보내서 배송비도 농가마다 보여 준다
+export function Totals({ itemsAmount, fee, total, policy, farms = [] }) {
+  const many = farms.length > 1
+  const more = (f) => (policy && f.fee > 0 ? ` · ${won(policy.shipping.freeOver - f.itemsAmount)} 더 담으면 무료` : '')
   return (
     <dl className="totals">
       <dt>상품 금액</dt><dd>{won(itemsAmount)}</dd>
-      <dt>배송비</dt><dd>{fee ? won(fee) : '무료'}</dd>
+      <dt>배송비{many && ` (농가 ${farms.length}곳)`}</dt><dd>{fee ? won(fee) : '무료'}</dd>
+      {many && farms.map((f) => (
+        <dd key={f.sellerCode} className="muted full">{f.name}: {f.fee ? won(f.fee) : '무료'}{more(f)}</dd>
+      ))}
       <dt className="sum">결제 예정 금액</dt><dd className="sum">{won(total)}</dd>
-      {policy && fee > 0 && <dd className="muted full">{won(policy.shipping.freeOver - itemsAmount)} 더 담으면 무료 배송이에요</dd>}
+      {many && <dd className="muted full">농가마다 따로 보내서 배송비가 농가마다 붙어요. 상품은 따로 도착할 수 있어요.</dd>}
+      {!many && policy && fee > 0 && <dd className="muted full">{won(policy.shipping.freeOver - itemsAmount)} 더 담으면 무료 배송이에요</dd>}
     </dl>
   )
 }

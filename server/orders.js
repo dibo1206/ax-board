@@ -41,6 +41,47 @@ async function restoreStock(client, orderId) {
   )
 }
 
+// ---------- 농가별 배송 ----------
+// 농가마다 따로 택배를 보낸다: 배송비는 농가별로 (그 농가 상품이 무료 배송 기준 이상이면 그 농가는 무료)
+export function farmShipping(lines) {
+  const farms = new Map()
+  for (const l of lines) farms.set(l.seller_code, (farms.get(l.seller_code) ?? 0) + l.subtotal)
+  return [...farms].map(([sellerCode, itemsAmount]) => ({ sellerCode, itemsAmount, fee: shippingFee(itemsAmount) }))
+}
+
+// 농가별 배송이 없는 주문(이 기능 전에 만든 주문·시험용으로 직접 넣은 주문)은 주문 상품의 농가로 만든다.
+// 그때 받은 배송비는 하나뿐이라 첫 농가에 모두 둔다. orderId 가 null 이면 모든 주문
+const ENSURE_SHIPMENTS = `
+  INSERT INTO order_shipments (order_id, seller_code, items_amount, shipping_fee, status, courier, tracking_no, delivered_at)
+  SELECT o.id, f.seller_code, f.amount, CASE WHEN f.first THEN o.shipping_fee ELSE 0 END,
+         CASE WHEN o.status IN ('paid', 'preparing', 'shipping', 'delivered', 'cancelled') THEN o.status ELSE 'paid' END,
+         o.courier, o.tracking_no, o.delivered_at
+  FROM orders o
+  JOIN (SELECT order_id, seller_code, sum(subtotal)::int AS amount, min(id) = min(min(id)) OVER (PARTITION BY order_id) AS first
+        FROM order_items GROUP BY order_id, seller_code) f ON f.order_id = o.id
+  WHERE ($1::int IS NULL OR o.id = $1) AND NOT EXISTS (SELECT 1 FROM order_shipments x WHERE x.order_id = o.id)
+  ON CONFLICT (order_id, seller_code) DO NOTHING`
+export const ensureShipments = (orderId = null, client = pool) => client.query(ENSURE_SHIPMENTS, [orderId])
+
+// 농가별 상태를 모아 주문 전체 상태를 정한다. 손님 알림·옛 화면을 위해 첫 송장을 주문에도 적어 둔다
+async function syncOrderStatus(client, orderId) {
+  const { rows } = await client.query("SELECT status FROM order_shipments WHERE order_id = $1 AND status <> 'cancelled'", [orderId])
+  const s = rows.map((r) => r.status)
+  const status = s.length && s.every((x) => x === 'delivered') ? 'delivered'
+    : s.some((x) => x === 'shipping' || x === 'delivered') ? 'shipping'
+      : s.some((x) => x === 'preparing') ? 'preparing' : 'paid'
+  await client.query(
+    `UPDATE orders o SET status = $2, updated_at = now(),
+       delivered_at = CASE WHEN $2 = 'delivered' THEN COALESCE(o.delivered_at, now()) ELSE NULL END,
+       courier = first.courier, tracking_no = first.tracking_no
+     FROM (SELECT (SELECT courier FROM order_shipments WHERE order_id = $1 AND tracking_no IS NOT NULL ORDER BY id LIMIT 1) AS courier,
+                  (SELECT tracking_no FROM order_shipments WHERE order_id = $1 AND tracking_no IS NOT NULL ORDER BY id LIMIT 1) AS tracking_no) first
+     WHERE o.id = $1`,
+    [orderId, status],
+  )
+  return status
+}
+
 async function inTransaction(work) {
   const client = await pool.connect()
   try {
@@ -152,13 +193,23 @@ async function loadOrder(orderNo, client = pool) {
      FROM order_items oi WHERE oi.order_id = $1 ORDER BY oi.id`,
     [rows[0].id],
   )
-  return { ...rows[0], items: items.rows }
+  await ensureShipments(rows[0].id, client)
+  const shipments = await client.query(
+    `SELECT sh.seller_code, s.name AS seller_name, sh.items_amount, sh.shipping_fee, sh.status, sh.courier, sh.tracking_no, sh.shipped_at, sh.delivered_at
+     FROM order_shipments sh JOIN sellers s ON s.seller_code = sh.seller_code WHERE sh.order_id = $1 ORDER BY sh.id`,
+    [rows[0].id],
+  )
+  return { ...rows[0], items: items.rows, shipments: shipments.rows }
 }
 
-// 손님에게 보여 줄 주문 (결제 키·내부 번호는 빼고)
+// 손님에게 보여 줄 주문 (결제 키·내부 번호는 빼고). 농가 이름의 [예시] 표시는 뺀다
 function publicOrder(order) {
   const { id: _id, payment_key: _key, customer_id: _customer, ...rest } = order
-  return { ...rest, tracking_url: trackingUrl(order.courier, order.tracking_no) }
+  return {
+    ...rest,
+    tracking_url: trackingUrl(order.courier, order.tracking_no),
+    shipments: (order.shipments ?? []).map((s) => ({ ...s, seller_name: s.seller_name.replace(/\[예시\]\s*/g, ''), tracking_url: trackingUrl(s.courier, s.tracking_no) })),
+  }
 }
 
 // ---------- 손님용 ----------
@@ -249,7 +300,8 @@ publicOrderRouter.post('/orders', async (req, res) => {
         lines.push({ ...rows[0], quantity, subtotal: rows[0].price * quantity })
       }
       const itemsAmount = lines.reduce((sum, l) => sum + l.subtotal, 0)
-      const fee = shippingFee(itemsAmount)
+      const farms = farmShipping(lines)
+      const fee = farms.reduce((sum, f) => sum + f.fee, 0)
       const orderNo = newOrderNo()
       const { rows } = await client.query(
         `INSERT INTO orders (order_no, buyer_name, buyer_phone, receiver_name, receiver_phone, zipcode, address1, address2, memo,
@@ -266,12 +318,17 @@ publicOrderRouter.post('/orders', async (req, res) => {
           [rows[0].id, l.product_code, l.seller_code, l.name, l.unit, l.price, l.quantity, l.subtotal],
         )
       }
+      for (const f of farms) {
+        await client.query('INSERT INTO order_shipments (order_id, seller_code, items_amount, shipping_fee) VALUES ($1, $2, $3, $4)',
+          [rows[0].id, f.sellerCode, f.itemsAmount, f.fee])
+      }
       const first = lines[0].name.replace(/\[예시\]\s*/g, '')
       return {
         orderNo,
         orderName: (lines.length > 1 ? `${first} 외 ${lines.length - 1}건` : first).slice(0, 100),
         itemsAmount,
         shippingFee: fee,
+        farms: farms.length,
         amount: itemsAmount + fee,
       }
     })
@@ -418,6 +475,9 @@ function cancelOrderTx(orderNo, reason, allowed) {
     const order = rows[0]
     if (!order) return { status: 404, error: '주문을 찾지 못했어요.' }
     if (!allowed.includes(order.status)) return { status: 409, error: '이 상태의 주문은 취소할 수 없어요. 배송이 시작됐다면 반품으로 처리해요.' }
+    await ensureShipments(order.id, client)
+    const sent = await client.query("SELECT 1 FROM order_shipments WHERE order_id = $1 AND status IN ('shipping', 'delivered')", [order.id])
+    if (sent.rowCount) return { status: 409, error: '이미 보낸 농가 상품이 있어서 전체 취소할 수 없어요. 받은 뒤 반품으로 처리해요.' }
     try {
       await cancelPayment({ paymentKey: order.payment_key, orderId: order.order_no, reason })
     } catch (error) {
@@ -429,6 +489,7 @@ function cancelOrderTx(orderNo, reason, allowed) {
       "UPDATE orders SET status = 'cancelled', cancel_reason = $2, cancelled_at = now(), updated_at = now() WHERE id = $1",
       [order.id, reason.slice(0, 200)],
     )
+    await client.query("UPDATE order_shipments SET status = 'cancelled', updated_at = now() WHERE order_id = $1", [order.id])
     console.log(`[order] 주문 취소 ${order.order_no}`)
     return { status: 200 }
   })
@@ -441,10 +502,13 @@ adminOrderRouter.use(requireAdmin)
 const LIST_SQL = `
   SELECT o.order_no, o.status, o.buyer_name, o.receiver_name, o.total_amount, o.payment_method, o.is_test,
          o.created_at, o.paid_at, o.tracking_no,
-         (SELECT string_agg(oi.name || ' ×' || oi.quantity, ', ' ORDER BY oi.id) FROM order_items oi WHERE oi.order_id = o.id) AS summary
+         (SELECT string_agg(oi.name || ' ×' || oi.quantity, ', ' ORDER BY oi.id) FROM order_items oi WHERE oi.order_id = o.id) AS summary,
+         (SELECT count(*) FROM order_shipments sh WHERE sh.order_id = o.id)::int AS farms,
+         (SELECT count(*) FROM order_shipments sh WHERE sh.order_id = o.id AND sh.status IN ('shipping', 'delivered'))::int AS farms_sent
   FROM orders o`
 
 adminOrderRouter.get('/', async (req, res) => {
+  await ensureShipments()
   const status = text(req.query.status)
   const params = []
   let sql = `${LIST_SQL} WHERE o.status NOT IN ('pending', 'failed', 'expired')`
@@ -462,12 +526,13 @@ adminOrderRouter.get('/:orderNo', async (req, res) => {
   res.json(publicOrder(order))
 })
 
-// 배송 단계 바꾸기: 결제완료 → 배송준비 → 배송중(송장 필수) → 배송완료
+// 배송 단계 바꾸기 (농가별): 결제완료 → 배송준비 → 배송중(송장 필수) → 배송완료
+// 판매자는 자기 농가 배송만, 관리자는 sellerCode 로 한 농가를 고르거나 비우면 그 단계에 있는 농가 모두 (송장은 농가마다 따로)
 const NEXT = { paid: 'preparing', preparing: 'shipping', shipping: 'delivered' }
 
 async function advance(orderNo, body, who, onlySeller = null) {
   const result = await advanceTx(orderNo, body, who, onlySeller)
-  if (result.status === 200 && body.status === 'shipping') notifyOrder(orderNo, 'shipping')
+  if (result.status === 200 && body.status === 'shipping') for (const seller of result.sellers) notifyOrder(orderNo, 'shipping', seller)
   return result
 }
 
@@ -475,24 +540,38 @@ function advanceTx(orderNo, body, who, onlySeller) {
   const status = text(body.status)
   const courier = text(body.courier).slice(0, 30)
   const trackingNo = text(body.trackingNo).replace(/[^0-9A-Za-z-]/g, '').slice(0, 30)
+  const pick = onlySeller ?? (text(body.sellerCode) || null)
   return inTransaction(async (client) => {
     const { rows } = await client.query('SELECT * FROM orders WHERE order_no = $1 FOR UPDATE', [orderNo])
     const order = rows[0]
     if (!order) return { status: 404, error: '주문을 찾지 못했어요.' }
-    if (onlySeller) {
-      const others = await client.query('SELECT 1 FROM order_items WHERE order_id = $1 AND seller_code <> $2', [order.id, onlySeller])
-      if (others.rowCount) return { status: 403, error: '다른 농가 상품이 함께 있는 주문은 회사에서 배송 처리해요.' }
-    }
-    if (NEXT[order.status] !== status) return { status: 409, error: '지금 상태에서 그 단계로 바꿀 수 없어요.' }
-    if (status === 'shipping' && (!courier || trackingNo.length < 6)) return { status: 400, error: '택배사와 송장 번호를 넣어 주세요.' }
-    await client.query(
-      `UPDATE orders SET status = $2, courier = COALESCE(NULLIF($3, ''), courier), tracking_no = COALESCE(NULLIF($4, ''), tracking_no), updated_at = now(),
-         delivered_at = CASE WHEN $2 = 'delivered' THEN now() ELSE delivered_at END
-       WHERE id = $1`,
-      [order.id, status, courier, trackingNo],
+    if (!['paid', 'preparing', 'shipping'].includes(order.status)) return { status: 409, error: '지금 상태에서 그 단계로 바꿀 수 없어요.' }
+    await ensureShipments(order.id, client)
+    const { rows: shipments } = await client.query(
+      "SELECT * FROM order_shipments WHERE order_id = $1 AND status <> 'cancelled' AND ($2::text IS NULL OR seller_code = $2) ORDER BY id FOR UPDATE",
+      [order.id, pick],
     )
-    console.log(`[order] ${who} ${order.order_no} → ${status}`)
-    return { status: 200 }
+    if (!shipments.length) return { status: onlySeller ? 403 : 404, error: onlySeller ? '이 주문에는 내 농가 상품이 없어요.' : '그 농가의 배송을 찾지 못했어요.' }
+    const targets = shipments.filter((s) => NEXT[s.status] === status)
+    if (!targets.length) return { status: 409, error: '지금 상태에서 그 단계로 바꿀 수 없어요.' }
+    if (status === 'shipping') {
+      if (!courier || trackingNo.length < 6) return { status: 400, error: '택배사와 송장 번호를 넣어 주세요.' }
+      if (targets.length > 1) return { status: 400, error: '농가마다 송장이 달라요. 농가를 골라 하나씩 넣어 주세요.' }
+    }
+    for (const s of targets) {
+      await client.query(
+        `UPDATE order_shipments SET status = $2, updated_at = now(),
+           courier = CASE WHEN $2 = 'shipping' THEN $3 ELSE courier END,
+           tracking_no = CASE WHEN $2 = 'shipping' THEN $4 ELSE tracking_no END,
+           shipped_at = CASE WHEN $2 = 'shipping' THEN now() ELSE shipped_at END,
+           delivered_at = CASE WHEN $2 = 'delivered' THEN now() ELSE delivered_at END
+         WHERE id = $1`,
+        [s.id, status, courier, trackingNo],
+      )
+    }
+    const orderStatus = await syncOrderStatus(client, order.id)
+    console.log(`[order] ${who} ${order.order_no} ${targets.map((s) => s.seller_code).join(',')} → ${status} (주문 ${orderStatus})`)
+    return { status: 200, sellers: targets.map((s) => s.seller_code) }
   })
 }
 
@@ -514,29 +593,28 @@ adminOrderRouter.post('/:orderNo/cancel', async (req, res) => {
 export const sellerOrderRouter = express.Router()
 sellerOrderRouter.use(requireSeller)
 
+// 주문 하나에 다른 농가 상품이 함께 있어도 내 농가 몫은 내가 따로 보낸다 (status·송장은 내 농가 배송 기준, order_status 는 주문 전체)
 sellerOrderRouter.get('/', async (req, res) => {
   const seller = req.seller.sellerCode
+  await ensureShipments()
   const { rows } = await pool.query(`
-    SELECT o.id, o.order_no, o.status, o.created_at, o.paid_at, o.courier, o.tracking_no, o.memo, o.is_test, o.confirmed_at,
-           o.receiver_name, o.receiver_phone, o.zipcode, o.address1, o.address2,
-           NOT EXISTS (SELECT 1 FROM order_items x WHERE x.order_id = o.id AND x.seller_code <> $1) AS only_mine
-    FROM orders o
+    SELECT o.id, o.order_no, sh.status, o.status AS order_status, o.created_at, o.paid_at, sh.courier, sh.tracking_no, o.memo, o.is_test, o.confirmed_at,
+           sh.items_amount, sh.shipping_fee, o.receiver_name, o.receiver_phone, o.zipcode, o.address1, o.address2,
+           (SELECT count(*) FROM order_shipments x WHERE x.order_id = o.id)::int AS farms
+    FROM orders o JOIN order_shipments sh ON sh.order_id = o.id AND sh.seller_code = $1
     WHERE o.status IN ('paid', 'preparing', 'shipping', 'delivered', 'cancelled')
-      AND EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id AND oi.seller_code = $1)
     ORDER BY o.created_at DESC LIMIT 200`, [seller])
   const items = rows.length
     ? (await pool.query('SELECT order_id, name, unit, quantity, subtotal FROM order_items WHERE order_id = ANY($1) AND seller_code = $2 ORDER BY id',
         [rows.map((r) => r.id), seller])).rows
     : []
-  // 받는 분 정보는 내가 배송해야 하는 주문(내 상품만 있고 아직 배송 전)에만 보여 준다
-  res.json(rows.map(({ id, receiver_name, receiver_phone, zipcode, address1, address2, memo, ...o }) => {
-    const shipper = o.only_mine && ['paid', 'preparing'].includes(o.status)
-    return {
-      ...o,
-      items: items.filter((i) => i.order_id === id).map(({ order_id: _o, ...i }) => i),
-      receiver: shipper ? { name: receiver_name, phone: receiver_phone, zipcode, address1, address2, memo } : null,
-    }
-  }))
+  // 받는 분 정보는 내가 보내야 하는 동안(내 농가 배송이 아직 보내기 전)만 보여 준다
+  res.json(rows.map(({ id, receiver_name, receiver_phone, zipcode, address1, address2, memo, ...o }) => ({
+    ...o,
+    tracking_url: trackingUrl(o.courier, o.tracking_no),
+    items: items.filter((i) => i.order_id === id).map(({ order_id: _o, ...i }) => i),
+    receiver: ['paid', 'preparing'].includes(o.status) ? { name: receiver_name, phone: receiver_phone, zipcode, address1, address2, memo } : null,
+  })))
 })
 
 // 정산 요약: 이번 달 구매 확정된 내 상품 매출(정산 예정)과 확정 기다리는 매출 (테스트 결제 포함, 표시는 화면에서)
@@ -552,7 +630,16 @@ sellerOrderRouter.get('/settlement', async (req, res) => {
      WHERE oi.seller_code = $1 AND o.status = 'delivered'`,
     [req.seller.sellerCode],
   )
-  res.json({ ...rows[0], confirmDays: CONFIRM_DAYS })
+  // 농가별로 받은 배송비도 그 농가 몫 (택배를 직접 보내니까)
+  await ensureShipments()
+  const fees = await pool.query(
+    `SELECT COALESCE(sum(sh.shipping_fee) FILTER (WHERE o.confirmed_at >= date_trunc('month', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul'), 0)::int AS confirmed_shipping,
+            COALESCE(sum(sh.shipping_fee) FILTER (WHERE o.confirmed_at IS NULL), 0)::int AS waiting_shipping
+     FROM order_shipments sh JOIN orders o ON o.id = sh.order_id
+     WHERE sh.seller_code = $1 AND o.status = 'delivered'`,
+    [req.seller.sellerCode],
+  )
+  res.json({ ...rows[0], ...fees.rows[0], confirmDays: CONFIRM_DAYS })
 })
 
 sellerOrderRouter.patch('/:orderNo', async (req, res) => {
@@ -562,18 +649,24 @@ sellerOrderRouter.patch('/:orderNo', async (req, res) => {
 })
 
 // ---------- 주문 알림 메일 (손님: 주문 때 남긴 이메일·회원 이메일 / 관리자: ADMIN_EMAIL) ----------
-async function notifyOrder(orderNo, event) {
+// sellerCode: 배송 알림은 농가마다 (그 농가 송장과 상품만)
+async function notifyOrder(orderNo, event, sellerCode = null) {
   try {
     const order = await loadOrder(orderNo)
     if (!order) return
-    const lines = order.items.map((i) => `- ${i.name.replace(/\[예시\]\s*/g, '')} × ${i.quantity}  ${i.subtotal.toLocaleString('ko-KR')}원`).join('\n')
-    const total = `합계 ${order.total_amount.toLocaleString('ko-KR')}원 (배송비 ${order.shipping_fee.toLocaleString('ko-KR')}원 포함)`
+    const listOf = (items) => items.map((i) => `- ${i.name.replace(/\[예시\]\s*/g, '')} × ${i.quantity}  ${i.subtotal.toLocaleString('ko-KR')}원`).join('\n')
+    const lines = listOf(order.items)
+    const farms = order.shipments.length > 1 ? `\n농가 ${order.shipments.length}곳에서 따로 보내요 (배송비는 농가마다).` : ''
+    const total = `합계 ${order.total_amount.toLocaleString('ko-KR')}원 (배송비 ${order.shipping_fee.toLocaleString('ko-KR')}원 포함)${farms}`
     const lookup = `${publicUrl()}/order/lookup`
+    const sent = order.shipments.find((s) => s.seller_code === sellerCode) ?? order.shipments[0] ?? order
+    const farmName = sent.seller_name ? `${sent.seller_name.replace(/\[예시\]\s*/g, '')}에서 ` : ''
+    const sentLines = sellerCode ? listOf(order.items.filter((i) => i.seller_code === sellerCode)) : lines
     const mails = {
       paid: [`[${SHOP.name}] 주문이 완료됐어요 (${order.order_no})`,
         `${order.buyer_name}님, 주문해 주셔서 고마워요.\n\n주문번호: ${order.order_no}\n${lines}\n${total}\n\n${SHIPPING.leadTime}.\n주문 조회: ${lookup}\n`],
-      shipping: [`[${SHOP.name}] 상품을 보냈어요 (${order.order_no})`,
-        `${order.buyer_name}님, 주문하신 상품을 보냈어요.\n\n${order.courier} ${order.tracking_no}\n배송 조회: ${trackingUrl(order.courier, order.tracking_no)}\n\n${lines}\n`],
+      shipping: [`[${SHOP.name}] ${farmName}상품을 보냈어요 (${order.order_no})`,
+        `${order.buyer_name}님, 주문하신 상품을 ${farmName}보냈어요.\n\n${sent.courier} ${sent.tracking_no}\n배송 조회: ${trackingUrl(sent.courier, sent.tracking_no)}\n\n${sentLines}\n`],
       cancelled: [`[${SHOP.name}] 주문이 취소됐어요 (${order.order_no})`,
         `${order.buyer_name}님, 주문이 취소되어 결제를 취소했어요. 카드사에 따라 환불까지 며칠 걸릴 수 있어요.\n\n주문번호: ${order.order_no}\n${lines}\n${total}\n`],
     }

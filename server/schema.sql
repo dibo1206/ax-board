@@ -305,6 +305,24 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS orders_confirm_idx ON orders (status, confirmed_at);
 
+-- 농가별 배송: 한 주문에 여러 농가 상품이 있으면 농가마다 따로 택배를 보낸다 → 배송비·송장·배송 상태가 농가마다
+-- 주문 전체 상태(orders.status)는 농가별 상태를 모아 정한다 (모두 배송 완료면 배송 완료, 하나라도 보냈으면 배송 중)
+CREATE TABLE IF NOT EXISTS order_shipments (
+  id SERIAL PRIMARY KEY,
+  order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  seller_code TEXT NOT NULL REFERENCES sellers(seller_code),
+  items_amount INT NOT NULL DEFAULT 0,
+  shipping_fee INT NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'paid' CHECK (status IN ('paid', 'preparing', 'shipping', 'delivered', 'cancelled')),
+  courier TEXT,
+  tracking_no TEXT,
+  shipped_at TIMESTAMPTZ,
+  delivered_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (order_id, seller_code)
+);
+CREATE INDEX IF NOT EXISTS order_shipments_seller_idx ON order_shipments (seller_code, status);
+
 -- 금지어 사전 (관리자 화면 [금지어]에서 고침). 기본 단어는 표가 비어 있을 때 한 번만 넣는다 (지운 단어가 다시 생기지 않게)
 CREATE TABLE IF NOT EXISTS banned_words (
   word TEXT PRIMARY KEY,

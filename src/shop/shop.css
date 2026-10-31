@@ -377,3 +377,6 @@
 /* 보관·섭취 안내의 신선도 단계 (신선 → 품질 저하 → 섭취 부적합) */
 .shop .fresh-stages { margin: 8px 0; padding-left: 18px; }
 .shop .fresh-stages li { margin: 4px 0; line-height: 1.6; }
+/* 주문 상세: 농가별 배송 (농가마다 따로 보낸다) */
+.shop .farm-shipments { margin: 0; padding-left: 18px; }
+.shop .farm-shipments li { margin: 2px 0; }
