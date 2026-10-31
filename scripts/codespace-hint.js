@@ -5,7 +5,9 @@ import { spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 
 const LOG = '/tmp/farm-mall-demo.log'
-const up = () => fetch('http://127.0.0.1:3066/').then((r) => r.ok).catch(() => false)
+// 화면(Vite)이 먼저 켜지고 백엔드는 DB 준비 뒤에 켜진다 → 둘 다 응답할 때 "켜졌어요"
+const ok = (url) => fetch(url).then((r) => r.ok).catch(() => false)
+const up = async () => (await ok('http://127.0.0.1:3066/')) && ok('http://127.0.0.1:3066/api/products')
 
 function address() {
   const name = process.env.CODESPACE_NAME
