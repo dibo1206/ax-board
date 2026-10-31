@@ -97,14 +97,17 @@ const ROUTES = [
 function loadCatalog() {
   return cached('chat:catalog', 15_000, async () => {
     const [products, items] = await Promise.all([
-      pool.query(`SELECT p.*, (p.stock = 0) AS sold_out, s.name AS seller_name, s.region AS seller_region, s.story AS seller_story
+      pool.query(`SELECT p.*, (p.stock = 0) AS sold_out, s.name AS seller_name, s.region AS seller_region, s.story AS seller_story,
+                         (SELECT count(*) FILTER (WHERE r.info_match = 'no') >= 3 AND count(*) FILTER (WHERE r.info_match = 'no') * 2 >= count(r.info_match) FROM reviews r WHERE r.product_code = p.product_code AND NOT r.hidden) AS info_disputed
                   FROM products p JOIN sellers s ON s.seller_code = p.seller_code
                   WHERE p.status = 'active' ORDER BY p.product_code LIMIT 300`),
       pool.query('SELECT * FROM items'),
     ])
+    // 후기에서 '표시와 달랐어요'가 많은 상품은 당도를 말하지 않는다 (상품 페이지와 같은 규칙)
+    const rows = products.rows.map((p) => (p.info_disputed ? { ...p, brix: null } : p))
     // 검수 전 품목은 이름·종류만, 그것도 판매 중인 상품이 있을 때만 (요청만 된 품목을 파는 것처럼 말하지 않게)
-    const selling = new Set(products.rows.map((p) => p.item_code))
-    return { products: products.rows, items: items.rows.filter((i) => i.status !== 'pending' || selling.has(i.item_code)).map(publicItem) }
+    const selling = new Set(rows.map((p) => p.item_code))
+    return { products: rows, items: items.rows.filter((i) => i.status !== 'pending' || selling.has(i.item_code)).map(publicItem) }
   })
 }
 
@@ -238,7 +241,9 @@ const FACTS = [
     re: /달아|달달|단가요|당도|브릭스|brix/i,
     needsBrix: true,
     specific: true,
-    say: (p) => (p.brix
+    say: (p) => (p.info_disputed
+      ? `${p.label} 당도는 구매 후기에서 표시와 다르다는 의견이 많아서 지금은 안내하지 않아요.`
+      : p.brix
       ? `${p.label} 당도는 ${p.brix}Brix예요${p.brix_measured_at ? ` (${p.brix_measured_at} 측정)` : ''}.`
       : `${p.label} 상품은 아직 측정한 당도 정보가 없어요.`),
   },

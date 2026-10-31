@@ -154,8 +154,13 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
       <dl>
         {product.weight_g && <><dt>1개 무게</dt><dd>{product.weight_g}g</dd></>}
         {product.count_per_box && <><dt>박스당</dt><dd>{product.count_per_box}개</dd></>}
-        {item.show_brix && product.brix && (
-          <><dt>당도</dt><dd>{product.brix}Brix{product.brix_measured_at && ` · ${product.brix_measured_at.slice(0, 10)} 측정`}</dd></>
+        {/* 당도는 판매자가 잰 값: 측정일과 당도계 사진을 함께 보여 준다. 후기에서 '표시와 달랐어요'가 많으면 내린다 */}
+        {item.show_brix && product.brix && !product.info_disputed && (
+          <><dt>당도</dt><dd>{product.brix}Brix <span className="muted">(판매자 측정{product.brix_measured_at && ` · ${product.brix_measured_at.slice(0, 10)}`})</span>
+            {product.brix_photo_url && <> <a href={product.brix_photo_url} target="_blank" rel="noreferrer">측정 사진</a></>}</dd></>
+        )}
+        {item.show_brix && product.brix && product.info_disputed && (
+          <><dt>당도</dt><dd className="muted">구매 후기에서 표시와 다르다는 의견이 많아 당도 표시를 잠시 내렸어요</dd></>
         )}
         {product.harvest_date && <><dt>수확일</dt><dd>{product.harvest_date.slice(0, 10)}</dd></>}
         <dt>판매 농가</dt><dd>{seller.name} · {seller.region}</dd>

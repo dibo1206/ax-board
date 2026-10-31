@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { thumbUrl, unitPrice } from '../shop/shared.js'
 import { AiDraft } from './AiDraft.jsx'
 import { adminApi } from './api.js'
@@ -49,6 +49,14 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
   const [form, setForm] = useState(() => toForm(product))
   const [errors, setErrors] = useState([])
   const [image, setImage] = useState(null)
+  const [brixPhoto, setBrixPhoto] = useState(null) // 당도계 사진 (새로 올릴 것)
+  // 당도를 바꾸면 서버가 옛 사진을 내리므로, 지금 적힌 당도가 저장된 값과 같을 때만 옛 사진을 보여 준다
+  const brixPhotoUrl = product?.brix_photo_url && Number(product.brix) === Number(form.brix) ? product.brix_photo_url : null
+  const [changes, setChanges] = useState([]) // 판매 중 가격·당도·수확일 수정 이력 (관리자만)
+  useEffect(() => {
+    if (!product || mode !== 'admin') return
+    api(`/products/${product.product_code}/changes`).then(setChanges).catch(() => {})
+  }, [product, mode, api])
   const [gallery, setGallery] = useState([]) // 새로 올릴 상세 사진들
   const [photos, setPhotos] = useState(() => ({ main: product?.image_url ?? null, list: product?.images ?? [] }))
   const [saving, setSaving] = useState(false)
@@ -95,6 +103,9 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
           body: image,
         })
       }
+      if (brixPhoto && saved.brix) {
+        await api(`/products/${saved.product_code}/image?role=brix`, { method: 'POST', headers: { 'Content-Type': brixPhoto.type }, body: brixPhoto })
+      }
       for (const file of gallery) {
         await api(`/products/${saved.product_code}/image?role=gallery`, { method: 'POST', headers: { 'Content-Type': file.type }, body: file })
       }
@@ -128,6 +139,12 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
       <h3>{isNew ? '새 상품 등록' : `상품 수정 · ${product.product_code}`}</h3>
       {product?.status === 'pending' && <p className="warn">검토 대기 중인 상품이에요. {seller ? '회사 관리자가 승인하면 판매돼요.' : '확인 후 [저장하고 판매]를 누르면 승인돼요.'}</p>}
       {product?.review_note && <p className="warn">반려 사유: {product.review_note}</p>}
+      {changes.length > 0 && (
+        <details className="preview">
+          <summary>판매 중 수정 이력 {changes.length}건 (가격·당도·수확일)</summary>
+          <ul>{changes.map((c, i) => <li key={i}>{c.changed_at.slice(0, 16).replace('T', ' ')} · {c.changed_by} · {c.field}: {c.old_value ?? '없음'} → {c.new_value ?? '없음'}</li>)}</ul>
+        </details>
+      )}
 
       <label>품목*
         <select value={form.item_code} onChange={set('item_code')}>
@@ -189,6 +206,14 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
           <label>당도 잰 날<input type="date" value={form.brix_measured_at} onChange={set('brix_measured_at')} /></label>
         </div>
       )}
+      {/* 거짓 표시 막기: 당도계 화면 사진. 판매자가 당도를 적으면 사진이 있어야 승인되고, 손님 화면에 [측정 사진]으로 보인다 */}
+      {item?.show_brix && form.brix && (
+        <label>당도계 사진 {seller && <span className="muted">(당도를 적으면 꼭 올려 주세요 · 당도를 바꾸면 다시 올려야 해요)</span>}
+          {brixPhotoUrl && !brixPhoto && <span className="muted"> · <a href={brixPhotoUrl} target="_blank" rel="noreferrer">올린 사진 보기</a></span>}
+          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setBrixPhoto(e.target.files?.[0] ?? null)} />
+        </label>
+      )}
+      {item?.brix_min != null && item?.brix_max != null && <p className="muted">{item.name} 보통 당도: {item.brix_min}~{item.brix_max}Brix</p>}
       {item && item.category !== '가공품' && (
         <label>수확일<input type="date" value={form.harvest_date} onChange={set('harvest_date')} /></label>
       )}

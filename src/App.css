@@ -220,3 +220,7 @@ a.card { text-decoration: none; height: 100%; box-sizing: border-box; }
 .faq-box details { padding: 8px 0; border-bottom: 1px solid var(--border); }
 .faq-box summary { cursor: pointer; font-weight: 600; }
 .faq-box details p { margin: 6px 0 0; color: var(--muted); }
+
+/* 후기: 상품 페이지 정보와 맞았는지 (거짓 표시 막기) */
+.info-match { border: 0; padding: 0; margin: 8px 0; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.info-match legend { width: 100%; margin-bottom: 4px; }

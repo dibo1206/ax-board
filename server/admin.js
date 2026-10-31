@@ -32,6 +32,30 @@ export async function codeSets() {
   }
 }
 
+// 판매자 입력 검사용: 품목별 보통 당도 범위 (비어 있으면 그 품목은 검사하지 않음)
+export async function itemRanges() {
+  const { rows } = await pool.query('SELECT item_code, name, brix_min, brix_max FROM items WHERE brix_min IS NOT NULL OR brix_max IS NOT NULL')
+  return new Map(rows.map((r) => [r.item_code, { name: r.name, min: r.brix_min == null ? null : Number(r.brix_min), max: r.brix_max == null ? null : Number(r.brix_max) }]))
+}
+
+// 판매 중인 상품의 가격·당도·수확일이 바뀌면 누가 언제 무엇을 바꿨는지 남긴다 (거짓 표시를 나중에 따져 볼 수 있게)
+const WATCHED = [['price', '가격'], ['brix', '당도'], ['brix_measured_at', '당도 잰 날'], ['harvest_date', '수확일']]
+export async function recordChanges(before, after, who) {
+  if (before.status !== 'active') return
+  // 숫자는 숫자로 비교한다 (DB 의 "14.0" 과 화면의 "14" 는 같은 값)
+  const norm = (v) => (v == null || v === '' ? null : /^\d+(\.\d+)?$/.test(String(v)) ? String(Number(v)) : String(v))
+  for (const [key, label] of WATCHED) {
+    if (norm(before[key]) === norm(after[key])) continue
+    await pool.query('INSERT INTO product_changes (product_code, field, old_value, new_value, changed_by) VALUES ($1, $2, $3, $4, $5)',
+      [before.product_code, label, norm(before[key]), norm(after[key]), who])
+  }
+}
+
+adminRouter.get('/products/:code/changes', async (req, res) => {
+  const { rows } = await pool.query('SELECT field, old_value, new_value, changed_by, changed_at FROM product_changes WHERE product_code = $1 ORDER BY changed_at DESC LIMIT 50', [req.params.code])
+  res.json(rows)
+})
+
 // 상품 등록 화면에 필요한 선택지와 품목 기준 정보
 adminRouter.get('/options', async (req, res) => {
   const [items, sellers, tags] = await Promise.all([
@@ -45,7 +69,9 @@ adminRouter.get('/options', async (req, res) => {
 // 임시 저장 상품까지 모두
 adminRouter.get('/products', async (req, res) => {
   const { rows } = await pool.query(`
-    SELECT p.*, (p.stock = 0) AS sold_out, i.name AS item_name, i.category, i.status AS item_status, s.name AS seller_name
+    SELECT p.*, (p.stock = 0) AS sold_out, i.name AS item_name, i.category, i.status AS item_status, i.show_brix, s.name AS seller_name,
+           (SELECT count(*) FROM reviews r WHERE r.product_code = p.product_code AND r.info_match = 'no' AND NOT r.hidden)::int AS info_no,
+           (SELECT count(*) FROM product_changes c WHERE c.product_code = p.product_code)::int AS changes
     FROM products p JOIN items i ON i.item_code = p.item_code JOIN sellers s ON s.seller_code = p.seller_code
     ORDER BY (p.status = 'pending') DESC, p.updated_at DESC`)
   res.json(rows)
@@ -104,7 +130,12 @@ adminRouter.patch('/products/:code', async (req, res) => {
   const merged = { ...current.rows[0], ...req.body, product_code: req.params.code }
   const { product, errors } = validateProduct(merged, { ...(await codeSets()), isNew: false })
   if (errors) return res.status(400).json({ error: errors.join(' '), errors })
+  // 판매자가 당도를 적어 검토를 요청한 상품은 당도계 사진이 있어야 승인한다 (관리자가 직접 등록한 상품은 해당 없음)
+  if (current.rows[0].status === 'pending' && product.status === 'active' && product.brix && !current.rows[0].brix_photo_url && current.rows[0].source?.startsWith('판매자')) {
+    return res.status(400).json({ error: '당도를 적은 판매자 상품은 당도계 사진이 있어야 승인할 수 있어요. 판매자에게 사진을 요청해 주세요.' })
+  }
   if (product.status !== 'draft') product.review_note = null // 승인하면 반려 사유는 지운다
+  await recordChanges(current.rows[0], product, `관리자 ${req.admin.loginId}`)
   const row = await updateProduct(req.params.code, product)
   const what = current.rows[0].status === 'pending' && product.status !== 'pending'
     ? (product.status === 'active' ? ' (승인)' : ' (반려)') : ''
@@ -153,8 +184,20 @@ export async function storeImage(req, res) {
   if (!ext || !Buffer.isBuffer(req.body) || req.body.length === 0 || !looksLike(type, req.body)) {
     return res.status(400).json({ error: '사진은 jpg, png, webp 파일만 올릴 수 있어요. (2MB 이하)' })
   }
-  const current = await pool.query('SELECT image_url, images FROM products WHERE product_code = $1', [req.params.code])
+  const current = await pool.query('SELECT image_url, images, brix_photo_url FROM products WHERE product_code = $1', [req.params.code])
   if (!current.rowCount) return res.status(404).json({ error: '상품을 찾지 못했어요.' })
+  if (req.query.role === 'brix') {
+    // 당도계 사진 (?role=brix): 상품 페이지의 당도 옆 [측정 사진]으로 보인다. 새로 올리면 옛 사진은 지운다
+    let brixUrl
+    try {
+      brixUrl = await saveOptimized(req.params.code, req.body)
+    } catch {
+      return res.status(400).json({ error: '사진을 읽지 못했어요. 다른 사진으로 올려 주세요.' })
+    }
+    const updated = await pool.query('UPDATE products SET brix_photo_url = $1, updated_at = now() WHERE product_code = $2 RETURNING *', [brixUrl, req.params.code])
+    await deleteFiles(req.params.code, current.rows[0].brix_photo_url)
+    return res.json(updated.rows[0])
+  }
   const gallery = req.query.role === 'gallery'
   if (gallery && current.rows[0].images.length >= MAX_GALLERY) return res.status(400).json({ error: `상세 사진은 ${MAX_GALLERY}장까지 올릴 수 있어요.` })
   let url
@@ -175,8 +218,9 @@ export async function removeImage(req, res) {
   const url = typeof req.body.url === 'string' ? req.body.url : ''
   const { rows } = await pool.query(
     `UPDATE products SET image_url = CASE WHEN image_url = $1 THEN NULL ELSE image_url END,
+       brix_photo_url = CASE WHEN brix_photo_url = $1 THEN NULL ELSE brix_photo_url END,
        images = array_remove(images, $1), updated_at = now()
-     WHERE product_code = $2 AND (image_url = $1 OR $1 = ANY(images)) RETURNING *`,
+     WHERE product_code = $2 AND (image_url = $1 OR brix_photo_url = $1 OR $1 = ANY(images)) RETURNING *`,
     [url, req.params.code],
   )
   if (!rows.length) return res.status(404).json({ error: '그 사진을 찾지 못했어요.' })

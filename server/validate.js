@@ -8,7 +8,8 @@ const text = (v) => (typeof v === 'string' ? v.trim() : v == null ? '' : String(
 // 통과하면 { product }, 아니면 { errors: [사람이 읽을 문장] }
 // findBanned: 서버는 금지어 사전(banned.js), 데이터 불러오기 스크립트는 기본 목록
 const defaultFindBanned = (value) => FORBIDDEN.filter((w) => value.includes(w))
-export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew, findBanned = defaultFindBanned }) {
+// itemRanges: 판매자 입력만 품목별 보통 당도 범위로 검사한다 (Map 품목 코드 → {name, min, max}). 관리자는 넘기지 않음
+export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew, findBanned = defaultFindBanned, itemRanges = null }) {
   const errors = []
   const p = {
     product_code: text(input.product_code),
@@ -54,6 +55,19 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
   }
   for (const [key, label] of [['brix_measured_at', '당도 잰 날'], ['harvest_date', '수확일']]) {
     if (p[key] && !isDate(p[key])) errors.push(`${label}는 2026-10-17 형식으로 적어 주세요.`)
+  }
+  // 거짓 표시 막기: 날짜끼리 맞는지 (오늘은 한국 날짜), 당도를 적으면 잰 날도
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
+  const dated = (key) => p[key] && isDate(p[key])
+  if (dated('harvest_date') && p.harvest_date > today) errors.push('수확일이 오늘보다 뒤예요. 날짜를 확인해 주세요.')
+  if (dated('brix_measured_at') && p.brix_measured_at > today) errors.push('당도 잰 날이 오늘보다 뒤예요. 날짜를 확인해 주세요.')
+  if (p.brix && !p.brix_measured_at) errors.push('당도를 적으면 잰 날도 적어 주세요.')
+  if (dated('harvest_date') && dated('brix_measured_at') && p.brix_measured_at < p.harvest_date) {
+    errors.push('당도를 수확일보다 먼저 잰 것으로 되어 있어요. 날짜를 확인해 주세요.')
+  }
+  const range = itemRanges?.get(p.item_code)
+  if (range && /^\d+(\.\d)?$/.test(p.brix) && ((range.min != null && Number(p.brix) < range.min) || (range.max != null && Number(p.brix) > range.max))) {
+    errors.push(`${range.name} 당도는 보통 ${range.min ?? '?'}~${range.max ?? '?'}Brix예요. 측정값이 맞으면 회사에 문의해 주세요.`)
   }
   if (p.external_url && !/^https?:\/\//.test(p.external_url)) errors.push('판매 링크는 http로 시작해야 해요.')
   const unknown = p.tags.filter((t) => !tagCodes.has(t))

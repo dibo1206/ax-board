@@ -101,11 +101,14 @@ const PRODUCT_SELECT = `
   SELECT p.*, (p.stock = 0) AS sold_out,
          i.name AS item_name, i.category, i.show_brix,
          s.name AS seller_name, s.region AS seller_region, s.is_company,
-         rv.rating, COALESCE(rv.review_count, 0) AS review_count, COALESCE(sales.sold, 0) AS sold_30d
+         rv.rating, COALESCE(rv.review_count, 0) AS review_count, COALESCE(sales.sold, 0) AS sold_30d,
+         -- 후기에서 '표시 정보와 달랐어요'가 3개 이상이고 답한 사람의 절반 이상이면 당도 표시를 내린다
+         (COALESCE(rv.info_no, 0) >= 3 AND rv.info_no * 2 >= rv.info_answers) AS info_disputed
   FROM products p
   JOIN items i ON i.item_code = p.item_code
   JOIN sellers s ON s.seller_code = p.seller_code
-  LEFT JOIN (SELECT product_code, round(avg(rating)::numeric, 1)::float AS rating, count(*)::int AS review_count
+  LEFT JOIN (SELECT product_code, round(avg(rating)::numeric, 1)::float AS rating, count(*)::int AS review_count,
+                    count(*) FILTER (WHERE info_match = 'no')::int AS info_no, count(info_match)::int AS info_answers
              FROM reviews WHERE NOT hidden GROUP BY product_code) rv ON rv.product_code = p.product_code
   LEFT JOIN (SELECT oi.product_code, sum(oi.quantity)::int AS sold
              FROM order_items oi JOIN orders o ON o.id = oi.order_id

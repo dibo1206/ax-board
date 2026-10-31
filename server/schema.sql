@@ -323,6 +323,28 @@ CREATE TABLE IF NOT EXISTS order_shipments (
 );
 CREATE INDEX IF NOT EXISTS order_shipments_seller_idx ON order_shipments (seller_code, status);
 
+-- 거짓 표시 막기 (당도·수확일은 판매자가 적는 값이라 몰이 직접 잴 수 없다 → 쓰기 어렵게, 이상하면 거르고, 거짓이면 드러나게)
+-- 1) 당도계 사진: 당도를 적은 판매자 상품은 사진이 있어야 승인. 판매 중에 당도를 바꾸면 옛 사진은 내린다
+ALTER TABLE products ADD COLUMN IF NOT EXISTS brix_photo_url TEXT;
+-- 2) 품목별 보통 당도 범위 (식품 담당이 출처를 보고 채운다. 비어 있으면 검사하지 않음)
+ALTER TABLE items ADD COLUMN IF NOT EXISTS brix_min NUMERIC(4, 1);
+ALTER TABLE items ADD COLUMN IF NOT EXISTS brix_max NUMERIC(4, 1);
+-- 3) 판매 중 상품의 가격·당도·수확일 수정 이력 (누가 언제 무엇을)
+CREATE TABLE IF NOT EXISTS product_changes (
+  id SERIAL PRIMARY KEY,
+  product_code TEXT NOT NULL REFERENCES products(product_code) ON DELETE CASCADE,
+  field TEXT NOT NULL,
+  old_value TEXT,
+  new_value TEXT,
+  changed_by TEXT NOT NULL,
+  changed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS product_changes_idx ON product_changes (product_code, changed_at DESC);
+-- 4) 후기: 상품 페이지의 당도·수확일 같은 정보와 맞았는지 (yes / no / 비움). '달랐어요'가 많으면 당도 표시를 내린다
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS info_match TEXT;
+ALTER TABLE reviews DROP CONSTRAINT IF EXISTS reviews_info_match_check;
+ALTER TABLE reviews ADD CONSTRAINT reviews_info_match_check CHECK (info_match IN ('yes', 'no'));
+
 -- 금지어 사전 (관리자 화면 [금지어]에서 고침). 기본 단어는 표가 비어 있을 때 한 번만 넣는다 (지운 단어가 다시 생기지 않게)
 CREATE TABLE IF NOT EXISTS banned_words (
   word TEXT PRIMARY KEY,

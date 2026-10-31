@@ -8,7 +8,9 @@ import { getPolicy, ORDER_STATUS, post, readCart, takePending, when, won, writeC
 export function OrderDetail({ order, phone = '', onConfirm = null }) {
   const [writing, setWriting] = useState(null)
   const [written, setWritten] = useState([])
-  const canReview = (i) => order.status === 'delivered' && !i.reviewed && !written.includes(i.product_code)
+  // 농가마다 따로 오니, 그 상품을 보낸 농가의 배송이 끝났으면 후기를 쓸 수 있다
+  const arrived = (i) => order.status === 'delivered' || order.shipments?.some((s) => s.seller_code === i.seller_code && s.status === 'delivered')
+  const canReview = (i) => arrived(i) && !i.reviewed && !written.includes(i.product_code)
   return (
     <>
       <dl className="detail-list">

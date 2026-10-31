@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { adminApi } from './api.js'
 
 // 품목 검수: 판매자가 요청한 새 품목(예: 수박)의 보관·안전 정보를 관리자가 확인한다
@@ -11,6 +11,8 @@ const splitCommas = (text) => text.split(',').map((s) => s.trim()).filter(Boolea
 function toForm(item) {
   return {
     show_brix: item.show_brix,
+    brix_min: item.brix_min ?? '',
+    brix_max: item.brix_max ?? '',
     storage_method: item.storage_method ?? '',
     stage1_state: item.stage1_state ?? '',
     stage1_uses: commas(item.stage1_uses),
@@ -117,6 +119,13 @@ function ItemCard({ item, onDone }) {
         <label>알레르기 표시 (쉼표로, 없으면 비우기)<input value={form.allergens} onChange={set('allergens')} /></label>
         <label className="check"><input type="checkbox" checked={form.show_brix} onChange={set('show_brix')} /> 당도 표시</label>
       </div>
+      {form.show_brix && (
+        <div className="row">
+          <label>보통 당도 최소 (Brix)<input value={form.brix_min} onChange={set('brix_min')} inputMode="decimal" placeholder="출처 확인 후" /></label>
+          <label>보통 당도 최대 (Brix)<input value={form.brix_max} onChange={set('brix_max')} inputMode="decimal" placeholder="출처 확인 후" /></label>
+        </div>
+      )}
+      {form.show_brix && <p className="muted">판매자가 이 범위 밖의 당도를 적으면 저장이 막혀요. 근거 없이 정하지 말고 출처에 나온 값으로 적어 주세요.</p>}
       <label>레시피 (한 줄에 하나: 제목: 재료: 방법)<textarea rows={3} value={form.recipes} onChange={set('recipes')} placeholder="수박 화채: 수박·사이다: 깍둑썰어 사이다를 붓기" /></label>
       <label>출처* (확인한 자료의 기관·제목·주소)<textarea rows={2} value={form.source} onChange={set('source')} maxLength={1000} placeholder="예: 농촌진흥청 농사로 「수박 보관법」 https://..." /></label>
 
@@ -124,7 +133,7 @@ function ItemCard({ item, onDone }) {
       {error && <p className="error">{error}</p>}
       <div className="actions">
         <button type="button" className="button ghost" onClick={save}>저장</button>
-        <button type="button" className="button" onClick={approve}>검수 완료</button>
+        {item.status === 'pending' && <button type="button" className="button" onClick={approve}>검수 완료</button>}
       </div>
     </div>
   )
@@ -132,13 +141,15 @@ function ItemCard({ item, onDone }) {
 
 export function ItemReview({ onCount }) {
   const [list, setList] = useState(null)
+  const [all, setAll] = useState(false) // 검수 끝난 품목도 보기 (보관법·보통 당도 범위 고치기)
+  const [open, setOpen] = useState(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
-  const load = () => adminApi('/items/review').then((rows) => { setList(rows); onCount?.(rows.length) }).catch((e) => setError(e.message))
-  useEffect(() => {
-    adminApi('/items/review').then((rows) => { setList(rows); onCount?.(rows.length) }).catch((e) => setError(e.message))
-  }, [onCount])
+  const load = useCallback(() => adminApi(`/items/review${all ? '?all=1' : ''}`)
+    .then((rows) => { setList(rows); onCount?.(rows.filter((r) => r.status === 'pending').length) })
+    .catch((e) => setError(e.message)), [all, onCount])
+  useEffect(() => { load() }, [load])
 
   if (!list) return error ? <p className="error">{error}</p> : <p className="muted">불러오는 중…</p>
   return (
@@ -146,9 +157,16 @@ export function ItemReview({ onCount }) {
       <p className="muted">판매자가 요청한 새 품목이에요. AI 초안과 자동 검사는 참고만 하고, 보관법·먹으면 안 되는 신호를 출처(농촌진흥청 농사로, 식품안전나라 등)와 대조한 뒤 검수 완료해 주세요.
         검수 전에는 손님 화면과 상담에 이 품목의 보관·안전 정보가 나가지 않아요.</p>
       {message && <p className="success">{message}</p>}
-      {list.length === 0 ? <p className="box muted">검수 기다리는 품목이 없어요.</p> : list.map((item) => (
-        <ItemCard key={item.item_code} item={item} onDone={(text) => { setMessage(text); load() }} />
-      ))}
+      <label className="check"><input type="checkbox" checked={all} onChange={(e) => { setAll(e.target.checked); setOpen(null) }} /> 검수 끝난 품목도 보기 (보관법·보통 당도 범위 고치기)</label>
+      {list.filter((i) => i.status === 'pending').length === 0 && <p className="box muted">검수 기다리는 품목이 없어요.</p>}
+      {list.map((item) => (item.status === 'pending' || open === item.item_code
+        ? <ItemCard key={item.item_code} item={item} onDone={(text) => { setMessage(text); load() }} />
+        : (
+          <p key={item.item_code} className="box">
+            <button type="button" className="link" onClick={() => setOpen(item.item_code)}>{item.category} · {item.name}</button>
+            <span className="muted"> · 검수 {item.reviewed_by ?? '전'}{item.brix_min != null || item.brix_max != null ? ` · 보통 당도 ${item.brix_min ?? '?'}~${item.brix_max ?? '?'}Brix` : ''}</span>
+          </p>
+        )))}
     </section>
   )
 }

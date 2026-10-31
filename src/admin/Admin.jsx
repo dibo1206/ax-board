@@ -205,7 +205,11 @@ function Admin() {
               {products.map((p) => (
                 <tr key={p.product_code} className={p.sold_out ? 'dim' : ''}>
                   <td><strong>{p.name}</strong><br /><span className="muted">{p.category} · {p.seller_name}</span>
-                    {p.item_status === 'pending' && <> <button type="button" className="badge" onClick={() => setTab('items')}>품목 검수 전</button></>}</td>
+                    {p.item_status === 'pending' && <> <button type="button" className="badge" onClick={() => setTab('items')}>품목 검수 전</button></>}
+                    {/* 거짓 표시 막기: 당도계 사진이 없는 당도, 후기의 '표시와 달랐어요', 판매 중 수정 이력 */}
+                    {p.show_brix && p.brix && !p.brix_photo_url && <> <span className="badge pending">당도 사진 없음</span></>}
+                    {p.info_no > 0 && <> <span className="badge soldout">표시와 다름 후기 {p.info_no}</span></>}
+                    {p.changes > 0 && <> <span className="muted">수정 이력 {p.changes}</span></>}</td>
                   <td>{won(p.price)}</td>
                   <td>{p.sold_out ? <span className="badge soldout">품절</span> : `${p.stock}개`}</td>
                   <td><StatusLabel product={p} /></td>

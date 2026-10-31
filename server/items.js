@@ -51,16 +51,18 @@ export function checkItem(item) {
   if (item.category !== '가공품' && !(item.stage1_state && item.stage2_state)) issues.push({ level: 'warn', field: '신선도 상태', problem: '신선·품질 저하 상태가 비어 있어요' })
   if (item.category === '가공품' && !item.opened_note) issues.push({ level: 'warn', field: '개봉 후', problem: '비어 있어요' })
   if (!item.recipes?.length) issues.push({ level: 'warn', field: '레시피', problem: '비어 있어요' })
+  if (item.brix_min != null && item.brix_max != null && Number(item.brix_min) > Number(item.brix_max)) issues.push({ level: 'error', field: '보통 당도 범위', problem: '최소가 최대보다 커요' })
+  if (item.show_brix && item.brix_min == null && item.brix_max == null) issues.push({ level: 'warn', field: '보통 당도 범위', problem: '비어 있으면 판매자가 적은 당도를 범위로 검사하지 않아요' })
   return issues
 }
 
-// GET /items/review — 검수 기다리는 품목 + 1차 검사 결과 + 그 품목을 쓰는 상품
+// GET /items/review — 검수 기다리는 품목 + 1차 검사 결과 + 그 품목을 쓰는 상품. ?all=1 이면 검수 끝난 품목도 (고치기용)
 export async function listReview(req, res) {
   const { rows } = await pool.query(`
     SELECT i.*, COALESCE(json_agg(json_build_object('code', p.product_code, 'name', p.name, 'status', p.status))
       FILTER (WHERE p.product_code IS NOT NULL), '[]') AS products
     FROM items i LEFT JOIN products p ON p.item_code = i.item_code
-    WHERE i.status = 'pending' GROUP BY i.item_code ORDER BY i.created_at`)
+    WHERE i.status = 'pending' OR $1 GROUP BY i.item_code ORDER BY (i.status = 'pending') DESC, i.category, i.name`, [req.query.all === '1'])
   res.json(rows.map((item) => ({ ...item, issues: checkItem(item) })))
 }
 
@@ -70,8 +72,11 @@ export async function saveItem(req, res) {
   const recipes = (Array.isArray(b.recipes) ? b.recipes : []).slice(0, 5)
     .map((r) => ({ title: text(r?.title, 30), ingredients: text(r?.ingredients, 60), method: text(r?.method, 120) }))
     .filter((r) => r.title && r.method)
+  const brixLimit = (v) => (v === '' || v == null || !/^\d{1,2}(\.\d)?$/.test(String(v)) ? null : Number(v))
   const values = {
     show_brix: b.show_brix === true,
+    brix_min: brixLimit(b.brix_min), // 보통 당도 범위: 판매자가 이 범위 밖 당도를 적으면 막힌다
+    brix_max: brixLimit(b.brix_max),
     storage_method: text(b.storage_method, 400) || null,
     stage1_state: text(b.stage1_state, 200) || null,
     stage2_state: text(b.stage2_state, 200) || null,
