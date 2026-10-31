@@ -16,6 +16,7 @@ function makeApi(base) {
       const error = new Error(data.error || `요청이 실패했어요 (${response.status})`)
       error.status = response.status
       error.errors = data.errors
+      error.issues = data.issues // 품목 검수: 고칠 것 목록
       error.needOtp = data.needOtp === true
       throw error
     }

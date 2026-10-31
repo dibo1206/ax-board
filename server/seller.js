@@ -6,6 +6,7 @@ import { requireSeller } from './auth.js'
 import { bannedMessage, findBanned } from './banned.js'
 import { fillItem, listTemplates, productDraft } from './content.js'
 import { pool } from './db.js'
+import { requestItem } from './items.js'
 import { validateProduct } from './validate.js'
 
 export const sellerRouter = express.Router()
@@ -17,6 +18,7 @@ const text = (v) => (typeof v === 'string' ? v.trim() : '')
 sellerRouter.get('/ai/templates', listTemplates)
 sellerRouter.post('/ai/product-draft', productDraft)
 sellerRouter.post('/items/:code/fill', fillItem)
+sellerRouter.post('/items/request', requestItem) // 목록에 없는 품목 요청 → 관리자 검수 (items.js)
 const mine = (req) => req.seller.sellerCode
 
 // 상품이 내 농가 것인지 확인하고 req.product에 담는다

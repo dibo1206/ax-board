@@ -19,6 +19,7 @@ import { describeRecommendation, loadActive, readWish, recommend } from './recom
 import { SHIPPING } from './policy.js'
 import { mostSimilar, similarity } from './similar.js'
 import { findBanned } from './banned.js'
+import { publicItem } from './items.js'
 
 const RULES_FILE = new URL('./chat_rules.md', import.meta.url)
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
@@ -101,7 +102,9 @@ function loadCatalog() {
                   WHERE p.status = 'active' ORDER BY p.product_code LIMIT 300`),
       pool.query('SELECT * FROM items'),
     ])
-    return { products: products.rows, items: items.rows }
+    // 검수 전 품목은 이름·종류만, 그것도 판매 중인 상품이 있을 때만 (요청만 된 품목을 파는 것처럼 말하지 않게)
+    const selling = new Set(products.rows.map((p) => p.item_code))
+    return { products: products.rows, items: items.rows.filter((i) => i.status !== 'pending' || selling.has(i.item_code)).map(publicItem) }
   })
 }
 
@@ -152,6 +155,7 @@ function describeProduct(p, item) {
 }
 
 function describeItem(item) {
+  if (item.pending) return `[품목 코드 ${item.item_code}] ${item.name} (${item.category}) — 담당자 확인 전이라 보관·안전·레시피 정보 없음 (먹어도 되는지·보관법은 상품 Q&A로 안내)`
   const lines = [
     `[품목 코드 ${item.item_code}] ${item.name} (${item.category}) 기준 정보`,
     `- 보관: ${item.storage_method || '정보 없음'}`,
@@ -489,6 +493,18 @@ function answerTemplate(message, catalog, ctx) {
     return { ...base, answer: `어떤 상품의 ${josa(topic.word, '을', '를')} 알려 드릴까요?`, sources: [], productCode: null, suggestions: catalog.items.slice(0, 6).map((i) => `${i.name} ${topic.word}`) }
   }
   const ofItems = catalog.products.filter((p) => items.some((i) => i.item_code === p.item_code))
+  // 검수 전 품목: 보관·안전·레시피·알레르기를 지어내지 않고 담당자에게 넘긴다 (의심되면 먹지 말라는 말은 한다)
+  const pendingItem = SAY_ITEM[topic.kind] && items.find((i) => i.pending)
+  if (pendingItem) {
+    const product = ofItems.find((p) => p.item_code === pendingItem.item_code)
+    return {
+      ...base,
+      answer: `${josa(pendingItem.name, '은', '는')} 담당자가 아직 ${({ recipe: '레시피', allergy: '알레르기' })[topic.kind] ?? '보관·안전'} 정보를 확인하고 있어요.${topic.kind === 'safety' ? ' 곰팡이나 이상한 냄새처럼 의심되는 상태라면 드시지 마시고, 사진과 함께 알려 주세요.' : ''} ${QNA_HINT}`,
+      sources: product ? [{ code: product.product_code, name: product.name }] : [],
+      productCode: product?.product_code ?? null,
+      handoff: true, action: 'qna',
+    }
+  }
   if (SAY_ITEM[topic.kind]) {
     const firsts = items.map((i) => ofItems.find((p) => p.item_code === i.item_code)).filter(Boolean)
     const current = ctx.current && items.some((i) => i.item_code === ctx.current.item_code) ? ctx.current : firsts[0]

@@ -24,6 +24,10 @@ function ItemPreview({ item }) {
   if (!item) return null
   return (
     <div className="preview">
+      {item.status === 'pending' && (
+        <p className="warn">새로 요청한 품목이라 관리자 검수 전이에요. 상품은 승인되면 팔 수 있지만, 보관·안전 정보는 검수가 끝나야 손님에게 보여요.
+          [AI로 채우기]를 누르면 품목 정보 초안도 같이 만들어 검수를 도와요.</p>
+      )}
       <strong>{item.name} 품목 기준 정보가 자동으로 붙어요</strong>
       <p>보관: {item.storage_method}</p>
       {item.stage1_state
@@ -50,8 +54,12 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
   const [saving, setSaving] = useState(false)
   const [itemDraft, setItemDraft] = useState(null) // AI가 만든 품목(원물) 초안 — 품목 정보가 비어 있을 때만
   const [fillItem, setFillItem] = useState(true)
+  // 목록에 없는 품목 요청 (관리자 검수 후 정보가 손님에게 보인다)
+  const [extraItems, setExtraItems] = useState([])
+  const [request, setRequest] = useState(null) // null: 닫힘, { name, category, error }
+  const items = [...options.items, ...extraItems.filter((x) => !options.items.some((i) => i.item_code === x.item_code))]
 
-  const item = options.items.find((i) => i.item_code === form.item_code)
+  const item = items.find((i) => i.item_code === form.item_code)
   const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
   const toggleTag = (code) => setForm((prev) => ({
     ...prev,
@@ -102,6 +110,17 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
     }
   }
 
+  async function sendRequest() {
+    try {
+      const { item: created } = await api('/items/request', { method: 'POST', body: { name: request.name, category: request.category } })
+      setExtraItems((prev) => [...prev, created])
+      setForm((prev) => ({ ...prev, item_code: created.item_code }))
+      setRequest(null)
+    } catch (e) {
+      setRequest((prev) => ({ ...prev, error: e.message }))
+    }
+  }
+
   const groups = [...new Set(options.tags.map((t) => t.tag_group))]
 
   return (
@@ -113,9 +132,30 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
       <label>품목*
         <select value={form.item_code} onChange={set('item_code')}>
           <option value="">골라 주세요</option>
-          {options.items.map((i) => <option key={i.item_code} value={i.item_code}>{i.category} · {i.name}</option>)}
+          {items.map((i) => <option key={i.item_code} value={i.item_code}>{i.category} · {i.name}{i.status === 'pending' ? ' (검수 전)' : ''}</option>)}
         </select>
       </label>
+      {request ? (
+        <div className="preview">
+          <strong>새 품목 요청</strong>
+          <p className="muted">목록에 없는 원물이면 이름과 종류만 적어 주세요. 회사 관리자가 보관법·먹으면 안 되는 신호를 출처와 함께 확인한 뒤 손님에게 보여요.</p>
+          <div className="row">
+            <label>품목 이름<input value={request.name} onChange={(e) => setRequest({ ...request, name: e.target.value, error: '' })} maxLength={20} placeholder="예: 수박" /></label>
+            <label>종류
+              <select value={request.category} onChange={(e) => setRequest({ ...request, category: e.target.value })}>
+                {['과일', '채소', '가공품'].map((c) => <option key={c}>{c}</option>)}
+              </select>
+            </label>
+          </div>
+          {request.error && <p className="error">{request.error}</p>}
+          <div className="actions">
+            <button type="button" className="button" disabled={!request.name.trim()} onClick={sendRequest}>요청하고 이 품목 고르기</button>
+            <button type="button" className="button ghost" onClick={() => setRequest(null)}>취소</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="link" onClick={() => setRequest({ name: '', category: '과일', error: '' })}>찾는 품목이 목록에 없어요 (새 품목 요청)</button>
+      )}
       <ItemPreview item={item} />
 
       {!seller && (

@@ -17,6 +17,7 @@ import { listMails } from './mailer.js'
 import { adminChatRouter, chatRouter } from './chat.js'
 import { initDb, isTransientDbError, pool } from './db.js'
 import { adminInquiryRouter, maskName, publicInquiryRouter } from './inquiry.js'
+import { publicItem } from './items.js'
 import { adminOrderRouter, memberOrderRouter, publicOrderRouter, sellerOrderRouter, startOrderSweeper } from './orders.js'
 import { recommendRouter } from './recommend.js'
 import { adminReviewRouter, reviewRouter } from './reviews.js'
@@ -198,7 +199,7 @@ async function loadProductDetail(code) {
   ])
   return {
     ...product,
-    item: item.rows[0],
+    item: publicItem(item.rows[0]), // 검수 전 품목은 보관·안전 정보를 빼고 보낸다
     seller: seller.rows[0],
     questions: questions.rows.map((q) => ({ ...q, author: maskName(q.author) })),
   }

@@ -38,6 +38,13 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS stage1_state TEXT;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS stage2_state TEXT;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS keep_period TEXT;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS danger_note TEXT;
+-- 새 품목 요청(server/items.js): 판매자가 목록에 없는 품목을 요청하면 'pending'. 관리자가 출처를 적고 검수해야 'active'
+-- 검수 전 품목의 보관·안전 정보는 손님 화면·상담에 내보내지 않는다
+ALTER TABLE items ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE items DROP CONSTRAINT IF EXISTS items_status_check;
+ALTER TABLE items ADD CONSTRAINT items_status_check CHECK (status IN ('active', 'pending'));
+ALTER TABLE items ADD COLUMN IF NOT EXISTS requested_by TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 -- 추천·검색용 태그 목록
 CREATE TABLE IF NOT EXISTS tags (

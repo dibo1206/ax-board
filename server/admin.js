@@ -8,6 +8,7 @@ import { requireAdmin } from './auth.js'
 import { findBanned } from './banned.js'
 import { fillItem, listTemplates, productDraft } from './content.js'
 import { pool } from './db.js'
+import { approveItem, listReview, requestItem, saveItem } from './items.js'
 import { validateProduct } from './validate.js'
 
 export const UPLOAD_DIR = new URL('../uploads/', import.meta.url)
@@ -44,7 +45,7 @@ adminRouter.get('/options', async (req, res) => {
 // 임시 저장 상품까지 모두
 adminRouter.get('/products', async (req, res) => {
   const { rows } = await pool.query(`
-    SELECT p.*, (p.stock = 0) AS sold_out, i.name AS item_name, i.category, s.name AS seller_name
+    SELECT p.*, (p.stock = 0) AS sold_out, i.name AS item_name, i.category, i.status AS item_status, s.name AS seller_name
     FROM products p JOIN items i ON i.item_code = p.item_code JOIN sellers s ON s.seller_code = p.seller_code
     ORDER BY (p.status = 'pending') DESC, p.updated_at DESC`)
   res.json(rows)
@@ -82,6 +83,11 @@ export async function updateProduct(code, product) {
 adminRouter.get('/ai/templates', listTemplates)
 adminRouter.post('/ai/product-draft', productDraft)
 adminRouter.post('/items/:code/fill', fillItem)
+// 새 품목 요청 · 검수 (items.js)
+adminRouter.post('/items/request', requestItem)
+adminRouter.get('/items/review', listReview)
+adminRouter.put('/items/:code', saveItem)
+adminRouter.post('/items/:code/approve', approveItem)
 
 adminRouter.post('/products', async (req, res) => {
   const { product, errors } = validateProduct(req.body, { ...(await codeSets()), isNew: true })

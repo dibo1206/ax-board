@@ -171,7 +171,8 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
       )}
       <section className="box">
         <h3>보관·섭취 안내</h3>
-        <p>{item.storage_method}</p>
+        {item.pending && <p className="muted">새로 들어온 품목이라 담당자가 보관·섭취 정보를 확인하고 있어요. 궁금한 점은 아래 상품 Q&A로 물어봐 주세요.</p>}
+        {item.storage_method && <p>{item.storage_method}</p>}
         {item.keep_period && <p>보관 기간 참고: {item.keep_period}</p>}
         {/* 신선도는 날짜가 아니라 지금 상태로 판단한다 (팀 식품 기준표). 옛 데이터(며칠)도 그대로 보여 준다 */}
         {fresh && item.stage1_state && (
@@ -191,14 +192,16 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {item.reviewed_by && item.source && <p className="note">출처: {item.source}</p>}
       </section>
 
-      <section className="box">
-        <h3>이렇게 즐겨 보세요</h3>
-        <ul>
-          {item.recipes.map((r) => (
-            <li key={r.title}><strong>{r.title}</strong> — {r.ingredients} · {r.method}</li>
-          ))}
-        </ul>
-      </section>
+      {item.recipes.length > 0 && (
+        <section className="box">
+          <h3>이렇게 즐겨 보세요</h3>
+          <ul>
+            {item.recipes.map((r) => (
+              <li key={r.title}><strong>{r.title}</strong> — {r.ingredients} · {r.method}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="box">
         <h3>판매 농가 이야기</h3>
