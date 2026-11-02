@@ -59,6 +59,7 @@ async function buildInput(body, sellerCode) {
     ['농가 이야기', seller?.story ? text(seller.story, 300) : ''],
     ['보관 방법', item.storage_method ?? ''],
     ['개봉 후', item.opened_note ?? ''],
+    ['카페 메뉴 비율 (시험 제조 제안값)', item.cafe_note ?? ''],
   ].filter(([, v]) => v)
   const needItem = empty(item.storage_method) || empty(item.recipes)
   return { item, facts, needItem }

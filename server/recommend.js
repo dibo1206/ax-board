@@ -11,12 +11,14 @@ export function loadActive() {
   return cached('recommend:active', 15_000, async () => {
     const [products, tags] = await Promise.all([
       pool.query(`SELECT p.*, (p.stock = 0) AS sold_out, i.name AS item_name, i.category, i.show_brix,
-                         s.name AS seller_name, s.region AS seller_region
+                         s.name AS seller_name, s.region AS seller_region,
+                         (SELECT count(*) FILTER (WHERE r.info_match = 'no') >= 3 AND count(*) FILTER (WHERE r.info_match = 'no') * 2 >= count(r.info_match) FROM reviews r WHERE r.product_code = p.product_code AND NOT r.hidden) AS info_disputed
                   FROM products p JOIN items i ON i.item_code = p.item_code JOIN sellers s ON s.seller_code = p.seller_code
                   WHERE p.status = 'active'`),
       pool.query('SELECT * FROM tags'),
     ])
-    return { products: products.rows, tagLabel: Object.fromEntries(tags.rows.map((t) => [t.tag_code, t.label])) }
+    // 후기에서 '표시와 달랐어요'가 많은 상품은 당도를 내세우지 않는다
+    return { products: products.rows.map((p) => (p.info_disputed ? { ...p, brix: null } : p)), tagLabel: Object.fromEntries(tags.rows.map((t) => [t.tag_code, t.label])) }
   })
 }
 

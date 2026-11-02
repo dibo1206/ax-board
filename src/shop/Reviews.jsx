@@ -49,6 +49,7 @@ export function ReviewList({ code }) {
 export function ReviewForm({ orderNo, phone, item, onDone }) {
   const [rating, setRating] = useState(5)
   const [content, setContent] = useState('')
+  const [infoMatch, setInfoMatch] = useState('') // 상품 페이지의 당도·수확일 같은 정보와 맞았나요? (고르지 않아도 됨)
   const [errors, setErrors] = useState([])
   const [sending, setSending] = useState(false)
 
@@ -56,7 +57,7 @@ export function ReviewForm({ orderNo, phone, item, onDone }) {
     event.preventDefault()
     setSending(true)
     try {
-      await post('/reviews', { orderNo, phone, productCode: item.product_code, rating, content })
+      await post('/reviews', { orderNo, phone, productCode: item.product_code, rating, content, infoMatch: infoMatch || null })
       onDone()
     } catch (e) {
       setErrors(e.errors ?? [e.message])
@@ -73,6 +74,12 @@ export function ReviewForm({ orderNo, phone, item, onDone }) {
         ))}
       </div>
       <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={3} maxLength={1000} placeholder="맛·신선도·포장처럼 직접 느낀 점을 10자 이상 적어 주세요" />
+      <fieldset className="info-match">
+        <legend>상품 페이지에 적힌 당도·수확일 같은 정보와 맞았나요? <span className="muted">(선택)</span></legend>
+        {[['yes', '맞았어요'], ['no', '달랐어요'], ['', '잘 모르겠어요']].map(([value, label]) => (
+          <label key={label} className="check"><input type="radio" name={`info-${item.product_code}`} checked={infoMatch === value} onChange={() => setInfoMatch(value)} /> {label}</label>
+        ))}
+      </fieldset>
       {errors.length > 0 && <ul className="error">{errors.map((e) => <li key={e}>{e}</li>)}</ul>}
       <button type="submit" className="button" disabled={sending}>후기 남기기</button>
     </form>

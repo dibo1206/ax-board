@@ -103,6 +103,7 @@ adminInquiryRouter.get('/summary', async (req, res) => {
     (SELECT count(*) FROM questions WHERE answer IS NULL AND NOT hidden)::int AS unanswered,
     (SELECT count(*) FROM b2b_inquiries WHERE status = '접수')::int AS new_b2b,
     (SELECT count(*) FROM products WHERE status = 'pending')::int AS pending_products,
+    (SELECT count(*) FROM items WHERE status = 'pending')::int AS pending_items,
     (SELECT count(*) FROM orders WHERE status = 'paid')::int AS new_orders`)
   res.json(rows[0])
 })

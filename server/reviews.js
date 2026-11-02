@@ -6,6 +6,7 @@ import { requireAdmin } from './auth.js'
 import { pool } from './db.js'
 import { maskName } from './inquiry.js'
 import { createLimiter } from './limit.js'
+import { ensureShipments } from './orders.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
 import { bannedMessage, findBanned } from './banned.js'
 
@@ -35,6 +36,8 @@ reviewRouter.post('/reviews', async (req, res) => {
   const phone = text(req.body.phone).replace(/[^0-9]/g, '')
   const rating = Number(req.body.rating)
   const content = text(req.body.content)
+  // 상품 페이지의 당도·수확일 같은 정보와 맞았는지 (고르지 않으면 비움). '달랐어요'가 많으면 당도 표시를 내린다
+  const infoMatch = ['yes', 'no'].includes(req.body.infoMatch) ? req.body.infoMatch : null
   const errors = []
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) errors.push('별점을 1~5개 골라 주세요.')
   if (content.length < 10 || content.length > 1000) errors.push('후기는 10~1000자로 적어 주세요.')
@@ -52,13 +55,16 @@ reviewRouter.post('/reviews', async (req, res) => {
   const customer = await currentCustomer(req)
   const mine = order && ((customer && order.customer_id === customer.id) || (phone && order.buyer_phone === phone))
   if (!mine) return res.status(404).json({ error: '주문을 찾지 못했어요. 주문번호와 휴대폰 번호를 확인해 주세요.' })
-  if (order.status !== 'delivered') return res.status(409).json({ error: '배송이 끝난 주문에만 후기를 쓸 수 있어요.' })
-  const item = await pool.query('SELECT 1 FROM order_items WHERE order_id = $1 AND product_code = $2', [order.id, productCode])
+  const item = await pool.query('SELECT seller_code FROM order_items WHERE order_id = $1 AND product_code = $2', [order.id, productCode])
   if (!item.rowCount) return res.status(404).json({ error: '이 주문에 없는 상품이에요.' })
+  // 농가마다 따로 보내니, 주문 전체가 아니라 그 상품을 보낸 농가의 배송이 끝났으면 후기를 쓸 수 있다
+  await ensureShipments(order.id)
+  const arrived = await pool.query("SELECT 1 FROM order_shipments WHERE order_id = $1 AND seller_code = $2 AND status = 'delivered'", [order.id, item.rows[0].seller_code])
+  if (order.status !== 'delivered' && !arrived.rowCount) return res.status(409).json({ error: '배송이 끝난 상품에만 후기를 쓸 수 있어요.' })
   const inserted = await pool.query(
-    `INSERT INTO reviews (order_id, product_code, customer_id, author, rating, content) VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO reviews (order_id, product_code, customer_id, author, rating, content, info_match) VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (order_id, product_code) DO NOTHING RETURNING id`,
-    [order.id, productCode, customer?.id ?? null, order.buyer_name, rating, content],
+    [order.id, productCode, customer?.id ?? null, order.buyer_name, rating, content, infoMatch],
   )
   if (!inserted.rowCount) return res.status(409).json({ error: '이 상품에는 이미 후기를 남겼어요.' })
   console.log(`[review] 후기 #${inserted.rows[0].id} ${productCode} ★${rating}`)

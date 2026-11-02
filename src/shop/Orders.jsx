@@ -8,7 +8,9 @@ import { getPolicy, ORDER_STATUS, post, readCart, takePending, when, won, writeC
 export function OrderDetail({ order, phone = '', onConfirm = null }) {
   const [writing, setWriting] = useState(null)
   const [written, setWritten] = useState([])
-  const canReview = (i) => order.status === 'delivered' && !i.reviewed && !written.includes(i.product_code)
+  // 농가마다 따로 오니, 그 상품을 보낸 농가의 배송이 끝났으면 후기를 쓸 수 있다
+  const arrived = (i) => order.status === 'delivered' || order.shipments?.some((s) => s.seller_code === i.seller_code && s.status === 'delivered')
+  const canReview = (i) => arrived(i) && !i.reviewed && !written.includes(i.product_code)
   return (
     <>
       <dl className="detail-list">
@@ -17,7 +19,19 @@ export function OrderDetail({ order, phone = '', onConfirm = null }) {
         <dt>주문일</dt><dd>{when(order.created_at)}</dd>
         {order.payment_method && <><dt>결제</dt><dd>{order.payment_method} · {won(order.total_amount)}</dd></>}
         <dt>받는 분</dt><dd>{order.receiver_name} · ({order.zipcode}) {order.address1} {order.address2 ?? ''}</dd>
-        {order.tracking_no && <><dt>송장</dt><dd>{order.courier} {order.tracking_no} {order.tracking_url && <a href={order.tracking_url} target="_blank" rel="noreferrer">배송 조회</a>}</dd></>}
+        {/* 농가마다 따로 보낸다: 농가별 배송 상태·송장 (한 농가만이면 송장 한 줄) */}
+        {order.shipments?.length > 1 ? (
+          <><dt>배송</dt><dd>
+            <ul className="farm-shipments">
+              {order.shipments.map((s) => (
+                <li key={s.seller_code}>
+                  <b>{s.seller_name}</b> · {ORDER_STATUS[s.status] ?? s.status} · 배송비 {s.shipping_fee ? won(s.shipping_fee) : '무료'}
+                  {s.tracking_no && <> · {s.courier} {s.tracking_no} {s.tracking_url && <a href={s.tracking_url} target="_blank" rel="noreferrer">배송 조회</a>}</>}
+                </li>
+              ))}
+            </ul>
+          </dd></>
+        ) : order.tracking_no && <><dt>송장</dt><dd>{order.courier} {order.tracking_no} {order.tracking_url && <a href={order.tracking_url} target="_blank" rel="noreferrer">배송 조회</a>}</dd></>}
         {order.cancel_reason && <><dt>취소</dt><dd>{when(order.cancelled_at)} · {order.cancel_reason}</dd></>}
         {order.status === 'delivered' && (
           <><dt>구매 확정</dt><dd>{order.confirmed_at
@@ -36,7 +50,7 @@ export function OrderDetail({ order, phone = '', onConfirm = null }) {
             )}
           </li>
         ))}
-        <li className="muted">상품 {won(order.items_amount)} + 배송비 {won(order.shipping_fee)} = <b>{won(order.total_amount)}</b></li>
+        <li className="muted">상품 {won(order.items_amount)} + 배송비 {won(order.shipping_fee)}{order.shipments?.length > 1 && ` (농가 ${order.shipments.length}곳)`} = <b>{won(order.total_amount)}</b></li>
       </ul>
     </>
   )

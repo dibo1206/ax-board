@@ -63,7 +63,7 @@ function PaymentStep({ order, buyer }) {
     <section className="box">
       <h3>결제</h3>
       <p>주문번호 <b>{order.orderNo}</b> · {order.orderName}</p>
-      <p className="price">{won(order.amount)} <span className="muted">(상품 {won(order.itemsAmount)} + 배송비 {won(order.shippingFee)})</span></p>
+      <p className="price">{won(order.amount)} <span className="muted">(상품 {won(order.itemsAmount)} + 배송비 {won(order.shippingFee)}{order.farms > 1 && ` · 농가 ${order.farms}곳에서 따로 보내요`})</span></p>
       {order.payment.test && <p className="warn">테스트 결제예요. 실제로 돈이 나가지 않아요.</p>}
       {order.payment.mode === 'toss' ? <><div id="payment-method" /><div id="payment-agreement" /></> : <p className="muted">결제 키가 아직 없어서 개발용 테스트 결제로 진행해요.</p>}
       {error && <p className="error">{error}</p>}

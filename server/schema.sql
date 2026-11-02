@@ -32,6 +32,22 @@ CREATE TABLE IF NOT EXISTS items (
   source TEXT,
   reviewed_by TEXT
 );
+-- 팀 식품 기준표(2026-10-31): 신선도는 날짜가 아니라 상태로 나눈다 (신선 → 품질 저하 → 섭취 부적합)
+-- 보관 기간은 품질 유지 참고값일 뿐이라 따로 적고, 먹으면 안 되는 신호의 예외(단순 갈변 등)도 함께 적는다
+ALTER TABLE items ADD COLUMN IF NOT EXISTS stage1_state TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS stage2_state TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS keep_period TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS danger_note TEXT;
+-- 가공식품 기준표(2026-11-02): 알레르기 안내 문장과 카페 메뉴 비율 (B2B, 공식 표준이 아닌 시험 제조 제안값)
+ALTER TABLE items ADD COLUMN IF NOT EXISTS allergen_note TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS cafe_note TEXT;
+-- 새 품목 요청(server/items.js): 판매자가 목록에 없는 품목을 요청하면 'pending'. 관리자가 출처를 적고 검수해야 'active'
+-- 검수 전 품목의 보관·안전 정보는 손님 화면·상담에 내보내지 않는다
+ALTER TABLE items ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE items DROP CONSTRAINT IF EXISTS items_status_check;
+ALTER TABLE items ADD CONSTRAINT items_status_check CHECK (status IN ('active', 'pending'));
+ALTER TABLE items ADD COLUMN IF NOT EXISTS requested_by TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 -- 추천·검색용 태그 목록
 CREATE TABLE IF NOT EXISTS tags (
@@ -291,6 +307,46 @@ ALTER TABLE products ALTER COLUMN price_updated_at SET DEFAULT now();
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS orders_confirm_idx ON orders (status, confirmed_at);
+
+-- 농가별 배송: 한 주문에 여러 농가 상품이 있으면 농가마다 따로 택배를 보낸다 → 배송비·송장·배송 상태가 농가마다
+-- 주문 전체 상태(orders.status)는 농가별 상태를 모아 정한다 (모두 배송 완료면 배송 완료, 하나라도 보냈으면 배송 중)
+CREATE TABLE IF NOT EXISTS order_shipments (
+  id SERIAL PRIMARY KEY,
+  order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  seller_code TEXT NOT NULL REFERENCES sellers(seller_code),
+  items_amount INT NOT NULL DEFAULT 0,
+  shipping_fee INT NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'paid' CHECK (status IN ('paid', 'preparing', 'shipping', 'delivered', 'cancelled')),
+  courier TEXT,
+  tracking_no TEXT,
+  shipped_at TIMESTAMPTZ,
+  delivered_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (order_id, seller_code)
+);
+CREATE INDEX IF NOT EXISTS order_shipments_seller_idx ON order_shipments (seller_code, status);
+
+-- 거짓 표시 막기 (당도·수확일은 판매자가 적는 값이라 몰이 직접 잴 수 없다 → 쓰기 어렵게, 이상하면 거르고, 거짓이면 드러나게)
+-- 1) 당도계 사진: 당도를 적은 판매자 상품은 사진이 있어야 승인. 판매 중에 당도를 바꾸면 옛 사진은 내린다
+ALTER TABLE products ADD COLUMN IF NOT EXISTS brix_photo_url TEXT;
+-- 2) 품목별 보통 당도 범위 (식품 담당이 출처를 보고 채운다. 비어 있으면 검사하지 않음)
+ALTER TABLE items ADD COLUMN IF NOT EXISTS brix_min NUMERIC(4, 1);
+ALTER TABLE items ADD COLUMN IF NOT EXISTS brix_max NUMERIC(4, 1);
+-- 3) 판매 중 상품의 가격·당도·수확일 수정 이력 (누가 언제 무엇을)
+CREATE TABLE IF NOT EXISTS product_changes (
+  id SERIAL PRIMARY KEY,
+  product_code TEXT NOT NULL REFERENCES products(product_code) ON DELETE CASCADE,
+  field TEXT NOT NULL,
+  old_value TEXT,
+  new_value TEXT,
+  changed_by TEXT NOT NULL,
+  changed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS product_changes_idx ON product_changes (product_code, changed_at DESC);
+-- 4) 후기: 상품 페이지의 당도·수확일 같은 정보와 맞았는지 (yes / no / 비움). '달랐어요'가 많으면 당도 표시를 내린다
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS info_match TEXT;
+ALTER TABLE reviews DROP CONSTRAINT IF EXISTS reviews_info_match_check;
+ALTER TABLE reviews ADD CONSTRAINT reviews_info_match_check CHECK (info_match IN ('yes', 'no'));
 
 -- 금지어 사전 (관리자 화면 [금지어]에서 고침). 기본 단어는 표가 비어 있을 때 한 번만 넣는다 (지운 단어가 다시 생기지 않게)
 CREATE TABLE IF NOT EXISTS banned_words (

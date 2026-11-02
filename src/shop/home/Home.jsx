@@ -101,7 +101,7 @@ function ProductCard({ p, onOpen }) {
           ? <img src={thumbUrl(p.image_url)} alt="" loading="lazy" width="400" height="400" />
           : <span className="photo-need"><span>사진 준비 중</span></span>}
         <span className="pcard-tags">
-          {p.show_brix && p.brix && <span className={`ptag ${p.brix >= 14 ? 'brix-high' : p.brix >= 12 ? 'brix-mid' : ''}`}>당도 {p.brix}</span>}
+          {p.show_brix && p.brix && !p.info_disputed && <span className={`ptag ${p.brix >= 14 ? 'brix-high' : p.brix >= 12 ? 'brix-mid' : ''}`}>당도 {p.brix}</span>}
           {p.tags?.includes('season') && <span className="ptag ptag-season">제철</span>}
         </span>
         {p.sold_out && <span className="pcard-flag">품절</span>}

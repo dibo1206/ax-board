@@ -19,6 +19,7 @@ import { describeRecommendation, loadActive, readWish, recommend } from './recom
 import { SHIPPING } from './policy.js'
 import { mostSimilar, similarity } from './similar.js'
 import { findBanned } from './banned.js'
+import { publicItem } from './items.js'
 
 const RULES_FILE = new URL('./chat_rules.md', import.meta.url)
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
@@ -73,6 +74,22 @@ const ROUTES = [
     handoff: true,
     action: 'b2b',
   },
+  {
+    // 할인·쿠폰 기능이 없다: 약속하지 않고 정해진 정책이 없다고만 말한다
+    kind: 'discount',
+    re: /할인|쿠폰|깎아|에누리|적립금/,
+    answer: () => `할인·쿠폰은 지금 정해진 정책이 없어서 제가 약속드릴 수 없어요. 상품은 상품 페이지에 적힌 가격으로 팔고, ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상 사면 배송비가 무료예요. 대량 구매는 상품 페이지의 [기업 구매 문의]로 견적을 받아 보실 수 있어요.`,
+    handoff: false,
+    action: null,
+  },
+  {
+    // 칼로리·영양 성분은 자료에 없다: 지어내지 않는다
+    kind: 'nutrition',
+    re: /칼로리|열량|kcal|영양\s?(성분|정보)|성분표|당류|나트륨|단백질|탄수화물/i,
+    answer: (ctx) => `${ctx.items.length ? `${ctx.items.map((i) => i.name).join(', ')}의 ` : ''}칼로리·영양 성분 정보는 아직 상품 정보에 없어요. 정확한 값이 필요하면 ${QNA_HINT.replace('질문을 남겨', '물어봐')}`,
+    handoff: false,
+    action: 'qna',
+  },
 ]
 
 // ---------- 2. DB에서 자료 꺼내기 ----------
@@ -80,12 +97,17 @@ const ROUTES = [
 function loadCatalog() {
   return cached('chat:catalog', 15_000, async () => {
     const [products, items] = await Promise.all([
-      pool.query(`SELECT p.*, (p.stock = 0) AS sold_out, s.name AS seller_name, s.region AS seller_region, s.story AS seller_story
+      pool.query(`SELECT p.*, (p.stock = 0) AS sold_out, s.name AS seller_name, s.region AS seller_region, s.story AS seller_story,
+                         (SELECT count(*) FILTER (WHERE r.info_match = 'no') >= 3 AND count(*) FILTER (WHERE r.info_match = 'no') * 2 >= count(r.info_match) FROM reviews r WHERE r.product_code = p.product_code AND NOT r.hidden) AS info_disputed
                   FROM products p JOIN sellers s ON s.seller_code = p.seller_code
                   WHERE p.status = 'active' ORDER BY p.product_code LIMIT 300`),
       pool.query('SELECT * FROM items'),
     ])
-    return { products: products.rows, items: items.rows }
+    // 후기에서 '표시와 달랐어요'가 많은 상품은 당도를 말하지 않는다 (상품 페이지와 같은 규칙)
+    const rows = products.rows.map((p) => (p.info_disputed ? { ...p, brix: null } : p))
+    // 검수 전 품목은 이름·종류만, 그것도 판매 중인 상품이 있을 때만 (요청만 된 품목을 파는 것처럼 말하지 않게)
+    const selling = new Set(rows.map((p) => p.item_code))
+    return { products: rows, items: items.rows.filter((i) => i.status !== 'pending' || selling.has(i.item_code)).map(publicItem) }
   })
 }
 
@@ -130,22 +152,27 @@ function describeProduct(p, item) {
   }
   if (item.category !== '가공품') lines.push(`- 수확일: ${p.harvest_date ?? '정보 없음'}`)
   if (p.summary) lines.push(`- 소개: ${p.summary}`)
-  lines.push(`- 구매: ${p.external_url ? '상품 페이지의 [구매하기]로 온라인 판매처에서 구매' : '온라인 판매 링크 없음 (상품 Q&A로 구매 문의)'}`)
+  lines.push(`- 구매: ${BUY_HOW}`)
   lines.push(`- 기업 구매 문의: ${p.b2b_available ? '받음' : '받지 않음'}`)
   return lines.join('\n')
 }
 
 function describeItem(item) {
+  if (item.pending) return `[품목 코드 ${item.item_code}] ${item.name} (${item.category}) — 담당자 확인 전이라 보관·안전·레시피 정보 없음 (먹어도 되는지·보관법은 상품 Q&A로 안내)`
   const lines = [
     `[품목 코드 ${item.item_code}] ${item.name} (${item.category}) 기준 정보`,
     `- 보관: ${item.storage_method || '정보 없음'}`,
   ]
-  if (item.fresh_days_stage1) {
+  if (item.stage1_state) {
+    lines.push(`- 신선도는 날짜가 아니라 상태로 판단: 신선(${item.stage1_state}) → ${list(item.stage1_uses)} / 품질 저하(${item.stage2_state}) → ${list(item.stage2_uses)} / 먹으면 안 되는 신호가 있으면 폐기`)
+  } else if (item.fresh_days_stage1) {
     lines.push(`- 받은 날부터 ${item.fresh_days_stage1}일까지: ${list(item.stage1_uses)} / ${item.fresh_days_stage2}일까지: ${list(item.stage2_uses)} / 그 뒤: ${list(item.stage3_uses)}`)
   }
+  if (item.keep_period) lines.push(`- 보관 기간 참고값: ${item.keep_period}`)
   if (item.opened_note) lines.push(`- 개봉 후: ${item.opened_note}`)
-  lines.push(`- 알레르기 표시: ${list(item.allergens)}`)
-  lines.push(`- 먹으면 안 되는 신호: ${list(item.danger_signs)}`)
+  lines.push(`- 알레르기 표시: ${list(item.allergens)}${item.allergen_note ? ` (${item.allergen_note})` : ''}`)
+  if (item.cafe_note) lines.push(`- 카페 메뉴 비율: ${item.cafe_note}`)
+  lines.push(`- 먹으면 안 되는 신호: ${list(item.danger_signs)}${item.danger_note ? ` (${item.danger_note})` : ''}`)
   lines.push(`- 레시피: ${item.recipes?.length ? item.recipes.map((r) => `${r.title}(재료 ${r.ingredients} / 방법 ${r.method})`).join('; ') : '정보 없음'}`)
   if (!item.reviewed_by) lines.push('- (식품팀 검수 전 정보)')
   return lines.join('\n')
@@ -173,7 +200,17 @@ async function buildMaterial(catalog, ctx) {
 }
 
 // ---------- 2-1. 가격·재고·개수·당도처럼 값 하나만 묻는 질문은 AI 없이 DB 값으로 바로 답한다 ----------
+// 모든 상품을 이 쇼핑몰에서 직접 판다 (external_url 은 관리자용 참고 링크라 손님에게 안내하지 않는다)
+const BUY_HOW = '이 쇼핑몰 상품 페이지에서 [장바구니 담기]나 [바로 구매]로 주문'
 const FACTS = [
+  {
+    // "어디서 사요?": 다른 판매처를 지어내지 않고 이 쇼핑몰 주문 방법만. 재고 답과 겹치면 이것만 답한다
+    re: /어디서\s?(사|살|구매|주문)|구매처|판매처|어디.{0,3}(팔아|파나|판매)/,
+    only: true,
+    say: (p) => (p.sold_out
+      ? `${p.label} 상품은 지금 품절이라 살 수 없어요. 다시 들어오는 날짜는 아직 안내된 정보가 없어요.`
+      : `${p.label} 상품은 ${BUY_HOW}할 수 있어요. 회원이 아니어도 주문할 수 있어요.`),
+  },
   {
     re: /얼마|가격|값/,
     explicit: /가격|값/,
@@ -184,7 +221,15 @@ const FACTS = [
     explicit: /살 수 있|재고|품절|남았/,
     say: (p) => (p.sold_out
       ? `${p.label} 상품은 지금 품절이라 살 수 없어요. 다시 들어오는 날짜는 아직 안내된 정보가 없어요.`
-      : `${p.label} 상품은 지금 살 수 있어요. ${p.external_url ? '상품 페이지의 [구매하기]를 눌러 주세요.' : '온라인 판매 링크가 없어서 상품 Q&A로 구매 방법을 안내해 드려요.'}`),
+      : `${p.label} 상품은 지금 살 수 있어요. ${BUY_HOW}해 주세요.`),
+  },
+  {
+    // "하나가 얼마나 커요?": '얼마'가 들어 있어도 가격이 아니라 1개 무게로 답한다
+    re: /얼마나\s?(커|크|무거)|크기|무게|중량/,
+    specific: true,
+    say: (p) => (p.weight_g
+      ? `${p.label} 1개 무게는 ${p.weight_g}g 정도예요 (판매 단위: ${p.unit}${p.count_per_box ? `, 한 박스 ${p.count_per_box}개` : ''}).`
+      : `${p.label} 상품의 1개 무게 정보는 아직 없어요. 판매 단위는 ${p.unit}이에요.`),
   },
   {
     re: /몇\s*개|개수|몇\s*알/,
@@ -197,7 +242,9 @@ const FACTS = [
     re: /달아|달달|단가요|당도|브릭스|brix/i,
     needsBrix: true,
     specific: true,
-    say: (p) => (p.brix
+    say: (p) => (p.info_disputed
+      ? `${p.label} 당도는 구매 후기에서 표시와 다르다는 의견이 많아서 지금은 안내하지 않아요.`
+      : p.brix
       ? `${p.label} 당도는 ${p.brix}Brix예요${p.brix_measured_at ? ` (${p.brix_measured_at} 측정)` : ''}.`
       : `${p.label} 상품은 아직 측정한 당도 정보가 없어요.`),
   },
@@ -268,11 +315,12 @@ function narrow(products, message, catalog) {
 }
 
 function answerFact(message, catalog, ctx) {
-  if (NEEDS_EXPLAIN.test(message) || TOPICS.some((t) => t.re.test(message))) return null
+  if (NEEDS_EXPLAIN.test(message) || TOPICS.some((t) => t.re.test(message)) || dangerSign(message, catalog.items)) return null
   let facts = FACTS.filter((f) => f.re.test(message))
   if (!facts.length) return null
   // "당도는 얼마예요?", "몇 개 들어 있어요?"처럼 겹치면 구체적인 쪽(당도·개수)만 답한다
-  if (facts.some((f) => f.specific)) facts = facts.filter((f) => f.specific || f.explicit?.test(message))
+  if (facts.some((f) => f.only)) facts = facts.filter((f) => f.only)
+  else if (facts.some((f) => f.specific)) facts = facts.filter((f) => f.specific || f.explicit?.test(message))
   const mentioned = findItems(message, catalog.items).map((i) => i.item_code)
   let products = mentioned.length
     ? catalog.products.filter((p) => mentioned.includes(p.item_code))
@@ -308,41 +356,105 @@ const label = (p) => p.name.replace(/\[예시\]\s*/g, '')
 
 const opened = (item) => (item.opened_note ? `개봉 후에는 ${sentence(item.opened_note.replace(/^개봉\s?후(에는|엔)?\s*/, ''))}` : '')
 
+// 신선도 안내: 팀 식품 기준표는 날짜가 아니라 상태로 나눈다. 옛 데이터(며칠)만 있는 품목은 날짜로 안내한다
 function timeline(item) {
+  if (item.stage1_state) {
+    return `신선한 상태(${item.stage1_state})면 ${list(item.stage1_uses)}, 품질이 떨어진 상태(${item.stage2_state})면 ${list(item.stage2_uses)} 용도로 안내하고 있어요.`
+  }
   if (!item.fresh_days_stage1) return ''
   return `받은 날부터 ${item.fresh_days_stage1}일까지는 ${list(item.stage1_uses)}, ${item.fresh_days_stage2}일까지는 ${list(item.stage2_uses)}, 그 뒤에는 ${list(item.stage3_uses)} 용도로 안내하고 있어요.`
+}
+function keepPeriod(item) {
+  if (!item.keep_period) return ''
+  const text = item.keep_period.replace(/\s*\(.*\)$/, '')
+  return /없어요$/.test(text) ? `${text}. 날짜보다 지금 상태로 판단해 주세요.` : `보관 기간 참고값은 ${josa(text, '이에요', '예요')}.`
+}
+
+// "산 지 2주 됐는데", "받은 지 10일" 같은 지난 날짜. 있으면 먹어도 되나 질문으로 보고, 그 날짜의 용도를 알려 준다
+const ELAPSED = /(?:산|샀|받은|받|온|사\s?온)\s?(?:지|게|거)\s?(\d+)\s*(일|주|달|개월)|(\d+)\s*(일|주|달|개월)\s*(?:이\s?)?(?:됐|지났|넘었|째)/
+function elapsedDays(message) {
+  const m = message.match(ELAPSED)
+  if (!m) return null
+  const n = Number(m[1] ?? m[3])
+  const unit = m[2] ?? m[4]
+  return n * (unit === '주' ? 7 : unit === '일' ? 1 : 30)
+}
+
+// 품목의 "먹으면 안 되는 신호"(예: 탁해지거나 거품이 계속 생김)를 손님이 말하면 바로 드시지 말라고 안내한다
+// 부패를 뜻하는 낱말을 손님이 말했고 그 품목의 신호 문장에도 같은 낱말이 있을 때만 그 신호로 본다
+// ("시큼한가요?" 같은 맛 질문이나 "껍질 벗겨요?"에 경고하지 않게, 흔한 낱말(냄새·껍질)은 넣지 않는다)
+const DANGER_WORDS = ['곰팡', '썩', '점액', '끈적', '미끈', '거품', '탁해', '초록색', '술 냄새', '발효 냄새', '시큼한 냄새', '즙이 흐']
+function dangerSign(message, items) {
+  const said = DANGER_WORDS.filter((w) => message.includes(w))
+  if (!said.length) return null
+  for (const item of findItems(message, items)) {
+    const sign = (item.danger_signs ?? []).find((s) => said.some((w) => s.includes(w)))
+    if (sign) return { item, sign }
+  }
+  return null
 }
 
 // 위에서부터 먼저 맞는 주제 하나로 답한다 ("먹어도 돼요?"가 "보관"보다 먼저)
 const TOPICS = [
-  { kind: 'safety', word: '먹어도 되는지', re: /(먹어|드셔|마셔|섭취해)도|싹(이|\s?났)|상했|상한\s?(것|거)|변했|변색|곰팡|이상한\s?냄새|냄새가\s?(나|이상)|물렀|물러졌|썩/ },
+  { kind: 'safety', word: '먹어도 되는지', re: new RegExp(`(먹어|드셔|마셔|섭취해)도|싹(이|\\s?났)|상했|상한\\s?(것|거)|변했|변색|곰팡|이상한\\s?냄새|냄새가\\s?(나|이상)|(술|발효|시큼한|썩은)\\s?냄새|물렀|물러졌|썩|끈적|미끈|점액|쭈글|초록색으로|${ELAPSED.source}`) },
   { kind: 'compare', word: '차이', re: /차이|비교|뭐가\s?달라|다른\s?점|뭐가\s?나아|어떤\s?게\s?나아/ },
-  { kind: 'recipe', word: '레시피', re: /레시피|만들|요리|활용|먹는\s?(법|방법)|어떻게\s?먹|해\s?먹|비율|음료|에이드/ },
-  { kind: 'storage', word: '보관법', re: /보관|냉장|냉동|상온|실온|어디에?\s?(둬|두|놔)|넣어도|개봉|뜯(은|으면|고)|언제까지|며칠|유통\s?기한|얼마나\s?(가|두|오래)/ },
+  { kind: 'recipe', word: '레시피', re: /레시피|만들|만드|요리|활용|먹는\s?(법|방법)|어떻게\s?먹|해\s?먹|비율|음료|에이드/ },
+  { kind: 'storage', word: '보관법', re: /보관|냉장|냉동|상온|실온|어디에?\s?(둬|두|놔)|(같이|함께)\s?(둬|두|놔|넣)|(둬|두어|놔)도|넣어도|개봉|뜯(은|으면|고)|언제까지|며칠|유통\s?기한|얼마나\s?(가|두|오래)/ },
   { kind: 'taste', word: '맛', re: /맛있|맛이\s?(어때|좋|괜찮)|맛은|무슨\s?맛/ },
   { kind: 'allergy', word: '알레르기 정보', re: /알레르기|알러지/ },
-  { kind: 'origin', word: '산지', re: /어디서|산지|원산지|농가|누가\s?(키|만들)|재배|키운|생산/ },
+  { kind: 'origin', word: '산지', re: /어디서(?!\s?(사|살|구매|주문))|산지|원산지|농가|누가\s?(키|만들)|재배|키운|생산/ },
   { kind: 'harvest', word: '수확일', re: /수확|언제\s?딴|딴\s?지/ },
 ]
 
 // 품목 하나로 답하는 주제
+// 받은 지 days일이면 어느 단계 용도인지 (옛 데이터: 며칠 기준. 신호가 없을 때만이라는 말을 꼭 붙인다)
+function stageOf(item, days) {
+  if (!item.fresh_days_stage1 || days == null) return ''
+  const uses = days <= item.fresh_days_stage1 ? item.stage1_uses : days <= item.fresh_days_stage2 ? item.stage2_uses : item.stage3_uses
+  return `받은 지 ${days}일이면, ${item.danger_signs.length ? '위 신호가 없을 때 ' : ''}${list(uses)} 용도로 안내하고 있어요.`
+}
+
+// "배숙 만드는 법", "고구마 맛탕 레시피"처럼 요리 이름을 말했는지 (품목 이름이 든 낱말이나 그 다음 낱말)
+const NOT_DISH = /^(레시피|요리|메뉴|만드|만들|활용|어떻게|뭐|무엇|알려|해|먹|법|방법|비율|음료|간단|쉬운)/
+function askedDish(item, message) {
+  const words = message.split(/\s+/).map((w) => w.replace(/[?!.,~]/g, '').replace(/(으로|로|은|는|이|가|을|를|에|도|랑|하고)$/, ''))
+  const at = words.findIndex((w) => w.includes(item.name))
+  if (at < 0) return null
+  const dish = words[at] !== item.name ? words[at] : words[at + 1]
+  return dish && !NOT_DISH.test(dish) ? dish : null
+}
+
 const SAY_ITEM = {
-  safety: (item) => [
-    `${josa(item.name, '을', '를')} 드셔도 되는지는 제가 판단할 수 없어요.`,
-    item.danger_signs.length ? `상품 정보에서는 ${item.danger_signs.join(', ')} 같은 상태라면 드시지 말라고 안내해요.` : '',
-    item.fresh_days_stage1 ? `참고로 ${timeline(item)}` : opened(item),
-    '애매하면 드시지 마시고, 사진과 함께 상품 Q&A나 고객센터로 알려 주세요.',
-  ].filter(Boolean).join(' '),
-  storage: (item, message) => [
-    `${item.name} 보관법은 이래요: ${sentence(item.storage_method || '보관 방법 정보가 아직 없어요')}`,
-    (item.storage_method ?? '').includes('개봉 후') ? '' : opened(item),
-    /언제까지|며칠|유통|얼마나/.test(message) || !item.opened_note ? timeline(item) : '',
-    /유통/.test(message) && !item.fresh_days_stage1 ? '유통기한은 상품 포장에 적힌 날짜를 확인해 주세요.' : '',
-  ].filter(Boolean).join(' '),
-  recipe: (item) => (item.recipes?.length
-    ? `${josa(item.name, '은', '는')} 이렇게 즐겨 보세요. ${item.recipes.slice(0, 3).map((r, i) => `${i + 1}) ${r.title}: ${r.ingredients} — ${r.method}`).join(' ')}`
-    : `${item.name} 레시피 정보는 아직 없어요.`),
-  allergy: (item) => (item.allergens.length
+  safety: (item, message) => {
+    const days = elapsedDays(message)
+    return [
+      `${josa(item.name, '을', '를')} 드셔도 되는지는 제가 판단할 수 없어요.`,
+      item.danger_signs.length ? `상품 정보에서는 ${item.danger_signs.join(' / ')} 같은 상태라면 드시지 말라고 안내해요.` : '',
+      item.danger_note ? sentence(item.danger_note) : '',
+      // 상태 기준 품목: 날짜를 말해도 단계를 정하지 않고, 보관 기간 참고값과 상태별 용도를 알려 준다
+      item.stage1_state ? [days != null ? keepPeriod(item) : '', timeline(item)].filter(Boolean).join(' ')
+        : stageOf(item, days) || (item.fresh_days_stage1 ? `참고로 ${timeline(item)}` : opened(item)),
+      '애매하면 드시지 마시고, 사진과 함께 상품 Q&A나 고객센터로 알려 주세요.',
+    ].filter(Boolean).join(' ')
+  },
+  storage: (item, message) => {
+    const asksHowLong = /언제까지|며칠|유통|얼마나/.test(message)
+    return [
+      `${item.name} 보관법은 이래요: ${sentence(item.storage_method || '보관 방법 정보가 아직 없어요')}`,
+      (item.storage_method ?? '').includes('개봉 후') ? '' : opened(item),
+      asksHowLong ? keepPeriod(item) : '',
+      asksHowLong || (!item.opened_note && !item.stage1_state) ? timeline(item) : '',
+      /유통/.test(message) && !item.fresh_days_stage1 && !item.keep_period ? '유통기한은 상품 포장에 적힌 날짜를 확인해 주세요.' : '',
+    ].filter(Boolean).join(' ')
+  },
+  recipe: (item, message) => {
+    if (!item.recipes?.length) return `${item.name} 레시피 정보는 아직 없어요.`
+    const dish = askedDish(item, message)
+    const known = !dish || item.recipes.some((r) => r.title.replace(/\s/g, '').includes(dish) || dish.includes(r.title.replace(/\s/g, '')))
+    const dishName = dish && (dish.includes(item.name) ? dish : `${item.name} ${dish}`)
+    return `${known ? '' : `${dishName} 레시피는 아직 등록돼 있지 않아요. 대신 `}${josa(item.name, '은', '는')} 이렇게 즐겨 보세요. ${item.recipes.slice(0, 3).map((r, i) => `${i + 1}) ${r.title}: ${r.ingredients} — ${r.method}`).join(' ')}${item.cafe_note && /카페|업소|매장|비율|퍼센트|%/.test(message) ? ` 카페 메뉴 비율은 ${sentence(item.cafe_note)}` : ''}`
+  },
+  allergy: (item) => (item.allergen_note && !item.allergens.length ? `${item.name}: ${sentence(item.allergen_note)}` : item.allergens.length
     ? `${item.name} 상품 정보에 표시된 알레르기 성분은 ${item.allergens.join(', ')}예요.`
     : `${josa(item.name, '은', '는')} 상품 정보에 표시된 알레르기 성분이 없어요. 정확한 성분이 필요하면 상품 Q&A로 물어봐 주세요.`),
 }
@@ -366,6 +478,17 @@ const SAY_PRODUCTS = {
 }
 
 function answerTemplate(message, catalog, ctx) {
+  const danger = dangerSign(message, catalog.items)
+  if (danger) {
+    const product = (ctx.current?.item_code === danger.item.item_code ? ctx.current : null)
+      ?? catalog.products.find((p) => p.item_code === danger.item.item_code)
+    return {
+      answer: `말씀하신 상태는 ${danger.item.name} 상품 정보에서 먹으면 안 되는 신호(${danger.sign})로 안내하는 상태예요. 드시지 마시고, 사진과 함께 상품 Q&A나 고객센터로 알려 주세요.`,
+      sources: product ? [{ code: product.product_code, name: product.name }] : [],
+      productCode: product?.product_code ?? null,
+      handoff: true, action: 'qna', model: 'rule:danger', blocked: false,
+    }
+  }
   const topic = TOPICS.find((t) => t.re.test(message))
   if (!topic) return null
   const mentioned = findItems(message, catalog.items)
@@ -376,6 +499,18 @@ function answerTemplate(message, catalog, ctx) {
     return { ...base, answer: `어떤 상품의 ${josa(topic.word, '을', '를')} 알려 드릴까요?`, sources: [], productCode: null, suggestions: catalog.items.slice(0, 6).map((i) => `${i.name} ${topic.word}`) }
   }
   const ofItems = catalog.products.filter((p) => items.some((i) => i.item_code === p.item_code))
+  // 검수 전 품목: 보관·안전·레시피·알레르기를 지어내지 않고 담당자에게 넘긴다 (의심되면 먹지 말라는 말은 한다)
+  const pendingItem = SAY_ITEM[topic.kind] && items.find((i) => i.pending)
+  if (pendingItem) {
+    const product = ofItems.find((p) => p.item_code === pendingItem.item_code)
+    return {
+      ...base,
+      answer: `${josa(pendingItem.name, '은', '는')} 담당자가 아직 ${({ recipe: '레시피', allergy: '알레르기' })[topic.kind] ?? '보관·안전'} 정보를 확인하고 있어요.${topic.kind === 'safety' ? ' 곰팡이나 이상한 냄새처럼 의심되는 상태라면 드시지 마시고, 사진과 함께 알려 주세요.' : ''} ${QNA_HINT}`,
+      sources: product ? [{ code: product.product_code, name: product.name }] : [],
+      productCode: product?.product_code ?? null,
+      handoff: true, action: 'qna',
+    }
+  }
   if (SAY_ITEM[topic.kind]) {
     const firsts = items.map((i) => ofItems.find((p) => p.item_code === i.item_code)).filter(Boolean)
     const current = ctx.current && items.some((i) => i.item_code === ctx.current.item_code) ? ctx.current : firsts[0]
@@ -437,6 +572,22 @@ async function answerSimilar(message, catalog, ctx, fallbackProduct) {
   if (!past || findProblem(past.answer, catalog)) return null
   const sources = toSourceChips(past.sources ?? [], catalog, ctx)
   return { ...base, answer: past.answer, sources, productCode: sources[0]?.code ?? fallbackProduct, model: 'similar:log' }
+}
+
+// ---------- 2-4-1. "수박도 팔아요?": 파는 품목이 아니면 지어내지 않고 지금 파는 품목을 알려 준다 ----------
+const ASKS_SELLING = /팔아|파나요|파시|파세요|파는지|판매\s?(해|하|중)/
+function answerNotSold(message, catalog, ctx) {
+  if (ctx.items.length || !ASKS_SELLING.test(message)) return null
+  // "선물세트 팔아요?"처럼 상품 이름 조각을 말했으면 파는 상품일 수 있어서 넘어간다
+  const nameWords = catalog.products.flatMap((p) => label(p).split(/\s+/)).filter((w) => w.length >= 2 && !/\d/.test(w))
+  if (nameWords.some((w) => message.includes(w))) return null
+  const selling = catalog.items.filter((i) => catalog.products.some((p) => p.item_code === i.item_code)).map((i) => i.name)
+  if (!selling.length) return null
+  return {
+    answer: `찾으시는 상품은 지금 이 쇼핑몰에서 팔지 않아요. 지금 파는 품목은 ${josa(selling.join(', '), '이에요', '예요')}. 들어왔으면 하는 상품이 있으면 고객센터로 알려 주세요.`,
+    suggestions: selling.slice(0, 3).map((name) => `${name} 가격`),
+    sources: [], handoff: false, action: null, productCode: null, model: 'rule:notsold', blocked: false,
+  }
 }
 
 // ---------- 2-5. 여기까지 못 찾으면: 고를 수 있는 질문 + [AI에게 물어보기] (손님이 누를 때만 AI) ----------
@@ -598,6 +749,9 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
 
   const template = answerTemplate(message, catalog, ctx)
   if (template) return template
+
+  const notSold = answerNotSold(message, catalog, ctx)
+  if (notSold) return notSold
 
   const material = await buildMaterial(catalog, ctx)
   const key = cacheKey('answer', message, material)

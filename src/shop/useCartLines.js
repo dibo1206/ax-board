@@ -22,6 +22,14 @@ export function useCartLines(lines) {
     : []
   const ok = rows.filter((r) => !r.problem)
   const itemsAmount = ok.reduce((sum, r) => sum + r.subtotal, 0)
-  const fee = policy && itemsAmount ? (itemsAmount >= policy.shipping.freeOver ? 0 : policy.shipping.fee) : 0
-  return { loading: !products && !error, error, rows, ok, itemsAmount, fee, total: itemsAmount + fee, policy }
+  // 농가마다 따로 보내서 배송비도 농가마다 (그 농가 상품이 무료 배송 기준 이상이면 그 농가는 무료). 서버 계산과 같은 규칙
+  const farms = []
+  for (const r of ok) {
+    const farm = farms.find((f) => f.sellerCode === r.product.seller_code)
+    if (farm) farm.itemsAmount += r.subtotal
+    else farms.push({ sellerCode: r.product.seller_code, name: r.product.seller_name.replace(/\[예시\]\s*/g, ''), itemsAmount: r.subtotal })
+  }
+  for (const f of farms) f.fee = policy ? (f.itemsAmount >= policy.shipping.freeOver ? 0 : policy.shipping.fee) : 0
+  const fee = farms.reduce((sum, f) => sum + f.fee, 0)
+  return { loading: !products && !error, error, rows, ok, itemsAmount, fee, farms, total: itemsAmount + fee, policy }
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { thumbUrl, unitPrice } from '../shop/shared.js'
 import { AiDraft } from './AiDraft.jsx'
 import { adminApi } from './api.js'
@@ -24,9 +24,15 @@ function ItemPreview({ item }) {
   if (!item) return null
   return (
     <div className="preview">
+      {item.status === 'pending' && (
+        <p className="warn">새로 요청한 품목이라 관리자 검수 전이에요. 상품은 승인되면 팔 수 있지만, 보관·안전 정보는 검수가 끝나야 손님에게 보여요.
+          [AI로 채우기]를 누르면 품목 정보 초안도 같이 만들어 검수를 도와요.</p>
+      )}
       <strong>{item.name} 품목 기준 정보가 자동으로 붙어요</strong>
       <p>보관: {item.storage_method}</p>
-      {item.fresh_days_stage1 && <p>신선도: {item.fresh_days_stage1}일까지 {item.stage1_uses.join('·')} → {item.fresh_days_stage2}일까지 {item.stage2_uses.join('·')}</p>}
+      {item.stage1_state
+        ? <p>신선도: 신선 {item.stage1_uses.join('·')} → 품질 저하 {item.stage2_uses.join('·')} (상태로 판단{item.keep_period ? ` · 보관 기간 참고 ${item.keep_period}` : ''})</p>
+        : item.fresh_days_stage1 && <p>신선도: {item.fresh_days_stage1}일까지 {item.stage1_uses.join('·')} → {item.fresh_days_stage2}일까지 {item.stage2_uses.join('·')}</p>}
       {item.opened_note && <p>개봉 후: {item.opened_note}</p>}
       <p>레시피 {item.recipes.length}개{item.allergens.length > 0 && ` · 알레르기: ${item.allergens.join(', ')}`}</p>
       {!item.reviewed_by && <p className="warn">식품팀 검수 전 정보예요</p>}
@@ -43,13 +49,25 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
   const [form, setForm] = useState(() => toForm(product))
   const [errors, setErrors] = useState([])
   const [image, setImage] = useState(null)
+  const [brixPhoto, setBrixPhoto] = useState(null) // 당도계 사진 (새로 올릴 것)
+  // 당도를 바꾸면 서버가 옛 사진을 내리므로, 지금 적힌 당도가 저장된 값과 같을 때만 옛 사진을 보여 준다
+  const brixPhotoUrl = product?.brix_photo_url && Number(product.brix) === Number(form.brix) ? product.brix_photo_url : null
+  const [changes, setChanges] = useState([]) // 판매 중 가격·당도·수확일 수정 이력 (관리자만)
+  useEffect(() => {
+    if (!product || mode !== 'admin') return
+    api(`/products/${product.product_code}/changes`).then(setChanges).catch(() => {})
+  }, [product, mode, api])
   const [gallery, setGallery] = useState([]) // 새로 올릴 상세 사진들
   const [photos, setPhotos] = useState(() => ({ main: product?.image_url ?? null, list: product?.images ?? [] }))
   const [saving, setSaving] = useState(false)
   const [itemDraft, setItemDraft] = useState(null) // AI가 만든 품목(원물) 초안 — 품목 정보가 비어 있을 때만
   const [fillItem, setFillItem] = useState(true)
+  // 목록에 없는 품목 요청 (관리자 검수 후 정보가 손님에게 보인다)
+  const [extraItems, setExtraItems] = useState([])
+  const [request, setRequest] = useState(null) // null: 닫힘, { name, category, error }
+  const items = [...options.items, ...extraItems.filter((x) => !options.items.some((i) => i.item_code === x.item_code))]
 
-  const item = options.items.find((i) => i.item_code === form.item_code)
+  const item = items.find((i) => i.item_code === form.item_code)
   const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
   const toggleTag = (code) => setForm((prev) => ({
     ...prev,
@@ -85,6 +103,9 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
           body: image,
         })
       }
+      if (brixPhoto && saved.brix) {
+        await api(`/products/${saved.product_code}/image?role=brix`, { method: 'POST', headers: { 'Content-Type': brixPhoto.type }, body: brixPhoto })
+      }
       for (const file of gallery) {
         await api(`/products/${saved.product_code}/image?role=gallery`, { method: 'POST', headers: { 'Content-Type': file.type }, body: file })
       }
@@ -100,6 +121,17 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
     }
   }
 
+  async function sendRequest() {
+    try {
+      const { item: created } = await api('/items/request', { method: 'POST', body: { name: request.name, category: request.category } })
+      setExtraItems((prev) => [...prev, created])
+      setForm((prev) => ({ ...prev, item_code: created.item_code }))
+      setRequest(null)
+    } catch (e) {
+      setRequest((prev) => ({ ...prev, error: e.message }))
+    }
+  }
+
   const groups = [...new Set(options.tags.map((t) => t.tag_group))]
 
   return (
@@ -107,13 +139,40 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
       <h3>{isNew ? '새 상품 등록' : `상품 수정 · ${product.product_code}`}</h3>
       {product?.status === 'pending' && <p className="warn">검토 대기 중인 상품이에요. {seller ? '회사 관리자가 승인하면 판매돼요.' : '확인 후 [저장하고 판매]를 누르면 승인돼요.'}</p>}
       {product?.review_note && <p className="warn">반려 사유: {product.review_note}</p>}
+      {changes.length > 0 && (
+        <details className="preview">
+          <summary>판매 중 수정 이력 {changes.length}건 (가격·당도·수확일)</summary>
+          <ul>{changes.map((c, i) => <li key={i}>{c.changed_at.slice(0, 16).replace('T', ' ')} · {c.changed_by} · {c.field}: {c.old_value ?? '없음'} → {c.new_value ?? '없음'}</li>)}</ul>
+        </details>
+      )}
 
       <label>품목*
         <select value={form.item_code} onChange={set('item_code')}>
           <option value="">골라 주세요</option>
-          {options.items.map((i) => <option key={i.item_code} value={i.item_code}>{i.category} · {i.name}</option>)}
+          {items.map((i) => <option key={i.item_code} value={i.item_code}>{i.category} · {i.name}{i.status === 'pending' ? ' (검수 전)' : ''}</option>)}
         </select>
       </label>
+      {request ? (
+        <div className="preview">
+          <strong>새 품목 요청</strong>
+          <p className="muted">목록에 없는 원물이면 이름과 종류만 적어 주세요. 회사 관리자가 보관법·먹으면 안 되는 신호를 출처와 함께 확인한 뒤 손님에게 보여요.</p>
+          <div className="row">
+            <label>품목 이름<input value={request.name} onChange={(e) => setRequest({ ...request, name: e.target.value, error: '' })} maxLength={20} placeholder="예: 수박" /></label>
+            <label>종류
+              <select value={request.category} onChange={(e) => setRequest({ ...request, category: e.target.value })}>
+                {['과일', '채소', '가공품'].map((c) => <option key={c}>{c}</option>)}
+              </select>
+            </label>
+          </div>
+          {request.error && <p className="error">{request.error}</p>}
+          <div className="actions">
+            <button type="button" className="button" disabled={!request.name.trim()} onClick={sendRequest}>요청하고 이 품목 고르기</button>
+            <button type="button" className="button ghost" onClick={() => setRequest(null)}>취소</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="link" onClick={() => setRequest({ name: '', category: '과일', error: '' })}>찾는 품목이 목록에 없어요 (새 품목 요청)</button>
+      )}
       <ItemPreview item={item} />
 
       {!seller && (
@@ -147,6 +206,14 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
           <label>당도 잰 날<input type="date" value={form.brix_measured_at} onChange={set('brix_measured_at')} /></label>
         </div>
       )}
+      {/* 거짓 표시 막기: 당도계 화면 사진. 판매자가 당도를 적으면 사진이 있어야 승인되고, 손님 화면에 [측정 사진]으로 보인다 */}
+      {item?.show_brix && form.brix && (
+        <label>당도계 사진 {seller && <span className="muted">(당도를 적으면 꼭 올려 주세요 · 당도를 바꾸면 다시 올려야 해요)</span>}
+          {brixPhotoUrl && !brixPhoto && <span className="muted"> · <a href={brixPhotoUrl} target="_blank" rel="noreferrer">올린 사진 보기</a></span>}
+          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setBrixPhoto(e.target.files?.[0] ?? null)} />
+        </label>
+      )}
+      {item?.brix_min != null && item?.brix_max != null && <p className="muted">{item.name} 보통 당도: {item.brix_min}~{item.brix_max}Brix</p>}
       {item && item.category !== '가공품' && (
         <label>수확일<input type="date" value={form.harvest_date} onChange={set('harvest_date')} /></label>
       )}

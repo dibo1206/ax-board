@@ -107,7 +107,7 @@ function MyQuestions({ onMessage, onError }) {
   )
 }
 
-// 내 농가 상품이 들어 있는 주문. 내 상품만 있는 주문은 직접 배송 처리(송장 입력)할 수 있다
+// 내 농가 상품이 들어 있는 주문. 다른 농가 상품과 함께 주문됐어도 내 상품은 내가 따로 보낸다 (송장·배송비가 농가마다)
 // 정산 요약: 배송 완료 7일 뒤(또는 손님이 먼저) 구매 확정된 매출이 정산 대상
 function Settlement() {
   const [s, setS] = useState(null)
@@ -118,7 +118,8 @@ function Settlement() {
   return (
     <div className="box">
       <h3>정산 <span className="muted">구매 확정된 내 상품 매출 기준{s.has_test ? ' · 테스트 결제 포함' : ''}</span></h3>
-      <p>이번 달 정산 예정 <b>{won(s.confirmed_amount)}</b> ({s.confirmed_orders}건) · 구매 확정 기다리는 중 {won(s.waiting_amount)} ({s.waiting_orders}건)</p>
+      <p>이번 달 정산 예정 <b>{won(s.confirmed_amount + s.confirmed_shipping)}</b> ({s.confirmed_orders}건, 배송비 {won(s.confirmed_shipping)} 포함)
+        · 구매 확정 기다리는 중 {won(s.waiting_amount + s.waiting_shipping)} ({s.waiting_orders}건)</p>
       <p className="muted">배송 완료 {s.confirmDays}일 뒤 자동으로 구매 확정돼요. 손님이 먼저 확정할 수도 있어요.</p>
     </div>
   )
@@ -153,13 +154,14 @@ function MyOrders({ onMessage, onError }) {
     <ul className="inbox">
       {orders.map((o) => (
         <li key={o.order_no} className={`box${o.status === 'cancelled' ? ' dim' : ''}`}>
-          <p><b>{o.order_no}</b> · {ORDER_STATUS[o.status]}{o.confirmed_at && ' · 구매 확정'} · {when(o.created_at)}{o.is_test && ' · 테스트'}</p>
+          <p><b>{o.order_no}</b> · 내 배송 {ORDER_STATUS[o.status]}{o.confirmed_at && ' · 구매 확정'} · {when(o.created_at)}{o.is_test && ' · 테스트'}</p>
           <ul>{o.items.map((i) => <li key={i.name}>{i.name} ({i.unit}) × {i.quantity}</li>)}</ul>
+          <p className="muted">내 상품 {won(o.items_amount)} + 배송비 {o.shipping_fee ? won(o.shipping_fee) : '무료'}
+            {o.farms > 1 && ` · 다른 농가 ${o.farms - 1}곳 상품과 함께 주문됐어요 (내 상품만 따로 보내면 돼요)`}</p>
           {o.receiver && <p className="muted">받는 분 {o.receiver.name} · {o.receiver.phone} · ({o.receiver.zipcode}) {o.receiver.address1} {o.receiver.address2 ?? ''}{o.receiver.memo && ` · 메모: ${o.receiver.memo}`}</p>}
-          {o.tracking_no && <p className="muted">송장 {o.courier} {o.tracking_no}</p>}
-          {!o.only_mine && o.status !== 'cancelled' && <p className="muted">다른 농가 상품과 함께 주문돼 회사에서 배송해요.</p>}
-          {o.only_mine && o.status === 'paid' && <button type="button" className="button ghost" onClick={() => advance(o, 'preparing')}>배송 준비 시작</button>}
-          {o.only_mine && o.status === 'preparing' && (
+          {o.tracking_no && <p className="muted">송장 {o.courier} {o.tracking_no} {o.tracking_url && <a href={o.tracking_url} target="_blank" rel="noreferrer">배송 조회</a>}</p>}
+          {o.status === 'paid' && <button type="button" className="button ghost" onClick={() => advance(o, 'preparing')}>배송 준비 시작</button>}
+          {o.status === 'preparing' && (
             <div className="row form">
               <label>택배사<input value={tracking[o.order_no]?.courier ?? ''} onChange={setT(o.order_no, 'courier')} list="couriers" placeholder="골라 주세요" /></label>
               <CourierList />

@@ -154,8 +154,13 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
       <dl>
         {product.weight_g && <><dt>1개 무게</dt><dd>{product.weight_g}g</dd></>}
         {product.count_per_box && <><dt>박스당</dt><dd>{product.count_per_box}개</dd></>}
-        {item.show_brix && product.brix && (
-          <><dt>당도</dt><dd>{product.brix}Brix{product.brix_measured_at && ` · ${product.brix_measured_at.slice(0, 10)} 측정`}</dd></>
+        {/* 당도는 판매자가 잰 값: 측정일과 당도계 사진을 함께 보여 준다. 후기에서 '표시와 달랐어요'가 많으면 내린다 */}
+        {item.show_brix && product.brix && !product.info_disputed && (
+          <><dt>당도</dt><dd>{product.brix}Brix <span className="muted">(판매자 측정{product.brix_measured_at && ` · ${product.brix_measured_at.slice(0, 10)}`})</span>
+            {product.brix_photo_url && <> <a href={product.brix_photo_url} target="_blank" rel="noreferrer">측정 사진</a></>}</dd></>
+        )}
+        {item.show_brix && product.brix && product.info_disputed && (
+          <><dt>당도</dt><dd className="muted">구매 후기에서 표시와 다르다는 의견이 많아 당도 표시를 잠시 내렸어요</dd></>
         )}
         {product.harvest_date && <><dt>수확일</dt><dd>{product.harvest_date.slice(0, 10)}</dd></>}
         <dt>판매 농가</dt><dd>{seller.name} · {seller.region}</dd>
@@ -171,23 +176,39 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
       )}
       <section className="box">
         <h3>보관·섭취 안내</h3>
-        <p>{item.storage_method}</p>
-        {fresh && item.fresh_days_stage1 && (
+        {item.pending && <p className="muted">새로 들어온 품목이라 담당자가 보관·섭취 정보를 확인하고 있어요. 궁금한 점은 아래 상품 Q&A로 물어봐 주세요.</p>}
+        {item.storage_method && <p>{item.storage_method}</p>}
+        {item.keep_period && <p>보관 기간 참고: {item.keep_period}</p>}
+        {/* 신선도는 날짜가 아니라 지금 상태로 판단한다 (팀 식품 기준표). 옛 데이터(며칠)도 그대로 보여 준다 */}
+        {fresh && item.stage1_state && (
+          <ul className="fresh-stages">
+            <li><strong>신선</strong> {item.stage1_state} → {item.stage1_uses.join(', ')}</li>
+            <li><strong>품질 저하</strong> {item.stage2_state} → {item.stage2_uses.join(', ')}</li>
+            <li><strong>섭취 부적합</strong> 아래 신호가 보이면 → 조리하지 말고 폐기</li>
+          </ul>
+        )}
+        {fresh && !item.stage1_state && item.fresh_days_stage1 && (
           <p>받은 날부터 {item.fresh_days_stage1}일까지: {item.stage1_uses.join(', ')} → {item.fresh_days_stage2}일까지: {item.stage2_uses.join(', ')} → 그 뒤: {item.stage3_uses.join(', ')}</p>
         )}
         {item.opened_note && <p>{item.opened_note}</p>}
         {item.allergens.length > 0 && <p className="warn">알레르기: {item.allergens.join(', ')}</p>}
-        {item.danger_signs.length > 0 && <p className="muted">이런 상태면 드시지 마세요: {item.danger_signs.join(', ')}</p>}
+        {item.allergen_note && <p className="muted">{item.allergen_note}</p>}
+        {item.danger_signs.length > 0 && <p className="muted">이런 상태면 드시지 마세요: {item.danger_signs.join(' / ')}</p>}
+        {item.danger_note && <p className="muted">{item.danger_note}</p>}
+        {item.cafe_note && <p className="muted">카페·업소 메뉴 비율: {item.cafe_note}</p>}
+        {item.reviewed_by && item.source && <p className="note">출처: {item.source}</p>}
       </section>
 
-      <section className="box">
-        <h3>이렇게 즐겨 보세요</h3>
-        <ul>
-          {item.recipes.map((r) => (
-            <li key={r.title}><strong>{r.title}</strong> — {r.ingredients} · {r.method}</li>
-          ))}
-        </ul>
-      </section>
+      {item.recipes.length > 0 && (
+        <section className="box">
+          <h3>이렇게 즐겨 보세요</h3>
+          <ul>
+            {item.recipes.map((r) => (
+              <li key={r.title}><strong>{r.title}</strong> — {r.ingredients} · {r.method}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="box">
         <h3>판매 농가 이야기</h3>

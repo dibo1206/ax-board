@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { adminApi } from './api.js'
 import { BannedWords } from './BannedWords.jsx'
 import { ChatLogs } from './ChatLogs.jsx'
+import { ItemReview } from './ItemReview.jsx'
 import { Inbox } from './Inbox.jsx'
 import { AccessLogs } from './AccessLogs.jsx'
 import { Dashboard } from './Dashboard.jsx'
@@ -63,6 +64,7 @@ function Admin() {
   const [error, setError] = useState('')
   const [tab, setTab] = useState('dashboard')
   const [counts, setCounts] = useState(null)
+  const setItemCount = useCallback((n) => setCounts((c) => (c ? { ...c, pending_items: n } : c)), [])
 
   useEffect(() => {
     adminApi('/me').then(setMe).catch(() => setMe(null))
@@ -148,6 +150,7 @@ function Admin() {
         <nav className="tabs">
           <button type="button" className={tab === 'dashboard' ? 'on' : ''} onClick={() => { setTab('dashboard'); setEditing(null); setMessage('') }}>매출</button>
           <button type="button" className={tab === 'products' ? 'on' : ''} onClick={() => setTab('products')}>상품 관리{pending > 0 && ` (검토 ${pending})`}</button>
+          <button type="button" className={tab === 'items' ? 'on' : ''} onClick={() => { setTab('items'); setEditing(null); setMessage('') }}>품목 검수{counts?.pending_items > 0 && ` (${counts.pending_items})`}</button>
           <button type="button" className={tab === 'inbox' ? 'on' : ''} onClick={() => { setTab('inbox'); setEditing(null); setMessage('') }}>
             문의함{waiting > 0 && ` (${waiting})`}
           </button>
@@ -176,6 +179,8 @@ function Admin() {
         <AdminReviews />
       ) : tab === 'mail' ? (
         <Notifications />
+      ) : tab === 'items' ? (
+        <ItemReview onCount={setItemCount} />
       ) : tab === 'banned' ? (
         <BannedWords />
       ) : tab === 'access' ? (
@@ -199,7 +204,12 @@ function Admin() {
             <tbody>
               {products.map((p) => (
                 <tr key={p.product_code} className={p.sold_out ? 'dim' : ''}>
-                  <td><strong>{p.name}</strong><br /><span className="muted">{p.category} · {p.seller_name}</span></td>
+                  <td><strong>{p.name}</strong><br /><span className="muted">{p.category} · {p.seller_name}</span>
+                    {p.item_status === 'pending' && <> <button type="button" className="badge" onClick={() => setTab('items')}>품목 검수 전</button></>}
+                    {/* 거짓 표시 막기: 당도계 사진이 없는 당도, 후기의 '표시와 달랐어요', 판매 중 수정 이력 */}
+                    {p.show_brix && p.brix && !p.brix_photo_url && <> <span className="badge pending">당도 사진 없음</span></>}
+                    {p.info_no > 0 && <> <span className="badge soldout">표시와 다름 후기 {p.info_no}</span></>}
+                    {p.changes > 0 && <> <span className="muted">수정 이력 {p.changes}</span></>}</td>
                   <td>{won(p.price)}</td>
                   <td>{p.sold_out ? <span className="badge soldout">품절</span> : `${p.stock}개`}</td>
                   <td><StatusLabel product={p} /></td>
