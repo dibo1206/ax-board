@@ -34,7 +34,7 @@ export function checkItem(item) {
   const issues = []
   const fields = [
     ['보관법', item.storage_method], ['신선한 상태', item.stage1_state], ['품질 저하 상태', item.stage2_state],
-    ['보관 기간 참고', item.keep_period], ['개봉 후', item.opened_note], ['신호 예외 안내', item.danger_note],
+    ['보관 기간 참고', item.keep_period], ['개봉 후', item.opened_note], ['신호 예외 안내', item.danger_note], ['알레르기 안내', item.allergen_note], ['카페 메뉴 비율', item.cafe_note],
     ...(item.danger_signs ?? []).map((s) => ['먹으면 안 되는 신호', s]),
     ...(item.recipes ?? []).map((r) => ['레시피', `${r.title}: ${r.ingredients} — ${r.method}`]),
   ]
@@ -88,6 +88,8 @@ export async function saveItem(req, res) {
     allergens: textList(b.allergens, 10, 20),
     danger_signs: textList(b.danger_signs, 6, 80),
     danger_note: text(b.danger_note, 200) || null,
+    allergen_note: text(b.allergen_note, 300) || null,
+    cafe_note: text(b.cafe_note, 400) || null,
     recipes: JSON.stringify(recipes),
     source: text(b.source, 1000) || null,
   }
@@ -118,7 +120,7 @@ export function publicItem(item) {
   if (!item || item.status !== 'pending') return item
   return {
     item_code: item.item_code, name: item.name, category: item.category, show_brix: false, pending: true,
-    storage_method: null, stage1_state: null, stage2_state: null, keep_period: null, opened_note: null, danger_note: null,
+    storage_method: null, stage1_state: null, stage2_state: null, keep_period: null, opened_note: null, danger_note: null, allergen_note: null, cafe_note: null,
     fresh_days_stage1: null, fresh_days_stage2: null, stage1_uses: [], stage2_uses: [], stage3_uses: [],
     allergens: [], danger_signs: [], recipes: [], source: null, reviewed_by: null,
   }

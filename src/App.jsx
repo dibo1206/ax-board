@@ -192,8 +192,10 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         )}
         {item.opened_note && <p>{item.opened_note}</p>}
         {item.allergens.length > 0 && <p className="warn">알레르기: {item.allergens.join(', ')}</p>}
+        {item.allergen_note && <p className="muted">{item.allergen_note}</p>}
         {item.danger_signs.length > 0 && <p className="muted">이런 상태면 드시지 마세요: {item.danger_signs.join(' / ')}</p>}
         {item.danger_note && <p className="muted">{item.danger_note}</p>}
+        {item.cafe_note && <p className="muted">카페·업소 메뉴 비율: {item.cafe_note}</p>}
         {item.reviewed_by && item.source && <p className="note">출처: {item.source}</p>}
       </section>
 

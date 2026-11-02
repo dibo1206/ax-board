@@ -170,7 +170,8 @@ function describeItem(item) {
   }
   if (item.keep_period) lines.push(`- 보관 기간 참고값: ${item.keep_period}`)
   if (item.opened_note) lines.push(`- 개봉 후: ${item.opened_note}`)
-  lines.push(`- 알레르기 표시: ${list(item.allergens)}`)
+  lines.push(`- 알레르기 표시: ${list(item.allergens)}${item.allergen_note ? ` (${item.allergen_note})` : ''}`)
+  if (item.cafe_note) lines.push(`- 카페 메뉴 비율: ${item.cafe_note}`)
   lines.push(`- 먹으면 안 되는 신호: ${list(item.danger_signs)}${item.danger_note ? ` (${item.danger_note})` : ''}`)
   lines.push(`- 레시피: ${item.recipes?.length ? item.recipes.map((r) => `${r.title}(재료 ${r.ingredients} / 방법 ${r.method})`).join('; ') : '정보 없음'}`)
   if (!item.reviewed_by) lines.push('- (식품팀 검수 전 정보)')
@@ -414,7 +415,7 @@ function stageOf(item, days) {
 }
 
 // "배숙 만드는 법", "고구마 맛탕 레시피"처럼 요리 이름을 말했는지 (품목 이름이 든 낱말이나 그 다음 낱말)
-const NOT_DISH = /^(레시피|요리|만드|만들|활용|어떻게|뭐|무엇|알려|해|먹|법|방법|비율|음료|간단|쉬운)/
+const NOT_DISH = /^(레시피|요리|메뉴|만드|만들|활용|어떻게|뭐|무엇|알려|해|먹|법|방법|비율|음료|간단|쉬운)/
 function askedDish(item, message) {
   const words = message.split(/\s+/).map((w) => w.replace(/[?!.,~]/g, '').replace(/(으로|로|은|는|이|가|을|를|에|도|랑|하고)$/, ''))
   const at = words.findIndex((w) => w.includes(item.name))
@@ -451,9 +452,9 @@ const SAY_ITEM = {
     const dish = askedDish(item, message)
     const known = !dish || item.recipes.some((r) => r.title.replace(/\s/g, '').includes(dish) || dish.includes(r.title.replace(/\s/g, '')))
     const dishName = dish && (dish.includes(item.name) ? dish : `${item.name} ${dish}`)
-    return `${known ? '' : `${dishName} 레시피는 아직 등록돼 있지 않아요. 대신 `}${josa(item.name, '은', '는')} 이렇게 즐겨 보세요. ${item.recipes.slice(0, 3).map((r, i) => `${i + 1}) ${r.title}: ${r.ingredients} — ${r.method}`).join(' ')}`
+    return `${known ? '' : `${dishName} 레시피는 아직 등록돼 있지 않아요. 대신 `}${josa(item.name, '은', '는')} 이렇게 즐겨 보세요. ${item.recipes.slice(0, 3).map((r, i) => `${i + 1}) ${r.title}: ${r.ingredients} — ${r.method}`).join(' ')}${item.cafe_note && /카페|업소|매장|비율|퍼센트|%/.test(message) ? ` 카페 메뉴 비율은 ${sentence(item.cafe_note)}` : ''}`
   },
-  allergy: (item) => (item.allergens.length
+  allergy: (item) => (item.allergen_note && !item.allergens.length ? `${item.name}: ${sentence(item.allergen_note)}` : item.allergens.length
     ? `${item.name} 상품 정보에 표시된 알레르기 성분은 ${item.allergens.join(', ')}예요.`
     : `${josa(item.name, '은', '는')} 상품 정보에 표시된 알레르기 성분이 없어요. 정확한 성분이 필요하면 상품 Q&A로 물어봐 주세요.`),
 }

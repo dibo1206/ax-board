@@ -24,7 +24,7 @@ const COLUMNS = {
   'sellers.csv': ['seller_code', 'name', 'region', 'intro', 'story', 'is_company', 'source'],
   'items.csv': ['item_code', 'name', 'category', 'show_brix', 'storage_method', 'fresh_days_stage1',
     'fresh_days_stage2', 'stage1_uses', 'stage2_uses', 'stage3_uses', 'opened_note', 'allergens',
-    'danger_signs', 'recipes', 'source', 'reviewed_by', 'stage1_state', 'stage2_state', 'keep_period', 'danger_note'],
+    'danger_signs', 'recipes', 'source', 'reviewed_by', 'stage1_state', 'stage2_state', 'keep_period', 'danger_note', 'allergen_note', 'cafe_note'],
   'tags.csv': ['tag_code', 'group', 'label'],
   'products.csv': ['product_code', 'seller_code', 'item_code', 'name', 'price', 'unit', 'stock', 'weight_g',
     'count_per_box', 'brix', 'brix_measured_at', 'harvest_date', 'summary', 'external_url', 'b2b_available',
@@ -174,17 +174,17 @@ async function load(sheets) {
       await client.query(
         `INSERT INTO items (item_code, name, category, show_brix, storage_method, fresh_days_stage1, fresh_days_stage2,
            stage1_uses, stage2_uses, stage3_uses, opened_note, allergens, danger_signs, recipes, source, reviewed_by,
-           stage1_state, stage2_state, keep_period, danger_note)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+           stage1_state, stage2_state, keep_period, danger_note, allergen_note, cafe_note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
          ON CONFLICT (item_code) DO UPDATE SET name=$2, category=$3, show_brix=$4, storage_method=$5,
            fresh_days_stage1=$6, fresh_days_stage2=$7, stage1_uses=$8, stage2_uses=$9, stage3_uses=$10,
            opened_note=$11, allergens=$12, danger_signs=$13, recipes=$14, source=$15, reviewed_by=$16,
-           stage1_state=$17, stage2_state=$18, keep_period=$19, danger_note=$20`,
+           stage1_state=$17, stage2_state=$18, keep_period=$19, danger_note=$20, allergen_note=$21, cafe_note=$22`,
         [r.item_code, r.name, r.category, yes(r.show_brix), nullable(r.storage_method), nullable(r.fresh_days_stage1),
           nullable(r.fresh_days_stage2), list(r.stage1_uses), list(r.stage2_uses), list(r.stage3_uses),
           nullable(r.opened_note), list(r.allergens), list(r.danger_signs), recipesJson(r.recipes),
           nullable(r.source), nullable(r.reviewed_by),
-          nullable(r.stage1_state), nullable(r.stage2_state), nullable(r.keep_period), nullable(r.danger_note)],
+          nullable(r.stage1_state), nullable(r.stage2_state), nullable(r.keep_period), nullable(r.danger_note), nullable(r.allergen_note), nullable(r.cafe_note)],
       )
     }
     for (const r of sheets['tags.csv']) {
