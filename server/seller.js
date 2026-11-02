@@ -1,7 +1,7 @@
 // 판매자(농가) API. 로그인한 농가의 상품·질문·소개만 다룬다 (다른 농가 것은 없는 것처럼 404)
 // 새 상품은 '검토 대기'로 올라가고 회사 관리자가 승인해야 판매된다. 이미 판매 중인 상품의 수정(가격·재고 등)은 바로 반영된다.
 import express from 'express'
-import { codeSets, insertProduct, itemRanges, rawImage, recordChanges, removeImage, storeImage, updateProduct } from './admin.js'
+import { codeSets, insertProduct, itemRanges, noticeProblem, rawImage, recordChanges, removeImage, storeImage, updateProduct } from './admin.js'
 import { requireSeller } from './auth.js'
 import { bannedMessage, findBanned } from './banned.js'
 import { fillItem, listTemplates, productDraft } from './content.js'
@@ -80,6 +80,8 @@ sellerRouter.post('/products', async (req, res) => {
   const body = { ...req.body, seller_code: mine(req), status: nextStatus(req.body.status, null), review_note: null }
   const { product, errors } = validateProduct(body, { ...(await codeSets()), isNew: true, itemRanges: await itemRanges() })
   if (errors) return res.status(400).json({ error: errors.join(' '), errors })
+  const problem = product.status === 'pending' ? await noticeProblem(product) : null // 임시 저장은 비어 있어도 된다
+  if (problem) return res.status(400).json({ error: problem, errors: [problem] })
   const row = await insertProduct(product, `판매자 화면 등록 (${req.seller.loginId})`)
   if (!row) return res.status(409).json({ error: '같은 상품 코드가 이미 있어요. 다른 코드를 써 주세요.' })
   console.log(`[seller] ${req.seller.loginId} 상품 등록 ${product.product_code} (${product.status})`)
@@ -94,6 +96,10 @@ sellerRouter.patch('/products/:code', ownProduct, async (req, res) => {
   const merged = { ...current, ...req.body, product_code: current.product_code, seller_code: mine(req), status, review_note: reviewNote }
   const { product, errors } = validateProduct(merged, { ...(await codeSets()), isNew: false, itemRanges: await itemRanges() })
   if (errors) return res.status(400).json({ error: errors.join(' '), errors })
+  if (product.status === 'pending' || (product.status === 'active' && 'notice' in req.body)) {
+    const problem = await noticeProblem(product)
+    if (problem) return res.status(400).json({ error: problem, errors: [problem] })
+  }
   await recordChanges(current, product, `판매자 ${req.seller.loginId}`)
   let row = await updateProduct(current.product_code, product)
   // 당도를 바꾸면 옛 당도계 사진은 새 값의 증거가 아니라서 내린다 (새 사진을 올리면 다시 붙는다)
@@ -107,6 +113,8 @@ sellerRouter.patch('/products/:code', ownProduct, async (req, res) => {
 
 // 사진까지 올린 뒤 검토 요청: 믿을 만한 농가의 문제없는 상품은 바로 판매, 아니면 관리자 검토 대기 (이유를 돌려준다)
 sellerRouter.post('/products/:code/submit', ownProduct, async (req, res) => {
+  const problem = req.product.status === 'pending' ? await noticeProblem(req.product) : null
+  if (problem) return res.status(400).json({ error: problem, errors: [problem] })
   const { product, reasons } = await submitProduct(req.product)
   console.log(`[seller] ${req.seller.loginId} 상품 ${product.product_code} ${product.status === 'active' ? '자동 승인' : '검토 대기'}`)
   res.json({ ...product, reasons })

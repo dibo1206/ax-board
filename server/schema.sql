@@ -348,6 +348,8 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS review_reason TEXT;
 -- 거짓 표시 막기 (당도·수확일은 판매자가 적는 값이라 몰이 직접 잴 수 없다 → 쓰기 어렵게, 이상하면 거르고, 거짓이면 드러나게)
 -- 1) 당도계 사진: 당도를 적은 판매자 상품은 사진이 있어야 승인. 판매 중에 당도를 바꾸면 옛 사진은 내린다
 ALTER TABLE products ADD COLUMN IF NOT EXISTS brix_photo_url TEXT;
+-- 상품정보 제공 고시: 판매자가 적는 칸 (원산지·소비기한 등, server/notice.js)
+ALTER TABLE products ADD COLUMN IF NOT EXISTS notice JSONB NOT NULL DEFAULT '{}';
 -- 2) 품목별 보통 당도 범위 (식품 담당이 출처를 보고 채운다. 비어 있으면 검사하지 않음)
 ALTER TABLE items ADD COLUMN IF NOT EXISTS brix_min NUMERIC(4, 1);
 ALTER TABLE items ADD COLUMN IF NOT EXISTS brix_max NUMERIC(4, 1);

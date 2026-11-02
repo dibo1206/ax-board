@@ -6,7 +6,7 @@ import { adminApi } from './api.js'
 const EMPTY = {
   product_code: '', seller_code: '', item_code: '', name: '', price: '', unit: '', stock: '',
   weight_g: '', count_per_box: '', brix: '', brix_measured_at: '', harvest_date: '', summary: '', description: '',
-  external_url: '', b2b_available: false, tags: [], faq: [],
+  external_url: '', b2b_available: false, tags: [], faq: [], notice: { imported: false },
 }
 
 function toForm(product) {
@@ -16,7 +16,42 @@ function toForm(product) {
     const value = product[key]
     form[key] = value === null || value === undefined ? EMPTY[key] : (typeof EMPTY[key] === 'string' ? String(value) : value)
   }
+  form.notice = { imported: false, ...product.notice }
   return form
+}
+
+// 상품정보 제공 고시: 판매자가 직접 적는 칸. 품목·용량·생산자·보관법·상담 전화는 자동으로 채워진다. AI 가 채우지 않는다
+function NoticeFields({ item, notice, hasHarvest, onChange }) {
+  const set = (key) => (e) => onChange({ ...notice, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
+  const text = (key, label, placeholder) => <label>{label}<input value={notice[key] ?? ''} onChange={set(key)} maxLength={300} placeholder={placeholder} /></label>
+  const processed = item.category === '가공품'
+  return (
+    <fieldset className="preview notice-fields">
+      <legend><strong>상품정보 제공 고시</strong> <span className="muted">법으로 보여 줘야 하는 정보예요. 직접 확인해서 적어 주세요 (AI 가 채우지 않아요)</span></legend>
+      {processed ? (
+        <>
+          {text('food_type', '식품의 유형*', '라벨 그대로. 예: 과·채주스')}
+          {text('address', '생산자 소재지*', '예: 충남 천안시 ○○로 1')}
+          {text('packed', '제조연월일*', '예: 제품 라벨에 표시 (별도 표기)')}
+          {text('expiry', '소비기한 또는 품질유지기한*', '예: 제조일부터 12개월')}
+          {text('ingredients', '원재료명·원산지·함량*', '예: 배(국내산) 100%')}
+          {text('nutrition', '영양성분*', '표시 대상이 아니면 "표시 대상 아님"')}
+          {text('gmo', '유전자변형식품 표시', '비우면 해당 없음')}
+        </>
+      ) : (
+        <>
+          {text('origin', '원산지*', '예: 국내산 (충남 천안)')}
+          {!hasHarvest && text('packed', '포장일 또는 생산연도* (수확일을 적으면 비워도 돼요)', '예: 2026년산')}
+          {text('expiry', '소비기한 또는 품질유지기한*', '예: 수령 후 냉장 보관, 2~3주 안에 드세요')}
+          {text('composition', '상품 구성*', '예: 사과 16개 내외')}
+          {text('gmo', '유전자변형농산물 표시', '비우면 해당 없음')}
+          {text('geo', '지리적 표시', '비우면 해당 없음')}
+        </>
+      )}
+      <label className="check"><input type="checkbox" checked={notice.imported === true} onChange={set('imported')} /> 수입 상품이에요</label>
+      {notice.imported && text('importer', '수입자*', '수입 회사 이름')}
+    </fieldset>
+  )
 }
 
 // 품목을 고르면 품목 기준표(보관·신선도·레시피)가 자동으로 붙는다는 걸 미리 보여 준다
@@ -224,6 +259,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
       {item && item.category !== '가공품' && (
         <label>수확일<input type="date" value={form.harvest_date} onChange={set('harvest_date')} /></label>
       )}
+      {item && <NoticeFields item={item} notice={form.notice} hasHarvest={Boolean(form.harvest_date)} onChange={(notice) => setForm((prev) => ({ ...prev, notice }))} />}
       <AiDraft form={form} api={api} onDraft={applyDraft} />
       <label>한 줄 소개<input value={form.summary} onChange={set('summary')} maxLength={200} /></label>
       <label>상품 설명 <span className="muted">(선택) 빈 줄로 문단을 나눠요. 효능 표현은 쓰지 않아요</span>

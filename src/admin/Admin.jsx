@@ -224,6 +224,7 @@ function Admin() {
                     {/* 거짓 표시 막기: 당도계 사진이 없는 당도, 후기의 '표시와 달랐어요', 판매 중 수정 이력 */}
                     {p.status === 'pending' && p.review_reason && <><br /><span className="muted">{p.review_reason}</span></>}
                     {p.auto_approved_at && !p.auto_checked_at && p.status === 'active' && <> <span className="badge pending">자동 승인 · 확인 전</span></>}
+                    {p.notice_missing?.length > 0 && <> <span className="badge soldout" title={p.notice_missing.join(', ')}>고시 미입력 {p.notice_missing.length}</span></>}
                     {p.show_brix && p.brix && !p.brix_photo_url && <> <span className="badge pending">당도 사진 없음</span></>}
                     {p.info_no > 0 && <> <span className="badge soldout">표시와 다름 후기 {p.info_no}</span></>}
                     {p.changes > 0 && <> <span className="muted">수정 이력 {p.changes}</span></>}</td>

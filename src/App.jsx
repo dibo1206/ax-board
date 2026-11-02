@@ -168,6 +168,14 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
       <BuyBox product={product} onAsk={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })} />
 
       <Description text={product.description} />
+      {product.notice_table && (
+        <section className="box notice-box">
+          <h3>상품정보 제공 고시 <span className="muted">{product.notice_table.title}</span></h3>
+          <table className="notice-table"><tbody>
+            {product.notice_table.rows.map((r) => <tr key={r.label}><th scope="row">{r.label}</th><td className={r.missing ? 'muted' : ''}>{r.value}</td></tr>)}
+          </tbody></table>
+        </section>
+      )}
       {product.faq?.length > 0 && (
         <section className="box faq-box">
           <h3>자주 묻는 질문</h3>

@@ -132,6 +132,9 @@ function validate(sheets, issues) {
       if (!/^\/[A-Za-z0-9_\-./]+\.webp$/.test(r.image_url)) issues.error('products.csv', line, `image_url "${r.image_url}"는 /product-photos/상품코드.webp 처럼 / 로 시작하는 .webp 주소만`)
       else if (!existsSync(new URL(`../public${r.image_url}`, import.meta.url))) issues.warn('products.csv', line, `image_url 파일이 public${r.image_url} 에 없어요`)
     }
+    if (r.notice) {
+      try { JSON.parse(r.notice) } catch { issues.error('products.csv', line, 'notice 는 JSON 형식으로') }
+    }
     if (r.external_url && !/^https?:\/\//.test(r.external_url)) issues.error('products.csv', line, '판매 링크는 http로 시작해야 해요')
     const productTags = list(r.tags)
     productTags.filter((t) => !tagCodes.has(t)).forEach((t) => issues.error('products.csv', line, `태그 "${t}"가 tags.csv에 없어요`))
@@ -197,15 +200,15 @@ async function load(sheets) {
     for (const r of sheets['products.csv']) {
       await client.query(
         `INSERT INTO products (product_code, seller_code, item_code, name, price, unit, stock, weight_g, count_per_box,
-           brix, brix_measured_at, harvest_date, summary, external_url, b2b_available, tags, source, image_url, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18, now())
+           brix, brix_measured_at, harvest_date, summary, external_url, b2b_available, tags, source, image_url, notice, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,COALESCE($19::jsonb, '{}'::jsonb), now())
          ON CONFLICT (product_code) DO UPDATE SET seller_code=$2, item_code=$3, name=$4, price=$5, unit=$6, stock=$7,
            weight_g=$8, count_per_box=$9, brix=$10, brix_measured_at=$11, harvest_date=$12, summary=$13,
-           external_url=$14, b2b_available=$15, tags=$16, source=$17, image_url=COALESCE($18, products.image_url), updated_at=now()`,
+           external_url=$14, b2b_available=$15, tags=$16, source=$17, image_url=COALESCE($18, products.image_url), notice=COALESCE($19::jsonb, products.notice), updated_at=now()`,
         [r.product_code, r.seller_code, r.item_code, r.name, Number(r.price), r.unit, Number(r.stock),
           nullable(r.weight_g), nullable(r.count_per_box), nullable(r.brix), nullable(r.brix_measured_at),
           nullable(r.harvest_date), nullable(r.summary), nullable(r.external_url), yes(r.b2b_available),
-          list(r.tags), nullable(r.source), nullable(r.image_url ?? '')],
+          list(r.tags), nullable(r.source), nullable(r.image_url ?? ''), nullable(r.notice ?? '')],
       )
     }
     for (const r of sheets['questions.csv']) {
