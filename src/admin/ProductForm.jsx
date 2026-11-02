@@ -136,7 +136,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
 
   return (
     <div className="box form">
-      <h3>{isNew ? '새 상품 등록' : `상품 수정 · ${product.product_code}`}</h3>
+      <h3>{isNew ? '새 상품 등록' : `상품 수정 · ${seller ? product.name : product.product_code}`}</h3>
       {product?.status === 'pending' && <p className="warn">검토 대기 중인 상품이에요. {seller ? '회사 관리자가 승인하면 판매돼요.' : '확인 후 [저장하고 판매]를 누르면 승인돼요.'}</p>}
       {product?.review_note && <p className="warn">반려 사유: {product.review_note}</p>}
       {changes.length > 0 && (
@@ -184,8 +184,9 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
         </label>
       )}
 
-      {isNew && (
-        <label>상품 코드* <span className="muted">(영문 소문자·숫자·밑줄, 한 번 정하면 바꾸지 않아요)</span>
+      {/* 상품 코드는 서버가 자동으로 만든다. 판매자에게는 보이지 않고, 관리자만 원하면 직접 정할 수 있다 */}
+      {isNew && !seller && (
+        <label>상품 코드 <span className="muted">(비워 두면 자동으로 만들어요. 직접 정하면 영문 소문자·숫자·밑줄)</span>
           <input value={form.product_code} onChange={set('product_code')} placeholder="예: apple_gift_5kg" />
         </label>
       )}

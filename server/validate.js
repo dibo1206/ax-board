@@ -1,4 +1,6 @@
 // 관리자 화면에서 들어온 상품 입력 검사. 데이터 불러오기 스크립트와 같은 규칙을 쓴다.
+import { randomBytes } from 'node:crypto'
+
 export const FORBIDDEN = ['면역력', '다이어트', '치료', '예방', '해독', '항암', '혈압', '혈당']
 
 const isCode = (v) => /^[a-z0-9_]+$/.test(v)
@@ -12,7 +14,8 @@ const defaultFindBanned = (value) => FORBIDDEN.filter((w) => value.includes(w))
 export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew, findBanned = defaultFindBanned, itemRanges = null }) {
   const errors = []
   const p = {
-    product_code: text(input.product_code),
+    // 새 상품의 코드는 비어 있으면 서버가 만든다 (판매자는 코드를 몰라도 된다)
+    product_code: text(input.product_code) || (isNew ? `p_${randomBytes(5).toString('hex')}` : ''),
     seller_code: text(input.seller_code),
     item_code: text(input.item_code),
     name: text(input.name),
