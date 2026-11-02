@@ -3,6 +3,7 @@ import { adminApi } from './api.js'
 import { BannedWords } from './BannedWords.jsx'
 import { ChatLogs } from './ChatLogs.jsx'
 import { ItemReview } from './ItemReview.jsx'
+import { SellerApproval } from './SellerApproval.jsx'
 import { Inbox } from './Inbox.jsx'
 import { AccessLogs } from './AccessLogs.jsx'
 import { Dashboard } from './Dashboard.jsx'
@@ -125,6 +126,17 @@ function Admin() {
     }
   }
 
+  // 바로 판매된 상품을 확인했다고 표시
+  async function checkAuto(product) {
+    try {
+      await adminApi(`/products/${product.product_code}/checked`, { method: 'POST' })
+      setCounts(await adminApi('/inquiries/summary'))
+      await refresh(`${product.name}: 확인했어요`)
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
   if (me === undefined) return <p className="muted">확인 중…</p>
   // 다시 로그인하면 전 계정(예: 판매자)으로 났던 오류 문구는 지운다
   if (!me) return <Login onLogin={(next) => { setError(''); setMe(next) }} />
@@ -149,8 +161,9 @@ function Admin() {
       <div className="admin-head">
         <nav className="tabs">
           <button type="button" className={tab === 'dashboard' ? 'on' : ''} onClick={() => { setTab('dashboard'); setEditing(null); setMessage('') }}>매출</button>
-          <button type="button" className={tab === 'products' ? 'on' : ''} onClick={() => setTab('products')}>상품 관리{pending > 0 && ` (검토 ${pending})`}</button>
+          <button type="button" className={tab === 'products' ? 'on' : ''} onClick={() => setTab('products')}>상품 관리{pending > 0 && ` (검토 ${pending})`}{counts?.auto_unchecked > 0 && ` (확인 ${counts.auto_unchecked})`}</button>
           <button type="button" className={tab === 'items' ? 'on' : ''} onClick={() => { setTab('items'); setEditing(null); setMessage('') }}>품목 검수{counts?.pending_items > 0 && ` (${counts.pending_items})`}</button>
+          <button type="button" className={tab === 'sellers' ? 'on' : ''} onClick={() => { setTab('sellers'); setEditing(null); setMessage('') }}>판매자 승인{counts?.pending_sellers > 0 && ` (${counts.pending_sellers})`}</button>
           <button type="button" className={tab === 'inbox' ? 'on' : ''} onClick={() => { setTab('inbox'); setEditing(null); setMessage('') }}>
             문의함{waiting > 0 && ` (${waiting})`}
           </button>
@@ -179,6 +192,8 @@ function Admin() {
         <AdminReviews />
       ) : tab === 'mail' ? (
         <Notifications />
+      ) : tab === 'sellers' ? (
+        <SellerApproval onCount={() => adminApi('/inquiries/summary').then(setCounts).catch(() => {})} />
       ) : tab === 'items' ? (
         <ItemReview onCount={setItemCount} />
       ) : tab === 'banned' ? (
@@ -207,6 +222,8 @@ function Admin() {
                   <td><strong>{p.name}</strong><br /><span className="muted">{p.category} · {p.seller_name}</span>
                     {p.item_status === 'pending' && <> <button type="button" className="badge" onClick={() => setTab('items')}>품목 검수 전</button></>}
                     {/* 거짓 표시 막기: 당도계 사진이 없는 당도, 후기의 '표시와 달랐어요', 판매 중 수정 이력 */}
+                    {p.status === 'pending' && p.review_reason && <><br /><span className="muted">{p.review_reason}</span></>}
+                    {p.auto_approved_at && !p.auto_checked_at && p.status === 'active' && <> <span className="badge pending">자동 승인 · 확인 전</span></>}
                     {p.show_brix && p.brix && !p.brix_photo_url && <> <span className="badge pending">당도 사진 없음</span></>}
                     {p.info_no > 0 && <> <span className="badge soldout">표시와 다름 후기 {p.info_no}</span></>}
                     {p.changes > 0 && <> <span className="muted">수정 이력 {p.changes}</span></>}</td>
@@ -216,6 +233,8 @@ function Admin() {
                   <td className="row-actions">
                     {p.status === 'pending' && <button type="button" onClick={() => review(p, true)}>승인</button>}
                     {p.status === 'pending' && <button type="button" onClick={() => review(p, false)}>반려</button>}
+                    {p.auto_approved_at && !p.auto_checked_at && p.status === 'active' && <button type="button" onClick={() => checkAuto(p)}>확인</button>}
+                    {p.auto_approved_at && !p.auto_checked_at && p.status === 'active' && <button type="button" onClick={() => review(p, false)}>내리기</button>}
                     <button type="button" onClick={() => { setEditing(p); setMessage('') }}>{p.status === 'pending' ? '열어 보기' : '수정'}</button>
                     {p.sold_out ? null : <button type="button" onClick={() => quickStock(p, 0)}>품절 처리</button>}
                   </td>

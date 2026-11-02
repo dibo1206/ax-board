@@ -22,6 +22,7 @@ import { adminOrderRouter, memberOrderRouter, publicOrderRouter, sellerOrderRout
 import { recommendRouter } from './recommend.js'
 import { adminReviewRouter, reviewRouter } from './reviews.js'
 import { sellerRouter } from './seller.js'
+import { adminSellerRouter, sellerSignupRouter } from './sellers.js'
 import { groupWhere, shopGroupRouter } from './shopGroups.js'
 import { seoRouter, serveDist } from './web.js'
 
@@ -126,6 +127,9 @@ app.get('/api/health', async (req, res) => {
   }
 })
 
+// 손님에게 보내지 않는 칸 (반려·승인 기록은 내부 정보)
+const publicProduct = ({ review_note: _n, review_reason: _r, rejected_at: _x, admin_approved_at: _a, auto_approved_at: _o, auto_checked_at: _c, ...p }) => p
+
 app.get('/api/products', async (req, res) => {
   const { category } = req.query
   const params = []
@@ -135,7 +139,7 @@ app.get('/api/products', async (req, res) => {
     sql += ` AND i.category = $${params.length}`
   }
   sql += ' ORDER BY (p.stock = 0), i.category, p.name'
-  res.json(await cached(`products:${category ?? ''}`, 15_000, async () => (await pool.query(sql, params)).rows))
+  res.json(await cached(`products:${category ?? ''}`, 15_000, async () => (await pool.query(sql, params)).rows.map(publicProduct)))
 })
 
 // 상품 찾기: 검색어(q, 띄어쓰기로 여러 단어)·카테고리·정렬·페이지. 품절 상품은 항상 뒤로
@@ -178,7 +182,7 @@ app.get('/api/catalog', async (req, res) => {
       params,
     )
     const total = Number(rows[0]?.total ?? 0)
-    return { items: rows.map(({ total: _t, ...p }) => p), total, page, pages: Math.max(1, Math.ceil(total / size)), sort }
+    return { items: rows.map(({ total: _t, ...p }) => publicProduct(p)), total, page, pages: Math.max(1, Math.ceil(total / size)), sort }
   }))
 })
 
@@ -191,10 +195,11 @@ app.get('/api/products/:code', async (req, res) => {
 async function loadProductDetail(code) {
   const { rows } = await pool.query(`${PRODUCT_SELECT} AND p.product_code = $1`, [code])
   if (rows.length === 0) return null
-  const product = rows[0]
+  const product = publicProduct(rows[0])
   const [item, seller, questions] = await Promise.all([
     pool.query('SELECT * FROM items WHERE item_code = $1', [product.item_code]),
-    pool.query('SELECT * FROM sellers WHERE seller_code = $1', [product.seller_code]),
+    // 농가 표에는 대표자·연락처·사업자번호도 있다 → 공개 칸만
+    pool.query('SELECT seller_code, name, region, intro, story, is_company FROM sellers WHERE seller_code = $1', [product.seller_code]),
     pool.query(
       'SELECT id, author, question, answer, created_at, answered_at FROM questions WHERE product_code = $1 AND NOT hidden ORDER BY created_at DESC',
       [product.product_code],
@@ -229,6 +234,8 @@ app.use('/api/admin/access-logs', adminAccessLogRouter)
 app.use('/api/admin/reviews', adminReviewRouter)
 app.use('/api/admin/dashboard', dashboardRouter)
 app.use('/api/admin/banned-words', bannedRouter)
+app.use('/api/admin/sellers', adminSellerRouter)
+app.use('/api/seller-signup', sellerSignupRouter)
 app.get('/api/admin/notifications', requireAdmin, async (req, res) => res.json(await listMails()))
 app.use('/api/admin', adminRouter)
 app.use('/api/seller/orders', sellerOrderRouter)

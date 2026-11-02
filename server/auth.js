@@ -176,12 +176,13 @@ export async function currentStaff(req) {
   const token = currentAdmin(req)
   if (!token?.id) return null
   const { rows } = await pool.query(
-    'SELECT login_id, role, seller_code, session_version, totp_secret_enc IS NOT NULL AS mfa FROM admins WHERE id = $1',
+    `SELECT a.login_id, a.role, a.seller_code, a.session_version, a.totp_secret_enc IS NOT NULL AS mfa, s.status AS seller_status
+     FROM admins a LEFT JOIN sellers s ON s.seller_code = a.seller_code WHERE a.id = $1`,
     [token.id],
   )
   const row = rows[0]
   if (!row || row.session_version !== token.sv) return null
-  return { ...token, loginId: row.login_id, role: row.role, sellerCode: row.seller_code, mfa: row.mfa }
+  return { ...token, loginId: row.login_id, role: row.role, sellerCode: row.seller_code, mfa: row.mfa, sellerStatus: row.seller_status }
 }
 
 // 관리자 API 앞에 붙이는 문지기. 로그인하지 않았으면 401, 판매자 계정이면 403
@@ -199,6 +200,8 @@ export async function requireSeller(req, res, next) {
   const account = await currentStaff(req)
   if (!account) return res.status(401).json({ error: '판매자 로그인이 필요해요.' })
   if (account.role !== 'seller' || !account.sellerCode) return res.status(403).json({ error: '판매자 계정만 쓸 수 있어요. 관리자는 관리자 화면(/admin)을 이용해 주세요.' })
+  // 승인 전 판매자는 내 상태(/me)만 볼 수 있다 (상품·주문은 승인 뒤에)
+  if (account.sellerStatus !== 'active' && req.path !== '/me') return res.status(403).json({ error: '판매자 승인 뒤에 쓸 수 있어요.', notApproved: true })
   req.seller = account
   next()
 }

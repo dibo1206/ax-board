@@ -326,6 +326,25 @@ CREATE TABLE IF NOT EXISTS order_shipments (
 );
 CREATE INDEX IF NOT EXISTS order_shipments_seller_idx ON order_shipments (seller_code, status);
 
+-- 판매자 가입: 스스로 신청 → 관리자 승인 후 활동 (기존 농가는 active). 관리자 계정은 가입으로 만들 수 없다
+ALTER TABLE sellers ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE sellers DROP CONSTRAINT IF EXISTS sellers_status_check;
+ALTER TABLE sellers ADD CONSTRAINT sellers_status_check CHECK (status IN ('active', 'pending', 'rejected'));
+ALTER TABLE sellers ADD COLUMN IF NOT EXISTS owner_name TEXT;
+ALTER TABLE sellers ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE sellers ADD COLUMN IF NOT EXISTS business_no TEXT;
+ALTER TABLE sellers ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE sellers ADD COLUMN IF NOT EXISTS reject_note TEXT;
+ALTER TABLE sellers ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ;
+ALTER TABLE sellers ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+CREATE UNIQUE INDEX IF NOT EXISTS sellers_business_no_key ON sellers (business_no) WHERE business_no IS NOT NULL;
+-- 상품 자동 승인: 관리자가 승인한 개수로 믿을 만한 농가를 가리고, 바로 판매한 상품은 관리자가 나중에 확인한다
+ALTER TABLE products ADD COLUMN IF NOT EXISTS admin_approved_at TIMESTAMPTZ;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMPTZ;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS auto_approved_at TIMESTAMPTZ;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS auto_checked_at TIMESTAMPTZ;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS review_reason TEXT;
+
 -- 거짓 표시 막기 (당도·수확일은 판매자가 적는 값이라 몰이 직접 잴 수 없다 → 쓰기 어렵게, 이상하면 거르고, 거짓이면 드러나게)
 -- 1) 당도계 사진: 당도를 적은 판매자 상품은 사진이 있어야 승인. 판매 중에 당도를 바꾸면 옛 사진은 내린다
 ALTER TABLE products ADD COLUMN IF NOT EXISTS brix_photo_url TEXT;

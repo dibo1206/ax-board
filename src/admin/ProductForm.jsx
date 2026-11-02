@@ -93,7 +93,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
     setErrors([])
     try {
       const body = { ...form, status }
-      const saved = isNew
+      let saved = isNew
         ? await api('/products', { method: 'POST', body })
         : await api(`/products/${product.product_code}`, { method: 'PATCH', body })
       if (image) {
@@ -112,6 +112,12 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
       if (itemDraft && fillItem) {
         // 같은 원물 상품들이 함께 쓰는 품목 정보는 비어 있는 칸만 채운다 (이미 있는 내용은 덮어쓰지 않음)
         await api(`/items/${form.item_code}/fill`, { method: 'POST', body: itemDraft })
+      }
+      // 판매자 판매 요청: 사진까지 올린 뒤 검사 → 믿을 만한 농가의 문제없는 상품은 바로 판매, 아니면 회사 확인 대기
+      if (seller && status === 'pending') {
+        saved = await api(`/products/${saved.product_code}/submit`, { method: 'POST' })
+        if (saved.status === 'active') return onSaved(saved, '검사를 통과해서 바로 판매를 시작했어요')
+        return onSaved(saved, `회사 확인 뒤 판매돼요 (${saved.reasons.join(' / ')})`)
       }
       onSaved(saved, SAVED[saved.status] ?? '저장했어요')
     } catch (e) {
@@ -293,7 +299,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
         <button type="button" className="button ghost" onClick={() => save('draft')} disabled={saving}>임시 저장</button>
         {seller ? (
           <button type="button" className="button" onClick={() => save(product?.status === 'active' ? 'active' : 'pending')} disabled={saving}>
-            {saving ? '저장 중…' : product?.status === 'active' ? '저장 (바로 반영)' : '검토 요청'}
+            {saving ? '저장 중…' : product?.status === 'active' ? '저장 (바로 반영)' : '판매 요청'}
           </button>
         ) : (
           <button type="button" className="button" onClick={() => save('active')} disabled={saving}>{saving ? '저장 중…' : product?.status === 'pending' ? '승인하고 판매' : '저장하고 판매'}</button>

@@ -51,6 +51,13 @@ export async function recordChanges(before, after, who) {
   }
 }
 
+// 바로 판매된 상품을 관리자가 확인했다고 표시
+adminRouter.post('/products/:code/checked', async (req, res) => {
+  const { rowCount } = await pool.query('UPDATE products SET auto_checked_at = now() WHERE product_code = $1 AND auto_approved_at IS NOT NULL', [req.params.code])
+  if (!rowCount) return res.status(404).json({ error: '상품을 찾지 못했어요.' })
+  res.status(204).end()
+})
+
 adminRouter.get('/products/:code/changes', async (req, res) => {
   const { rows } = await pool.query('SELECT field, old_value, new_value, changed_by, changed_at FROM product_changes WHERE product_code = $1 ORDER BY changed_at DESC LIMIT 50', [req.params.code])
   res.json(rows)
@@ -137,6 +144,13 @@ adminRouter.patch('/products/:code', async (req, res) => {
   if (product.status !== 'draft') product.review_note = null // 승인하면 반려 사유는 지운다
   await recordChanges(current.rows[0], product, `관리자 ${req.admin.loginId}`)
   const row = await updateProduct(req.params.code, product)
+  // 승인 기록 (믿을 만한 농가 판단에 쓴다). 반려·내리기는 관리자가 다시 승인할 때까지 그 농가의 자동 승인을 멈춘다
+  const before = current.rows[0]
+  if (before.status !== 'active' && product.status === 'active') {
+    await pool.query('UPDATE products SET admin_approved_at = now(), rejected_at = NULL, review_reason = NULL WHERE product_code = $1', [req.params.code])
+  } else if (product.status === 'draft' && product.review_note && before.review_note !== product.review_note) {
+    await pool.query('UPDATE products SET rejected_at = now() WHERE product_code = $1', [req.params.code])
+  }
   const what = current.rows[0].status === 'pending' && product.status !== 'pending'
     ? (product.status === 'active' ? ' (승인)' : ' (반려)') : ''
   console.log(`[admin] ${req.admin.loginId} 상품 수정 ${req.params.code}${what}`)

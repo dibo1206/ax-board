@@ -50,7 +50,7 @@ function MyProducts({ onMessage, onError }) {
   }
   return (
     <>
-      <p className="muted">새 상품은 [검토 요청]을 하면 회사 관리자가 확인한 뒤 판매돼요. 판매 중인 상품의 가격·재고 수정은 바로 반영돼요.</p>
+      <p className="muted">새 상품은 [판매 요청]을 하면 자동으로 검사해요. 처음 상품 3개는 회사가 확인하고, 그 뒤로는 문제가 없으면 바로 판매돼요. 판매 중인 상품의 가격·재고 수정은 바로 반영돼요.</p>
       <button type="button" className="button" onClick={() => { setEditing('new'); onMessage('') }}>새 상품 등록</button>
       {products.length === 0 ? <p className="muted">아직 등록한 상품이 없어요.</p> : (
         <table className="table">
@@ -61,6 +61,7 @@ function MyProducts({ onMessage, onError }) {
                 <td>
                   <strong>{p.name}</strong><br /><span className="muted">{p.category} · {p.item_name}</span>
                   {p.status === 'draft' && p.review_note && <><br /><span className="warn">반려 사유: {p.review_note}</span></>}
+                  {p.status === 'pending' && p.review_reason && <><br /><span className="muted">회사 확인이 필요해요: {p.review_reason}</span></>}
                 </td>
                 <td>{won(p.price)}</td>
                 <td>{p.sold_out ? <span className="badge soldout">품절</span> : `${p.stock}개`}</td>
@@ -222,7 +223,12 @@ export default function Seller() {
 
   if (me === undefined) return <p className="muted">확인 중…</p>
   if (me === null) {
-    return <Login title="판매자 로그인" onLogin={() => sellerApi('/me').then(setMe).catch(() => setMe('not-seller'))} />
+    return (
+      <>
+        <Login title="판매자 로그인" onLogin={() => sellerApi('/me').then(setMe).catch(() => setMe('not-seller'))} />
+        <p className="muted">아직 판매자가 아니세요? <a href="/account/signup?type=seller">판매자 가입 신청</a></p>
+      </>
+    )
   }
   if (me === 'not-seller') {
     return (
@@ -232,6 +238,19 @@ export default function Seller() {
           <a className="button" href="/admin">관리자 화면으로</a>
           <button type="button" className="button ghost" onClick={logout}>로그아웃</button>
         </div>
+      </div>
+    )
+  }
+
+  // 승인 전: 상품·주문은 승인 뒤에 쓸 수 있다
+  if (me.seller.status !== 'active') {
+    return (
+      <div className="box">
+        <h3>{me.seller.name} · 판매자 가입 {me.seller.status === 'rejected' ? '반려' : '승인 대기 중'}</h3>
+        {me.seller.status === 'rejected'
+          ? <p className="warn">사유: {me.seller.reject_note} · 다시 신청하려면 회사로 연락해 주세요.</p>
+          : <p>회사가 농가 정보를 확인하고 있어요. 승인되면 이메일로 알려 드리고, 그때부터 상품을 올릴 수 있어요.</p>}
+        <button type="button" className="link" onClick={logout}>로그아웃</button>
       </div>
     )
   }

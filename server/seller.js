@@ -7,6 +7,7 @@ import { bannedMessage, findBanned } from './banned.js'
 import { fillItem, listTemplates, productDraft } from './content.js'
 import { pool } from './db.js'
 import { requestItem } from './items.js'
+import { submitProduct } from './sellers.js'
 import { validateProduct } from './validate.js'
 
 export const sellerRouter = express.Router()
@@ -37,7 +38,7 @@ function nextStatus(requested, current) {
 }
 
 sellerRouter.get('/me', async (req, res) => {
-  const { rows } = await pool.query('SELECT seller_code, name, region, intro, story FROM sellers WHERE seller_code = $1', [mine(req)])
+  const { rows } = await pool.query('SELECT seller_code, name, region, intro, story, status, reject_note FROM sellers WHERE seller_code = $1', [mine(req)])
   res.json({ loginId: req.seller.loginId, role: 'seller', seller: rows[0], mfa: Boolean(req.seller.mfa) })
 })
 
@@ -102,6 +103,13 @@ sellerRouter.patch('/products/:code', ownProduct, async (req, res) => {
   }
   console.log(`[seller] ${req.seller.loginId} 상품 수정 ${current.product_code} (${current.status} → ${status})`)
   res.json(row)
+})
+
+// 사진까지 올린 뒤 검토 요청: 믿을 만한 농가의 문제없는 상품은 바로 판매, 아니면 관리자 검토 대기 (이유를 돌려준다)
+sellerRouter.post('/products/:code/submit', ownProduct, async (req, res) => {
+  const { product, reasons } = await submitProduct(req.product)
+  console.log(`[seller] ${req.seller.loginId} 상품 ${product.product_code} ${product.status === 'active' ? '자동 승인' : '검토 대기'}`)
+  res.json({ ...product, reasons })
 })
 
 sellerRouter.post('/products/:code/image', ownProduct, rawImage, storeImage)
