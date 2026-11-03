@@ -101,7 +101,9 @@ function ProductCard({ p, onOpen }) {
           ? <img src={thumbUrl(p.image_url)} alt="" loading="lazy" width="400" height="400" />
           : <span className="photo-need"><span>사진 준비 중</span></span>}
         <span className="pcard-tags">
-          {p.show_brix && p.brix && !p.info_disputed && <span className={`ptag ${p.brix >= 14 ? 'brix-high' : p.brix >= 12 ? 'brix-mid' : ''}`}>당도 {p.brix}</span>}
+          {/* 등급은 품목·품종별 공식 기준으로 서버가 정한다. 기준이 없거나 보통 당도면 측정값만 */}
+          {p.show_brix && p.brix && !p.info_disputed && <span className={`ptag ${p.brix_rank === 3 ? 'brix-high' : p.brix_rank === 2 ? 'brix-mid' : ''}`}>{p.brix_rank >= 2 ? `${p.brix_grade} ${Number(p.brix)}°Bx` : `당도 ${Number(p.brix)}°Bx`}</span>}
+          {p.harvest_days != null && p.harvest_days <= 30 && <span className="ptag">수확 {p.harvest_days}일째</span>}
           {p.tags?.includes('season') && <span className="ptag ptag-season">제철</span>}
         </span>
         {p.sold_out && <span className="pcard-flag">품절</span>}
@@ -135,6 +137,7 @@ export function ProductSection({ groups, loc, typed, setTyped, list, sorts, onCh
             <button key={t.key} type="button" className={t.key === loc.cat ? 'on' : ''} aria-pressed={t.key === loc.cat} onClick={() => onChange({ cat: t.key })}>{t.name}</button>
           ))}
         </nav>
+        <label className="brix-filter"><input type="checkbox" checked={loc.brix === 'high'} onChange={(e) => onChange({ brix: e.target.checked ? 'high' : '' })} /> 높은 당도 이상</label>
         <select className="sort" value={loc.sort} onChange={(e) => onChange({ sort: e.target.value })} aria-label="정렬">
           {sorts.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select>

@@ -35,9 +35,13 @@ export async function codeSets() {
 
 // 판매로 넘어가려면 상품정보 제공 고시의 필수 칸이 있어야 한다. 비어 있으면 안내 문장을 돌려준다
 export async function noticeProblem(product) {
-  const { rows } = await pool.query('SELECT category FROM items WHERE item_code = $1', [product.item_code])
+  const { rows } = await pool.query('SELECT category, brix_standards FROM items WHERE item_code = $1', [product.item_code])
   const missing = noticeMissing(rows[0]?.category, product.notice, product)
-  return missing.length ? `상품정보 고시에서 ${missing.join(', ')} 칸을 채워 주세요.` : null
+  if (missing.length) return `상품정보 고시에서 ${missing.join(', ')} 칸을 채워 주세요.`
+  // 품종마다 당도 기준이 달라서, 기준이 있는 품목에 당도를 적으면 품종을 골라야 한다 (표에 없으면 기타)
+  const standards = rows[0]?.brix_standards ?? []
+  if (product.brix && !product.variety && standards.some((s) => !s.varieties.includes('공통'))) return '당도를 적었으면 품종을 골라 주세요. 목록에 없으면 기타를 고르면 돼요.'
+  return null
 }
 
 // 판매자 입력 검사용: 품목별 보통 당도 범위 (비어 있으면 그 품목은 검사하지 않음)
@@ -47,7 +51,7 @@ export async function itemRanges() {
 }
 
 // 판매 중인 상품의 가격·당도·수확일이 바뀌면 누가 언제 무엇을 바꿨는지 남긴다 (거짓 표시를 나중에 따져 볼 수 있게)
-const WATCHED = [['price', '가격'], ['brix', '당도'], ['brix_measured_at', '당도 잰 날'], ['harvest_date', '수확일'], ['notice.origin', '원산지'], ['notice.expiry', '소비기한']]
+const WATCHED = [['price', '가격'], ['brix', '당도'], ['variety', '품종'], ['brix_measured_at', '당도 잰 날'], ['harvest_date', '수확일'], ['notice.origin', '원산지'], ['notice.expiry', '소비기한']]
 const watched = (product, key) => (key.startsWith('notice.') ? product.notice?.[key.slice(7)] : product[key])
 export async function recordChanges(before, after, who) {
   if (before.status !== 'active') return
@@ -94,7 +98,7 @@ adminRouter.get('/products', async (req, res) => {
 })
 
 const PRODUCT_FIELDS = ['seller_code', 'item_code', 'name', 'price', 'unit', 'stock', 'weight_g', 'count_per_box',
-  'brix', 'brix_measured_at', 'harvest_date', 'summary', 'description', 'external_url', 'b2b_available', 'tags', 'status', 'review_note', 'faq', 'notice']
+  'brix', 'brix_measured_at', 'harvest_date', 'summary', 'description', 'external_url', 'b2b_available', 'tags', 'status', 'review_note', 'faq', 'notice', 'variety']
 const value = (product, column) => (column === 'faq' ? JSON.stringify(product.faq ?? []) : column === 'notice' ? JSON.stringify(product.notice ?? {}) : product[column])
 
 // 검사를 통과한 상품을 넣는다. 같은 코드가 있으면 null

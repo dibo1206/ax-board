@@ -104,7 +104,8 @@ sellerRouter.patch('/products/:code', ownProduct, async (req, res) => {
   let row = await updateProduct(current.product_code, product)
   // 당도를 바꾸면 옛 당도계 사진은 새 값의 증거가 아니라서 내린다 (새 사진을 올리면 다시 붙는다)
   const brixOf = (v) => (v == null || v === '' ? null : Number(v)) // DB 의 "14.0" 과 화면의 "14" 는 같은 값
-  if (brixOf(current.brix) !== brixOf(product.brix) && current.brix_photo_url) {
+  // 품종을 바꾸면 적용되는 등급 기준도 달라지니, 당도를 바꿀 때처럼 사진부터 다시 받는다
+  if ((brixOf(current.brix) !== brixOf(product.brix) || (current.variety ?? '') !== (product.variety ?? '')) && current.brix_photo_url) {
     row = (await pool.query('UPDATE products SET brix_photo_url = NULL WHERE product_code = $1 RETURNING *', [current.product_code])).rows[0]
   }
   console.log(`[seller] ${req.seller.loginId} 상품 수정 ${current.product_code} (${current.status} → ${status})`)

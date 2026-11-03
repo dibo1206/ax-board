@@ -18,6 +18,7 @@ import { adminChatRouter, chatRouter } from './chat.js'
 import { initDb, isTransientDbError, pool } from './db.js'
 import { adminInquiryRouter, maskName, publicInquiryRouter } from './inquiry.js'
 import { publicItem } from './items.js'
+import { GRADE_LABEL } from './brix.js'
 import { buildNotice } from './notice.js'
 import { adminOrderRouter, memberOrderRouter, publicOrderRouter, sellerOrderRouter, startOrderSweeper } from './orders.js'
 import { recommendRouter } from './recommend.js'
@@ -105,7 +106,10 @@ const PRODUCT_SELECT = `
          s.name AS seller_name, s.region AS seller_region, s.is_company,
          rv.rating, COALESCE(rv.review_count, 0) AS review_count, COALESCE(sales.sold, 0) AS sold_30d,
          -- 후기에서 '표시 정보와 달랐어요'가 3개 이상이고 답한 사람의 절반 이상이면 당도 표시를 내린다
-         (COALESCE(rv.info_no, 0) >= 3 AND rv.info_no * 2 >= rv.info_answers) AS info_disputed
+         (COALESCE(rv.info_no, 0) >= 3 AND rv.info_no * 2 >= rv.info_answers) AS info_disputed,
+         COALESCE(rv.info_answers, 0) AS info_answers, COALESCE(rv.info_answers - rv.info_no, 0) AS info_matched,
+         std.high AS brix_high, std.top AS brix_top, i.brix_standard_source,
+         CASE WHEN std.top IS NULL THEN NULL WHEN p.brix >= std.top THEN 3 WHEN p.brix >= std.high THEN 2 ELSE 1 END AS brix_rank
   FROM products p
   JOIN items i ON i.item_code = p.item_code
   JOIN sellers s ON s.seller_code = p.seller_code
@@ -116,6 +120,10 @@ const PRODUCT_SELECT = `
              FROM order_items oi JOIN orders o ON o.id = oi.order_id
              WHERE o.status IN ('paid', 'preparing', 'shipping', 'delivered') AND o.created_at > now() - interval '30 days'
              GROUP BY oi.product_code) sales ON sales.product_code = p.product_code
+  -- 당도 등급: 품목의 품종별 기준으로 정한다. 당도계 사진이 없거나 후기 이의가 많으면 등급을 붙이지 않는다
+  LEFT JOIN LATERAL (SELECT (b->>'high')::numeric AS high, (b->>'top')::numeric AS top FROM jsonb_array_elements(i.brix_standards) b
+                     WHERE b->'varieties' ? COALESCE(p.variety, '공통') LIMIT 1) std
+    ON i.show_brix AND p.brix IS NOT NULL AND p.brix_photo_url IS NOT NULL AND NOT (COALESCE(rv.info_no, 0) >= 3 AND rv.info_no * 2 >= rv.info_answers)
   WHERE p.status = 'active'`
 
 // 상태 확인: DB까지 살아 있으면 200, DB가 안 되면 503 (배포 후 모니터링·자동 재시작이 이 주소를 본다)
@@ -129,7 +137,14 @@ app.get('/api/health', async (req, res) => {
 })
 
 // 손님에게 보내지 않는 칸 (반려·승인 기록은 내부 정보)
-const publicProduct = ({ review_note: _n, review_reason: _r, rejected_at: _x, admin_approved_at: _a, auto_approved_at: _o, auto_checked_at: _c, ...p }) => p
+// 수확 며칠째인지와 당도 등급 이름을 붙인다 (신선도 등급은 매기지 않고 사실만 보여 준다)
+const koreaToday = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
+const harvestDays = (date) => (date ? Math.max(1, Math.floor((Date.parse(koreaToday()) - Date.parse(String(date).slice(0, 10))) / 86_400_000) + 1) : null)
+const publicProduct = ({ review_note: _n, review_reason: _r, rejected_at: _x, admin_approved_at: _a, auto_approved_at: _o, auto_checked_at: _c, ...p }) => ({
+  ...p,
+  brix_grade: GRADE_LABEL[p.brix_rank] ?? null,
+  harvest_days: harvestDays(p.harvest_date),
+})
 
 app.get('/api/products', async (req, res) => {
   const { category } = req.query
@@ -151,6 +166,7 @@ const SORTS = {
   price_desc: 'x.price DESC, x.name',
   new: 'x.created_at DESC, x.name',
   rating: 'x.rating DESC NULLS LAST, x.review_count DESC, x.name',
+  brix: 'x.brix_rank DESC NULLS LAST, x.brix DESC NULLS LAST, x.name', // 품종마다 기준이 달라 등급 먼저, 같은 등급은 측정값
 }
 
 app.get('/api/catalog', async (req, res) => {
@@ -167,6 +183,8 @@ app.get('/api/catalog', async (req, res) => {
   // 손님 화면 카테고리(생과일·선물세트 등). 정해 둔 조건만 쓰고 손님이 보낸 글자는 SQL에 넣지 않는다
   const group = groupWhere(String(req.query.group ?? ''))
   if (group) where += ` AND ${group}`
+  const highBrix = req.query.brix === 'high' // 높은 당도 이상만
+  if (highBrix) where += ' AND p.brix >= std.high'
   // 단어마다 상품 이름·품목·소개·농가·태그 중 하나에 들어 있어야 한다 (%·_는 글자 그대로 찾게)
   for (const word of q.split(/\s+/).filter(Boolean).slice(0, 5)) {
     params.push(`%${word.replace(/[\\%_]/g, (c) => `\\${c}`)}%`)
@@ -176,7 +194,7 @@ app.get('/api/catalog', async (req, res) => {
   }
   params.push(size, (page - 1) * size)
   // 같은 검색·정렬·페이지는 15초 동안 DB를 다시 읽지 않는다 (재고는 주문할 때 서버가 다시 확인)
-  res.json(await cached(`catalog:${JSON.stringify(params)}:${sort}:${group ? req.query.group : ''}`, 15_000, async () => {
+  res.json(await cached(`catalog:${JSON.stringify(params)}:${sort}:${group ? req.query.group : ''}:${highBrix}`, 15_000, async () => {
     const { rows } = await pool.query(
       `SELECT x.*, count(*) OVER () AS total FROM (${PRODUCT_SELECT} ${where}) x
        ORDER BY (x.stock = 0), ${SORTS[sort]} LIMIT $${params.length - 1} OFFSET $${params.length}`,

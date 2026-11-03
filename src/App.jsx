@@ -156,13 +156,16 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {product.count_per_box && <><dt>박스당</dt><dd>{product.count_per_box}개</dd></>}
         {/* 당도는 판매자가 잰 값: 측정일과 당도계 사진을 함께 보여 준다. 후기에서 '표시와 달랐어요'가 많으면 내린다 */}
         {item.show_brix && product.brix && !product.info_disputed && (
-          <><dt>당도</dt><dd>{product.brix}Brix <span className="muted">(판매자 측정{product.brix_measured_at && ` · ${product.brix_measured_at.slice(0, 10)}`})</span>
-            {product.brix_photo_url && <> <a href={product.brix_photo_url} target="_blank" rel="noreferrer">측정 사진</a></>}</dd></>
+          <><dt>당도</dt><dd>{product.brix_grade && <strong className={`brix-grade rank-${product.brix_rank}`}>{product.brix_grade}</strong>} {Number(product.brix)}°Bx <span className="muted">(판매자 측정{product.brix_measured_at && ` · ${product.brix_measured_at.slice(0, 10)}`})</span>
+            {product.brix_photo_url && <> <a href={product.brix_photo_url} target="_blank" rel="noreferrer">측정 사진</a></>}
+            {product.brix_grade && <><br /><span className="muted">{product.variety && product.variety !== '공통' ? `${product.variety} 기준 ` : ''}높은 당도 {Number(product.brix_high)} 이상 · 매우높은 당도 {Number(product.brix_top)} 이상 · 출처: {product.brix_standard_source}</span></>}</dd></>
         )}
         {item.show_brix && product.brix && product.info_disputed && (
           <><dt>당도</dt><dd className="muted">구매 후기에서 표시와 다르다는 의견이 많아 당도 표시를 잠시 내렸어요</dd></>
         )}
-        {product.harvest_date && <><dt>수확일</dt><dd>{product.harvest_date.slice(0, 10)}</dd></>}
+        {product.harvest_date && <><dt>수확일</dt><dd>{product.harvest_date.slice(0, 10)} <span className="muted">(수확 {product.harvest_days}일째)</span></dd></>}
+        {item.keep_period && <><dt>보관 참고</dt><dd>{item.keep_period}</dd></>}
+        {product.info_answers >= 3 && <><dt>구매자 확인</dt><dd>표시와 맞았어요 {product.info_matched}/{product.info_answers}</dd></>}
         <dt>판매 농가</dt><dd>{seller.name} · {seller.region}</dd>
       </dl>
       <BuyBox product={product} onAsk={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })} />
@@ -305,7 +308,7 @@ function innerPage(path) {
 
 // 상품 목록 상태는 주소(?q=&cat=&sort=)에, 상품 상세는 /p/상품코드 에 둔다 → 새로고침·공유·뒤로 가기가 그대로 된다
 // cat 은 손님 화면 카테고리 키(fresh·base·processed…, server/shopGroups.js)
-const SORT_OPTIONS = [['recommended', '추천순'], ['popular', '인기순'], ['new', '신상품순'], ['rating', '별점순'], ['price_asc', '낮은 가격순'], ['price_desc', '높은 가격순']]
+const SORT_OPTIONS = [['recommended', '추천순'], ['popular', '인기순'], ['brix', '당도 등급 높은 순'], ['new', '신상품순'], ['rating', '별점순'], ['price_asc', '낮은 가격순'], ['price_desc', '높은 가격순']]
 
 function readLocation() {
   const params = new URLSearchParams(window.location.search)
@@ -315,20 +318,23 @@ function readLocation() {
     q: params.get('q') ?? '',
     cat: /^[a-z]{2,20}$/.test(params.get('cat') ?? '') ? params.get('cat') : 'all',
     sort: SORT_OPTIONS.some(([key]) => key === params.get('sort')) ? params.get('sort') : 'recommended',
+    brix: params.get('brix') === 'high' ? 'high' : '',
   }
 }
 
-function listUrl({ q, cat, sort }) {
+function listUrl({ q, cat, sort, brix }) {
   const params = new URLSearchParams()
   if (q) params.set('q', q)
   if (cat !== 'all') params.set('cat', cat)
   if (sort !== 'recommended') params.set('sort', sort)
+  if (brix) params.set('brix', brix)
   return `/${params.size ? `?${params}` : ''}`
 }
 
-function fetchCatalog({ q, cat, sort }, page) {
+function fetchCatalog({ q, cat, sort, brix }, page) {
   const params = new URLSearchParams({ q, sort, page, size: 12 })
   if (cat !== 'all') params.set('group', cat)
+  if (brix) params.set('brix', brix)
   return api(`/catalog?${params}`)
 }
 

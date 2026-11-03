@@ -353,6 +353,10 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS notice JSONB NOT NULL DEFAULT '{}'
 -- 2) 품목별 보통 당도 범위 (식품 담당이 출처를 보고 채운다. 비어 있으면 검사하지 않음)
 ALTER TABLE items ADD COLUMN IF NOT EXISTS brix_min NUMERIC(4, 1);
 ALTER TABLE items ADD COLUMN IF NOT EXISTS brix_max NUMERIC(4, 1);
+-- 당도 등급 기준 (품종별 높은 당도·매우높은 당도, server/brix.js). 비어 있으면 등급 없이 측정값만 보여 준다
+ALTER TABLE items ADD COLUMN IF NOT EXISTS brix_standards JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE items ADD COLUMN IF NOT EXISTS brix_standard_source TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS variety TEXT; -- 품종: 품목 기준에서 고른다. 기타면 등급 없음
 -- 3) 판매 중 상품의 가격·당도·수확일 수정 이력 (누가 언제 무엇을)
 CREATE TABLE IF NOT EXISTS product_changes (
   id SERIAL PRIMARY KEY,

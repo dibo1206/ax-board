@@ -2,6 +2,7 @@
 // 품목 정보(보관·먹으면 안 되는 신호)는 안전 정보라 AI 가 최종 판단하지 않는다. 검수 전에는 손님 화면·상담에 내보내지 않는다
 import { randomBytes } from 'node:crypto'
 import { findBanned } from './banned.js'
+import { BRIX_SOURCE, OFFICIAL, readStandards } from './brix.js'
 import { pool } from './db.js'
 
 const CATEGORIES = ['과일', '채소', '가공품']
@@ -19,9 +20,10 @@ export async function requestItem(req, res) {
   if (same.rowCount) return res.json({ item: same.rows[0], existed: true })
   const who = req.seller ? req.seller.sellerCode : `admin:${req.admin.loginId}`
   const { rows } = await pool.query(
-    `INSERT INTO items (item_code, name, category, show_brix, stage1_uses, stage2_uses, stage3_uses, allergens, danger_signs, recipes, status, requested_by)
-     VALUES ($1, $2, $3, false, '{}', '{}', '{}', '{}', '{}', '[]', 'pending', $4) RETURNING *`,
-    [`item_${randomBytes(4).toString('hex')}`, name, category, who],
+    `INSERT INTO items (item_code, name, category, show_brix, stage1_uses, stage2_uses, stage3_uses, allergens, danger_signs, recipes, status, requested_by, brix_standards, brix_standard_source)
+     VALUES ($1, $2, $3, $5, '{}', '{}', '{}', '{}', '{}', '[]', 'pending', $4, $6, $7) RETURNING *`,
+    // 공식 당도 규격에 있는 품목(수박 등)은 기준을 바로 붙인다. 없으면 측정값만 보여 준다
+    [`item_${randomBytes(4).toString('hex')}`, name, category, who, Boolean(OFFICIAL[name]), JSON.stringify(OFFICIAL[name] ?? []), OFFICIAL[name] ? BRIX_SOURCE : null],
   )
   console.log(`[items] ${(req.seller ?? req.admin).loginId} 새 품목 요청 ${name} (${category})`)
   res.status(201).json({ item: rows[0], existed: false })
@@ -51,6 +53,7 @@ export function checkItem(item) {
   if (item.category !== '가공품' && !(item.stage1_state && item.stage2_state)) issues.push({ level: 'warn', field: '신선도 상태', problem: '신선·품질 저하 상태가 비어 있어요' })
   if (item.category === '가공품' && !item.opened_note) issues.push({ level: 'warn', field: '개봉 후', problem: '비어 있어요' })
   if (!item.recipes?.length) issues.push({ level: 'warn', field: '레시피', problem: '비어 있어요' })
+  if (item.brix_standards?.length && !item.brix_standard_source) issues.push({ level: 'error', field: '당도 기준', problem: '기준의 출처를 적어 주세요' })
   if (item.brix_min != null && item.brix_max != null && Number(item.brix_min) > Number(item.brix_max)) issues.push({ level: 'error', field: '보통 당도 범위', problem: '최소가 최대보다 커요' })
   if (item.show_brix && item.brix_min == null && item.brix_max == null) issues.push({ level: 'warn', field: '보통 당도 범위', problem: '비어 있으면 판매자가 적은 당도를 범위로 검사하지 않아요' })
   return issues
@@ -77,6 +80,8 @@ export async function saveItem(req, res) {
     show_brix: b.show_brix === true,
     brix_min: brixLimit(b.brix_min), // 보통 당도 범위: 판매자가 이 범위 밖 당도를 적으면 막힌다
     brix_max: brixLimit(b.brix_max),
+    brix_standards: JSON.stringify(readStandards(b.brix_standards)),
+    brix_standard_source: text(b.brix_standard_source, 300) || null,
     storage_method: text(b.storage_method, 400) || null,
     stage1_state: text(b.stage1_state, 200) || null,
     stage2_state: text(b.stage2_state, 200) || null,

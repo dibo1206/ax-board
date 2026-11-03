@@ -5,7 +5,7 @@ import { adminApi } from './api.js'
 
 const EMPTY = {
   product_code: '', seller_code: '', item_code: '', name: '', price: '', unit: '', stock: '',
-  weight_g: '', count_per_box: '', brix: '', brix_measured_at: '', harvest_date: '', summary: '', description: '',
+  weight_g: '', count_per_box: '', brix: '', variety: '', brix_measured_at: '', harvest_date: '', summary: '', description: '',
   external_url: '', b2b_available: false, tags: [], faq: [], notice: { imported: false },
 }
 
@@ -18,6 +18,31 @@ function toForm(product) {
   }
   form.notice = { imported: false, ...product.notice }
   return form
+}
+
+// 당도 등급: 품종과 측정값으로 자동으로 정해진다 (판매자가 고를 수 없다). 기준이 없으면 측정값만 보인다
+function BrixGradeFields({ item, brix, variety, hasPhoto, onChange }) {
+  const standards = item.brix_standards ?? []
+  const common = standards.some((s) => s.varieties.includes('공통'))
+  const std = standards.find((s) => s.varieties.includes(common ? '공통' : variety))
+  const value = Number(brix)
+  const grade = !std || !brix ? null : value >= std.top ? '매우높은 당도' : value >= std.high ? '높은 당도' : '보통 당도'
+  return (
+    <div className="preview">
+      {standards.length > 0 && !common && (
+        <label>품종{brix ? '*' : ''}
+          <select value={variety} onChange={onChange}>
+            <option value="">골라 주세요</option>
+            {standards.flatMap((s) => s.varieties).map((v) => <option key={v} value={v}>{v}</option>)}
+            <option value="기타">기타 (목록에 없는 품종)</option>
+          </select>
+        </label>
+      )}
+      {std && <p className="muted">공식 기준{common ? '' : ` (${variety})`}: 높은 당도 {std.high} 이상 · 매우높은 당도 {std.top} 이상</p>}
+      {grade && <p><strong>{grade}</strong>로 표시돼요{hasPhoto ? '' : ' (당도계 사진을 올려야 등급이 보여요)'}</p>}
+      {brix && !std && <p className="muted">공식 기준이 없어서 등급 없이 측정값만 보여요.</p>}
+    </div>
+  )
 }
 
 // 상품정보 제공 고시: 판매자가 직접 적는 칸. 품목·용량·생산자·보관법·상담 전화는 자동으로 채워진다. AI 가 채우지 않는다
@@ -248,6 +273,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
           <label>당도 잰 날<input type="date" value={form.brix_measured_at} onChange={set('brix_measured_at')} /></label>
         </div>
       )}
+      {item?.show_brix && <BrixGradeFields item={item} brix={form.brix} variety={form.variety} hasPhoto={Boolean(brixPhoto || brixPhotoUrl)} onChange={set('variety')} />}
       {/* 거짓 표시 막기: 당도계 화면 사진. 판매자가 당도를 적으면 사진이 있어야 승인되고, 손님 화면에 [측정 사진]으로 보인다 */}
       {item?.show_brix && form.brix && (
         <label>당도계 사진 {seller && <span className="muted">(당도를 적으면 꼭 올려 주세요 · 당도를 바꾸면 다시 올려야 해요)</span>}
