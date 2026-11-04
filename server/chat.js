@@ -980,6 +980,12 @@ const tooMany = createLimiter({ limit: 15, windowMs: 10 * 60_000 })
 // [AI에게 물어보기]는 따로 더 적게: 비회원은 IP당 10분에 3번, 회원은 계정당 10분에 10번 (하루 전체 상한은 ai.js)
 const tooManyAiGuest = createLimiter({ limit: 3, windowMs: 10 * 60_000 })
 const tooManyAiMember = createLimiter({ limit: 10, windowMs: 10 * 60_000, key: (req) => `customer:${req.customerId}` })
+// 하루 전체 상한은 모든 손님이 함께 쓰므로, 한 사람이 혼자 다 쓰지 못하게 하루 몫을 따로 둔다 (.env 의 AI_DAILY_PER_USER, 질문 수).
+// 기본은 전체 상한의 1/10 — 질문 하나가 AI를 최대 3번 부르니 한 사람이 하루 전체의 30% 안쪽만 쓴다.
+// 개발 중에는 팀 모두가 같은 IP(SSH 터널)라 따로 두지 않는다
+const aiShare = Number(process.env.AI_DAILY_PER_USER || (process.env.NODE_ENV === 'production' ? Math.max(1, Math.floor(dailyLimit() / 10)) : dailyLimit()))
+const aiTodayGuest = createLimiter({ limit: aiShare, windowMs: 24 * 3_600_000 })
+const aiTodayMember = createLimiter({ limit: aiShare, windowMs: 24 * 3_600_000, key: (req) => `customer:${req.customerId}` })
 
 function cleanHistory(history) {
   if (!Array.isArray(history)) return []
@@ -1002,6 +1008,9 @@ chatRouter.post('/chat', async (req, res) => {
     req.customerId = customer?.id
     if (customer ? tooManyAiMember(req) : tooManyAiGuest(req)) {
       return res.status(429).json({ error: `AI 질문은 잠시 후 다시 해 주세요.${customer ? '' : ' 로그인하면 더 많이 물어볼 수 있어요.'} ${QNA_HINT}` })
+    }
+    if (customer ? aiTodayMember(req) : aiTodayGuest(req)) {
+      return res.status(429).json({ error: `오늘 물어볼 수 있는 AI 질문을 다 썼어요. 내일 다시 물어봐 주세요. ${QNA_HINT}` })
     }
   }
 

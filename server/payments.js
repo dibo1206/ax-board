@@ -3,6 +3,8 @@
 //
 // 통신이 중간에 끊기면 "실패"인지 "이미 승인됐는데 답만 못 받은 것"인지 알 수 없다.
 // 그런 오류에는 uncertain: true 를 붙이고, 부르는 쪽은 실패로 처리하지 말고 결제 조회(lookupPayment)로 실제 상태를 확인한다.
+import { createHash } from 'node:crypto'
+
 const DEFAULT_API = 'https://api.tosspayments.com/v1/payments'
 // 결과를 알 수 없는 오류 코드 (공식 오류 코드 문서 기준): 결제사 일시 오류, 같은 요청 처리 중, 이미 처리됨
 const UNCERTAIN_CODES = new Set(['PROVIDER_ERROR', 'FAILED_INTERNAL_SYSTEM_PROCESSING', 'IDEMPOTENT_REQUEST_PROCESSING', 'ALREADY_PROCESSED_PAYMENT'])
@@ -87,7 +89,10 @@ export async function confirmPayment({ paymentKey, orderId, amount }) {
     if (paymentKey !== `mock_${orderId}`) throw Object.assign(new Error('테스트 결제 정보가 맞지 않아요.'), { code: 'MOCK_MISMATCH' })
     return { paymentKey, method: '테스트 결제', approvedAt: new Date().toISOString() }
   }
-  const data = await request('POST', '/confirm', { paymentKey, orderId, amount }, `confirm-${orderId}`)
+  // 멱등키에 결제키·금액을 넣는다: 같은 승인 요청을 다시 보내면 한 번만 처리되고, 주문번호만 아는 사람이 지어낸 키로 먼저 보낸
+  // 실패 응답이 주인의 진짜 승인 요청에 그대로 돌아오지 않게 (주문번호만으로 만든 키면 첫 응답이 주문 전체에 묶인다)
+  const fingerprint = createHash('sha256').update(`${paymentKey}:${amount}`).digest('base64url').slice(0, 32)
+  const data = await request('POST', '/confirm', { paymentKey, orderId, amount }, `confirm-${orderId}-${fingerprint}`)
   return checkApproved(data, { orderId, amount })
 }
 
