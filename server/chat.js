@@ -41,7 +41,7 @@ const QNA_HINT = '상품 페이지 아래 Q&A에 질문을 남겨 주시면 담�
 const ROUTES = [
   {
     kind: 'health',
-    re: /당뇨|임신|임산부|수유|(?<!이)아기|애기|유아|이유식|먹여도|혈압|혈당|복용|질환|환자|수술|아토피|신장|통풍|감기|기침|변비|소화|다이어트|체중|살\s?(빠|찌)|면역|효능|효과|건강에|몸에\s?(좋|나쁘|안\s?좋)|알레르기(가|이)?\s?(있|반응)|알레르기\s?체질/,
+    re: /당뇨|임신|임산부|수유|(?<!이)아기|애기|유아|이유식|먹여도|혈압|혈당|복용|질환|환자|수술|아토피|신장|통풍|감기|기침|변비|소화|다이어트|체중|살\s?(빠|찌)|면역|효능|효과|건강에|몸에\s?(좋|나쁘|안\s?좋)|피부|숙취|수험생|어르신|노인|이가\s?안\s?좋|목\s?(이\s?)?(안\s?)?아|당\s?(이\s?)?(올라|오르)|(알레르기|알러지)(가|이)?\s?(있|반응)|(알레르기|알러지)\s?체질/,
     answer: (ctx) => {
       const allergy = ctx.items.filter((i) => i.allergens.length).map((i) => `${i.name}: ${i.allergens.join(', ')}`)
       return '건강 상태에 따라 드셔도 되는지는 제가 판단할 수 없어요. 의사·약사 같은 전문가와 꼭 상의해 주세요. '
@@ -53,7 +53,7 @@ const ROUTES = [
   },
   {
     kind: 'refund',
-    re: /환불|교환|반품|파손|불량|배송.{0,8}(안\s?와|안\s?오|늦|누락|잘못)|(받|온|왔|도착).{0,12}(상했|썩|깨졌|터졌|곰팡이|물러)/,
+    re: /환불|교환|반품|파손|불량|배송.{0,8}(안\s?와|안\s?오|늦|누락|잘못)|(받|온|왔|도착).{0,12}(상했|썩|깨졌|터졌|곰팡이|물러|멍)|(멍들|썩|상해|깨져|터져|곰팡이).{0,8}(왔|왓|도착)|(멍들|썩은|상한|깨진).{0,12}사진/,
     answer: () => '불편을 드려 죄송해요. 환불·교환 여부는 제가 결정할 수 없어서 담당자에게 넘길게요. '
       + '받은 날부터 7일 안에 주문번호와 상품 상태(사진)를 고객센터나 상품 Q&A로 알려 주시면 담당자가 확인 후 안내해 드려요. '
       + '자세한 기준은 화면 아래 [교환·환불 정책]에 있어요. 배송 준비 전이면 [주문 조회]에서 바로 취소할 수도 있어요.',
@@ -69,6 +69,29 @@ const ROUTES = [
     action: 'lookup',
   },
   {
+    // 사람과 이야기하고 싶을 때: 회사 대표 번호만 안내한다 (개인 번호는 주지 않는다)
+    kind: 'contact',
+    re: /상담(원|사)\s?(연결|바꿔|불러)|사람\s?(바꿔|연결)|전화\s?(상담|번호)|대표\s?(전화|번호)|고객\s?센터|사장님?\s?(번호|전화|연락)|몇\s?시까지\s?(해|하|상담)/,
+    answer: () => `상담은 고객센터 ${SHOP.phone}로 연락해 주세요. 운영 시간은 ${SHOP.hours}예요. 글로 남기려면 상품 페이지 아래 Q&A에 적어 주세요. 담당자 개인 번호는 안내하지 않아요.`,
+    handoff: true,
+    action: null,
+  },
+  {
+    // 주소·상품 변경 기능이 없다: 바꿨다고 말하지 않고 사람에게 넘긴다
+    kind: 'order_change',
+    re: /주소.{0,8}(잘못|틀|바꿔|바꾸|변경|수정)|(잘못|틀리게).{0,6}(주문|시켰)|주문.{0,4}잘못|(받는|수령).{0,6}(사람|분|인).{0,8}(바꿔|바꾸|변경|수정)/,
+    answer: () => `주문 내용은 상담창에서 바꿀 수 없어요. 바로 고객센터 ${SHOP.phone}로 주문번호와 함께 알려 주세요 (${SHOP.hours}). 배송 준비가 시작되기 전이면 [주문 조회]에서 취소한 뒤 다시 주문할 수도 있어요.`,
+    handoff: true,
+    action: 'lookup',
+  },
+  {
+    kind: 'no_subscription',
+    re: /정기\s?배송|구독/,
+    answer: () => `정기배송은 지금 하지 않아요. 필요할 때마다 주문해 주세요. 정기적으로 많이 필요하면 상품 페이지의 [기업 구매 문의]로 알려 주세요.`,
+    handoff: false,
+    action: null,
+  },
+  {
     kind: 'shipping',
     re: /배송비|무료\s?배송|택배비|언제\s?(와|도착|받)|며칠.{0,4}(걸|와)/,
     answer: () => `배송비는 농가마다 따로 붙어요. 농가별로 ${SHIPPING.fee.toLocaleString('ko-KR')}원이고, 그 농가 상품을 ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상 사면 그 농가 배송비는 무료예요. 장바구니에서 농가별 배송비를 볼 수 있어요. ${SHIPPING.leadTime}.`,
@@ -77,7 +100,7 @@ const ROUTES = [
   },
   {
     kind: 'b2b',
-    re: /납품|도매|대량|견적|사업자|기업\s?구매|정기\s?(배송|구매|납품)|\d{2,}\s*(병|박스|상자)/,
+    re: /납품|도매|대량|견적|사업자|기업\s?구매|정기\s?(구매|납품)|\d{2,}\s*(병|박스|상자)/,
     answer: (ctx) => {
       const b2b = ctx.products.filter((p) => p.b2b_available)
       if (ctx.products.length && !b2b.length) return `${ctx.products[0].name}은(는) 아직 기업 구매 문의를 받지 않는 상품이에요. ${QNA_HINT}`
@@ -422,7 +445,7 @@ function dangerSign(message, items) {
 
 // 위에서부터 먼저 맞는 주제 하나로 답한다 ("먹어도 돼요?"가 "보관"보다 먼저)
 const TOPICS = [
-  { kind: 'safety', word: '먹어도 되는지', re: new RegExp(`(먹어|드셔|마셔|섭취해)도|싹(이|\\s?났)|상했|상한\\s?(것|거)|변했|변색|곰팡|이상한\\s?냄새|냄새가\\s?(나|이상)|(술|발효|시큼한|썩은)\\s?냄새|물렀|물러졌|썩|끈적|미끈|점액|쭈글|초록색으로|${ELAPSED.source}`) },
+  { kind: 'safety', word: '먹어도 괜찮은지', re: new RegExp(`(먹어|드셔|마셔|섭취해)도|싹(이|\\s?났)|상했|상한\\s?(것|거)|변했|변색|곰팡|이상한\\s?냄새|냄새가\\s?(나|이상)|(술|발효|시큼한|썩은)\\s?냄새|물렀|물러졌|썩|끈적|미끈|점액|쭈글|초록색으로|${ELAPSED.source}`) },
   { kind: 'compare', word: '차이', re: /차이|비교|뭐가\s?달라|다른\s?점|뭐가\s?나아|어떤\s?게\s?나아/ },
   { kind: 'recipe', word: '레시피', re: /레시피|만들|만드|요리|활용|먹는\s?(법|방법)|어떻게\s?먹|해\s?먹|비율|음료|에이드/ },
   { kind: 'storage', word: '보관법', re: /보관|냉장|냉동|상온|실온|어디에?\s?(둬|두|놔)|(같이|함께)\s?(둬|두|놔|넣)|(둬|두어|놔)도|넣어도|개봉|뜯(은|으면|고)|언제까지|며칠|유통\s?기한|얼마나\s?(가|두|오래)/ },
@@ -521,6 +544,7 @@ function answerTemplate(message, catalog, ctx) {
   const items = (mentioned.length ? mentioned : ctx.items).slice(0, 2)
   const base = { handoff: false, action: null, model: `rule:${topic.kind}`, blocked: false }
   if (!items.length) {
+    if (message.replace(/\s/g, '').length > 12) return null
     // 무엇을 묻는지는 알지만 어떤 상품인지 모를 때: 품목 버튼을 보여 준다
     return { ...base, answer: `어떤 상품의 ${josa(topic.word, '을', '를')} 알려 드릴까요?`, sources: [], productCode: null, suggestions: catalog.items.slice(0, 6).map((i) => `${i.name} ${topic.word}`) }
   }
@@ -553,6 +577,19 @@ function answerTemplate(message, catalog, ctx) {
   const answer = products.length ? SAY_PRODUCTS[topic.kind](products, items) : null
   if (!answer) return null
   return { ...base, answer, sources: products.map((p) => ({ code: p.product_code, name: p.name })), productCode: products[0].product_code }
+}
+
+// ---------- 2-3-0. 상품이 없는 등급, 알아볼 수 없는 말: 비슷한 상품 답으로 넘겨짚지 않는다 ----------
+const GRADE_WORD = /못난이|등외|흠과|파지/
+function answerOddWords(message, catalog, ctx) {
+  const base = { sources: [], productCode: ctx.current?.product_code ?? null, handoff: false, action: null, blocked: false }
+  if (GRADE_WORD.test(message) && !catalog.products.some((p) => GRADE_WORD.test(p.name))) {
+    return { ...base, answer: `못난이·등외 상품은 지금 따로 팔지 않아요. 지금 파는 품목 ${catalog.items.filter((i) => catalog.products.some((p) => p.item_code === i.item_code)).map((i) => i.name).join(', ')} 중에서 골라 주세요.`, model: 'rule:grade' }
+  }
+  if (/[ㄱ-ㅎ]{3,}/.test(message)) {
+    return { ...base, answer: `어떤 말인지 알아보지 못했어요. 상품 이름을 풀어서 다시 적어 주세요. ${QNA_HINT}`, model: 'rule:ask' }
+  }
+  return null
 }
 
 // ---------- 2-3-1. "사과랑 배 중에 뭐가 나아요?": 두 품목 이상을 비교·선택하는 질문 ----------
@@ -833,6 +870,8 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
       blocked: false,
     }
   }
+  const odd = allowAi ? null : answerOddWords(message, catalog, ctx)
+  if (odd) return odd
   // 두 품목 비교·선택: 규칙 답에서 [AI에게 물어보기]를 누른 경우(allowAi)에만 아래 규칙을 건너뛰고 AI에게 간다
   const choosing = choiceItems(message, catalog)
   if (choosing && !allowAi) return answerChoice(choosing, message, catalog, ctx)
