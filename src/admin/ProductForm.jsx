@@ -5,8 +5,8 @@ import { adminApi } from './api.js'
 
 const EMPTY = {
   product_code: '', seller_code: '', item_code: '', name: '', price: '', unit: '', stock: '',
-  weight_g: '', count_per_box: '', brix: '', brix_measured_at: '', harvest_date: '', summary: '', description: '',
-  external_url: '', b2b_available: false, tags: [], faq: [],
+  weight_g: '', count_per_box: '', brix: '', variety: '', brix_measured_at: '', harvest_date: '', summary: '', description: '',
+  external_url: '', b2b_available: false, tags: [], faq: [], notice: { imported: false },
 }
 
 function toForm(product) {
@@ -16,7 +16,67 @@ function toForm(product) {
     const value = product[key]
     form[key] = value === null || value === undefined ? EMPTY[key] : (typeof EMPTY[key] === 'string' ? String(value) : value)
   }
+  form.notice = { imported: false, ...product.notice }
   return form
+}
+
+// 당도 등급: 품종과 측정값으로 자동으로 정해진다 (판매자가 고를 수 없다). 기준이 없으면 측정값만 보인다
+function BrixGradeFields({ item, brix, variety, hasPhoto, onChange }) {
+  const standards = item.brix_standards ?? []
+  const common = standards.some((s) => s.varieties.includes('공통'))
+  const std = standards.find((s) => s.varieties.includes(common ? '공통' : variety))
+  const value = Number(brix)
+  const grade = !std || !brix ? null : value >= std.top ? '매우높은 당도' : value >= std.high ? '높은 당도' : '보통 당도'
+  return (
+    <div className="preview">
+      {standards.length > 0 && !common && (
+        <label>품종{brix ? '*' : ''}
+          <select value={variety} onChange={onChange}>
+            <option value="">골라 주세요</option>
+            {standards.flatMap((s) => s.varieties).map((v) => <option key={v} value={v}>{v}</option>)}
+            <option value="기타">기타 (목록에 없는 품종)</option>
+          </select>
+        </label>
+      )}
+      {std && <p className="muted">공식 기준{common ? '' : ` (${variety})`}: 높은 당도 {std.high} 이상 · 매우높은 당도 {std.top} 이상</p>}
+      {grade && <p><strong>{grade}</strong>로 표시돼요{hasPhoto ? '' : ' (당도계 사진을 올려야 등급이 보여요)'}</p>}
+      {brix && !std && <p className="muted">공식 기준이 없어서 등급 없이 측정값만 보여요.</p>}
+    </div>
+  )
+}
+
+// 상품정보 제공 고시: 판매자가 직접 적는 칸. 품목·용량·생산자·보관법·상담 전화는 자동으로 채워진다. AI 가 채우지 않는다
+function NoticeFields({ item, notice, hasHarvest, onChange }) {
+  const set = (key) => (e) => onChange({ ...notice, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
+  const text = (key, label, placeholder) => <label>{label}<input value={notice[key] ?? ''} onChange={set(key)} maxLength={300} placeholder={placeholder} /></label>
+  const processed = item.category === '가공품'
+  return (
+    <fieldset className="preview notice-fields">
+      <legend><strong>상품정보 제공 고시</strong> <span className="muted">법으로 보여 줘야 하는 정보예요. 직접 확인해서 적어 주세요 (AI 가 채우지 않아요)</span></legend>
+      {processed ? (
+        <>
+          {text('food_type', '식품의 유형*', '라벨 그대로. 예: 과·채주스')}
+          {text('address', '생산자 소재지*', '예: 충남 천안시 ○○로 1')}
+          {text('packed', '제조연월일*', '예: 제품 라벨에 표시 (별도 표기)')}
+          {text('expiry', '소비기한 또는 품질유지기한*', '예: 제조일부터 12개월')}
+          {text('ingredients', '원재료명·원산지·함량*', '예: 배(국내산) 100%')}
+          {text('nutrition', '영양성분*', '표시 대상이 아니면 "표시 대상 아님"')}
+          {text('gmo', '유전자변형식품 표시', '비우면 해당 없음')}
+        </>
+      ) : (
+        <>
+          {text('origin', '원산지*', '예: 국내산 (충남 천안)')}
+          {!hasHarvest && text('packed', '포장일 또는 생산연도* (수확일을 적으면 비워도 돼요)', '예: 2026년산')}
+          {text('expiry', '소비기한 또는 품질유지기한*', '예: 수령 후 냉장 보관, 2~3주 안에 드세요')}
+          {text('composition', '상품 구성*', '예: 사과 16개 내외')}
+          {text('gmo', '유전자변형농산물 표시', '비우면 해당 없음')}
+          {text('geo', '지리적 표시', '비우면 해당 없음')}
+        </>
+      )}
+      <label className="check"><input type="checkbox" checked={notice.imported === true} onChange={set('imported')} /> 수입 상품이에요</label>
+      {notice.imported && text('importer', '수입자*', '수입 회사 이름')}
+    </fieldset>
+  )
 }
 
 // 품목을 고르면 품목 기준표(보관·신선도·레시피)가 자동으로 붙는다는 걸 미리 보여 준다
@@ -93,7 +153,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
     setErrors([])
     try {
       const body = { ...form, status }
-      const saved = isNew
+      let saved = isNew
         ? await api('/products', { method: 'POST', body })
         : await api(`/products/${product.product_code}`, { method: 'PATCH', body })
       if (image) {
@@ -112,6 +172,12 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
       if (itemDraft && fillItem) {
         // 같은 원물 상품들이 함께 쓰는 품목 정보는 비어 있는 칸만 채운다 (이미 있는 내용은 덮어쓰지 않음)
         await api(`/items/${form.item_code}/fill`, { method: 'POST', body: itemDraft })
+      }
+      // 판매자 판매 요청: 사진까지 올린 뒤 검사 → 믿을 만한 농가의 문제없는 상품은 바로 판매, 아니면 회사 확인 대기
+      if (seller && status === 'pending') {
+        saved = await api(`/products/${saved.product_code}/submit`, { method: 'POST' })
+        if (saved.status === 'active') return onSaved(saved, '검사를 통과해서 바로 판매를 시작했어요')
+        return onSaved(saved, `회사 확인 뒤 판매돼요 (${saved.reasons.join(' / ')})`)
       }
       onSaved(saved, SAVED[saved.status] ?? '저장했어요')
     } catch (e) {
@@ -136,7 +202,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
 
   return (
     <div className="box form">
-      <h3>{isNew ? '새 상품 등록' : `상품 수정 · ${product.product_code}`}</h3>
+      <h3>{isNew ? '새 상품 등록' : `상품 수정 · ${seller ? product.name : product.product_code}`}</h3>
       {product?.status === 'pending' && <p className="warn">검토 대기 중인 상품이에요. {seller ? '회사 관리자가 승인하면 판매돼요.' : '확인 후 [저장하고 판매]를 누르면 승인돼요.'}</p>}
       {product?.review_note && <p className="warn">반려 사유: {product.review_note}</p>}
       {changes.length > 0 && (
@@ -184,8 +250,9 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
         </label>
       )}
 
-      {isNew && (
-        <label>상품 코드* <span className="muted">(영문 소문자·숫자·밑줄, 한 번 정하면 바꾸지 않아요)</span>
+      {/* 상품 코드는 서버가 자동으로 만든다. 판매자에게는 보이지 않고, 관리자만 원하면 직접 정할 수 있다 */}
+      {isNew && !seller && (
+        <label>상품 코드 <span className="muted">(비워 두면 자동으로 만들어요. 직접 정하면 영문 소문자·숫자·밑줄)</span>
           <input value={form.product_code} onChange={set('product_code')} placeholder="예: apple_gift_5kg" />
         </label>
       )}
@@ -206,6 +273,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
           <label>당도 잰 날<input type="date" value={form.brix_measured_at} onChange={set('brix_measured_at')} /></label>
         </div>
       )}
+      {item?.show_brix && <BrixGradeFields item={item} brix={form.brix} variety={form.variety} hasPhoto={Boolean(brixPhoto || brixPhotoUrl)} onChange={set('variety')} />}
       {/* 거짓 표시 막기: 당도계 화면 사진. 판매자가 당도를 적으면 사진이 있어야 승인되고, 손님 화면에 [측정 사진]으로 보인다 */}
       {item?.show_brix && form.brix && (
         <label>당도계 사진 {seller && <span className="muted">(당도를 적으면 꼭 올려 주세요 · 당도를 바꾸면 다시 올려야 해요)</span>}
@@ -217,6 +285,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
       {item && item.category !== '가공품' && (
         <label>수확일<input type="date" value={form.harvest_date} onChange={set('harvest_date')} /></label>
       )}
+      {item && <NoticeFields item={item} notice={form.notice} hasHarvest={Boolean(form.harvest_date)} onChange={(notice) => setForm((prev) => ({ ...prev, notice }))} />}
       <AiDraft form={form} api={api} onDraft={applyDraft} />
       <label>한 줄 소개<input value={form.summary} onChange={set('summary')} maxLength={200} /></label>
       <label>상품 설명 <span className="muted">(선택) 빈 줄로 문단을 나눠요. 효능 표현은 쓰지 않아요</span>
@@ -292,7 +361,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
         <button type="button" className="button ghost" onClick={() => save('draft')} disabled={saving}>임시 저장</button>
         {seller ? (
           <button type="button" className="button" onClick={() => save(product?.status === 'active' ? 'active' : 'pending')} disabled={saving}>
-            {saving ? '저장 중…' : product?.status === 'active' ? '저장 (바로 반영)' : '검토 요청'}
+            {saving ? '저장 중…' : product?.status === 'active' ? '저장 (바로 반영)' : '판매 요청'}
           </button>
         ) : (
           <button type="button" className="button" onClick={() => save('active')} disabled={saving}>{saving ? '저장 중…' : product?.status === 'pending' ? '승인하고 판매' : '저장하고 판매'}</button>

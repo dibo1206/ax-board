@@ -16,7 +16,7 @@ const isEmail = (v) => /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(v)
 const isMobile = (v) => /^01[016789]\d{7,8}$/.test(v)
 const sha256 = (v) => createHash('sha256').update(v).digest('hex')
 
-function checkPassword(password, email) {
+export function checkPassword(password, email) {
   if (typeof password !== 'string' || password.length < 10 || password.length > 100) return '비밀번호는 10~100자로 정해 주세요.'
   if (/^\d+$/.test(password) || /^(.)\1+$/.test(password)) return '숫자만 쓰거나 같은 글자만 반복한 비밀번호는 쓸 수 없어요.'
   if (email && password.toLowerCase().includes(email.split('@')[0].toLowerCase())) return '이메일 아이디가 들어간 비밀번호는 쓸 수 없어요.'

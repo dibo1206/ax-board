@@ -9,6 +9,7 @@ import { findBanned } from './banned.js'
 import { fillItem, listTemplates, productDraft } from './content.js'
 import { pool } from './db.js'
 import { approveItem, listReview, requestItem, saveItem } from './items.js'
+import { noticeMissing } from './notice.js'
 import { validateProduct } from './validate.js'
 
 export const UPLOAD_DIR = new URL('../uploads/', import.meta.url)
@@ -32,6 +33,17 @@ export async function codeSets() {
   }
 }
 
+// 판매로 넘어가려면 상품정보 제공 고시의 필수 칸이 있어야 한다. 비어 있으면 안내 문장을 돌려준다
+export async function noticeProblem(product) {
+  const { rows } = await pool.query('SELECT category, brix_standards FROM items WHERE item_code = $1', [product.item_code])
+  const missing = noticeMissing(rows[0]?.category, product.notice, product)
+  if (missing.length) return `상품정보 고시에서 ${missing.join(', ')} 칸을 채워 주세요.`
+  // 품종마다 당도 기준이 달라서, 기준이 있는 품목에 당도를 적으면 품종을 골라야 한다 (표에 없으면 기타)
+  const standards = rows[0]?.brix_standards ?? []
+  if (product.brix && !product.variety && standards.some((s) => !s.varieties.includes('공통'))) return '당도를 적었으면 품종을 골라 주세요. 목록에 없으면 기타를 고르면 돼요.'
+  return null
+}
+
 // 판매자 입력 검사용: 품목별 보통 당도 범위 (비어 있으면 그 품목은 검사하지 않음)
 export async function itemRanges() {
   const { rows } = await pool.query('SELECT item_code, name, brix_min, brix_max FROM items WHERE brix_min IS NOT NULL OR brix_max IS NOT NULL')
@@ -39,17 +51,25 @@ export async function itemRanges() {
 }
 
 // 판매 중인 상품의 가격·당도·수확일이 바뀌면 누가 언제 무엇을 바꿨는지 남긴다 (거짓 표시를 나중에 따져 볼 수 있게)
-const WATCHED = [['price', '가격'], ['brix', '당도'], ['brix_measured_at', '당도 잰 날'], ['harvest_date', '수확일']]
+const WATCHED = [['price', '가격'], ['brix', '당도'], ['variety', '품종'], ['brix_measured_at', '당도 잰 날'], ['harvest_date', '수확일'], ['notice.origin', '원산지'], ['notice.expiry', '소비기한']]
+const watched = (product, key) => (key.startsWith('notice.') ? product.notice?.[key.slice(7)] : product[key])
 export async function recordChanges(before, after, who) {
   if (before.status !== 'active') return
   // 숫자는 숫자로 비교한다 (DB 의 "14.0" 과 화면의 "14" 는 같은 값)
   const norm = (v) => (v == null || v === '' ? null : /^\d+(\.\d+)?$/.test(String(v)) ? String(Number(v)) : String(v))
   for (const [key, label] of WATCHED) {
-    if (norm(before[key]) === norm(after[key])) continue
+    if (norm(watched(before, key)) === norm(watched(after, key))) continue
     await pool.query('INSERT INTO product_changes (product_code, field, old_value, new_value, changed_by) VALUES ($1, $2, $3, $4, $5)',
-      [before.product_code, label, norm(before[key]), norm(after[key]), who])
+      [before.product_code, label, norm(watched(before, key)), norm(watched(after, key)), who])
   }
 }
+
+// 바로 판매된 상품을 관리자가 확인했다고 표시
+adminRouter.post('/products/:code/checked', async (req, res) => {
+  const { rowCount } = await pool.query('UPDATE products SET auto_checked_at = now() WHERE product_code = $1 AND auto_approved_at IS NOT NULL', [req.params.code])
+  if (!rowCount) return res.status(404).json({ error: '상품을 찾지 못했어요.' })
+  res.status(204).end()
+})
 
 adminRouter.get('/products/:code/changes', async (req, res) => {
   const { rows } = await pool.query('SELECT field, old_value, new_value, changed_by, changed_at FROM product_changes WHERE product_code = $1 ORDER BY changed_at DESC LIMIT 50', [req.params.code])
@@ -74,12 +94,12 @@ adminRouter.get('/products', async (req, res) => {
            (SELECT count(*) FROM product_changes c WHERE c.product_code = p.product_code)::int AS changes
     FROM products p JOIN items i ON i.item_code = p.item_code JOIN sellers s ON s.seller_code = p.seller_code
     ORDER BY (p.status = 'pending') DESC, p.updated_at DESC`)
-  res.json(rows)
+  res.json(rows.map((p) => ({ ...p, notice_missing: noticeMissing(p.category, p.notice, p) })))
 })
 
 const PRODUCT_FIELDS = ['seller_code', 'item_code', 'name', 'price', 'unit', 'stock', 'weight_g', 'count_per_box',
-  'brix', 'brix_measured_at', 'harvest_date', 'summary', 'description', 'external_url', 'b2b_available', 'tags', 'status', 'review_note', 'faq']
-const value = (product, column) => (column === 'faq' ? JSON.stringify(product.faq ?? []) : product[column])
+  'brix', 'brix_measured_at', 'harvest_date', 'summary', 'description', 'external_url', 'b2b_available', 'tags', 'status', 'review_note', 'faq', 'notice', 'variety']
+const value = (product, column) => (column === 'faq' ? JSON.stringify(product.faq ?? []) : column === 'notice' ? JSON.stringify(product.notice ?? {}) : product[column])
 
 // 검사를 통과한 상품을 넣는다. 같은 코드가 있으면 null
 export async function insertProduct(product, source) {
@@ -118,6 +138,8 @@ adminRouter.post('/items/:code/approve', approveItem)
 adminRouter.post('/products', async (req, res) => {
   const { product, errors } = validateProduct(req.body, { ...(await codeSets()), isNew: true })
   if (errors) return res.status(400).json({ error: errors.join(' '), errors })
+  const problem = product.status === 'active' ? await noticeProblem(product) : null
+  if (problem) return res.status(400).json({ error: problem, errors: [problem] })
   const row = await insertProduct(product, '관리자 화면 등록')
   if (!row) return res.status(409).json({ error: '같은 상품 코드가 이미 있어요. 다른 코드를 써 주세요.' })
   console.log(`[admin] ${req.admin.loginId} 상품 등록 ${product.product_code} (${product.status})`)
@@ -134,9 +156,21 @@ adminRouter.patch('/products/:code', async (req, res) => {
   if (current.rows[0].status === 'pending' && product.status === 'active' && product.brix && !current.rows[0].brix_photo_url && current.rows[0].source?.startsWith('판매자')) {
     return res.status(400).json({ error: '당도를 적은 판매자 상품은 당도계 사진이 있어야 승인할 수 있어요. 판매자에게 사진을 요청해 주세요.' })
   }
+  // 판매로 넘어갈 때, 판매 중에 고시를 고칠 때는 필수 칸을 확인한다 (재고만 바꿀 때는 보지 않는다)
+  if (product.status === 'active' && (current.rows[0].status !== 'active' || 'notice' in req.body)) {
+    const problem = await noticeProblem(product)
+    if (problem) return res.status(400).json({ error: problem, errors: [problem] })
+  }
   if (product.status !== 'draft') product.review_note = null // 승인하면 반려 사유는 지운다
   await recordChanges(current.rows[0], product, `관리자 ${req.admin.loginId}`)
   const row = await updateProduct(req.params.code, product)
+  // 승인 기록 (믿을 만한 농가 판단에 쓴다). 반려·내리기는 관리자가 다시 승인할 때까지 그 농가의 자동 승인을 멈춘다
+  const before = current.rows[0]
+  if (before.status !== 'active' && product.status === 'active') {
+    await pool.query('UPDATE products SET admin_approved_at = now(), rejected_at = NULL, review_reason = NULL WHERE product_code = $1', [req.params.code])
+  } else if (product.status === 'draft' && product.review_note && before.review_note !== product.review_note) {
+    await pool.query('UPDATE products SET rejected_at = now() WHERE product_code = $1', [req.params.code])
+  }
   const what = current.rows[0].status === 'pending' && product.status !== 'pending'
     ? (product.status === 'active' ? ' (승인)' : ' (반려)') : ''
   console.log(`[admin] ${req.admin.loginId} 상품 수정 ${req.params.code}${what}`)

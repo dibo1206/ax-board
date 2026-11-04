@@ -11,6 +11,8 @@ const splitCommas = (text) => text.split(',').map((s) => s.trim()).filter(Boolea
 function toForm(item) {
   return {
     show_brix: item.show_brix,
+    brix_standards: (item.brix_standards ?? []).map((s) => `${s.varieties.join(', ')} : ${s.high} : ${s.top}`).join('\n'),
+    brix_standard_source: item.brix_standard_source ?? '',
     brix_min: item.brix_min ?? '',
     brix_max: item.brix_max ?? '',
     storage_method: item.storage_method ?? '',
@@ -36,6 +38,10 @@ function toBody(form) {
     stage1_uses: splitCommas(form.stage1_uses),
     stage2_uses: splitCommas(form.stage2_uses),
     stage3_uses: ['폐기'],
+    brix_standards: splitLines(form.brix_standards).map((line) => {
+      const [varieties, high, top] = line.split(':').map((s) => s.trim())
+      return { varieties: splitCommas(varieties ?? ''), high: Number(high), top: Number(top) }
+    }),
     allergens: splitCommas(form.allergens),
     danger_signs: splitLines(form.danger_signs),
     recipes: splitLines(form.recipes).map((line) => {
@@ -126,6 +132,13 @@ function ItemCard({ item, onDone }) {
           <label>보통 당도 최소 (Brix)<input value={form.brix_min} onChange={set('brix_min')} inputMode="decimal" placeholder="출처 확인 후" /></label>
           <label>보통 당도 최대 (Brix)<input value={form.brix_max} onChange={set('brix_max')} inputMode="decimal" placeholder="출처 확인 후" /></label>
         </div>
+      )}
+      {form.show_brix && (
+        <>
+          <label>당도 등급 기준 (한 줄에 하나: 품종들 : 높은 당도 : 매우높은 당도. 품종 구분이 없으면 공통)<textarea rows={3} value={form.brix_standards} onChange={set('brix_standards')} placeholder="공통 : 9 : 11" /></label>
+          <label>당도 기준 출처 (기준을 넣으면 필수)<input value={form.brix_standard_source} onChange={set('brix_standard_source')} maxLength={300} /></label>
+          <p className="muted">비워 두면 등급 없이 측정값만 보여요. 공식 자료에 있는 값만 넣어 주세요.</p>
+        </>
       )}
       {form.show_brix && <p className="muted">판매자가 이 범위 밖의 당도를 적으면 저장이 막혀요. 근거 없이 정하지 말고 출처에 나온 값으로 적어 주세요.</p>}
       <label>알레르기 안내 문장 (선택)<input value={form.allergen_note} onChange={set('allergen_note')} maxLength={300} placeholder="예: 다른 원료가 들어간 제품은 라벨을 확인해 주세요" /></label>

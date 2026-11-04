@@ -132,6 +132,9 @@ function validate(sheets, issues) {
       if (!/^\/[A-Za-z0-9_\-./]+\.webp$/.test(r.image_url)) issues.error('products.csv', line, `image_url "${r.image_url}"는 /product-photos/상품코드.webp 처럼 / 로 시작하는 .webp 주소만`)
       else if (!existsSync(new URL(`../public${r.image_url}`, import.meta.url))) issues.warn('products.csv', line, `image_url 파일이 public${r.image_url} 에 없어요`)
     }
+    if (r.notice) {
+      try { JSON.parse(r.notice) } catch { issues.error('products.csv', line, 'notice 는 JSON 형식으로') }
+    }
     if (r.external_url && !/^https?:\/\//.test(r.external_url)) issues.error('products.csv', line, '판매 링크는 http로 시작해야 해요')
     const productTags = list(r.tags)
     productTags.filter((t) => !tagCodes.has(t)).forEach((t) => issues.error('products.csv', line, `태그 "${t}"가 tags.csv에 없어요`))
@@ -174,17 +177,18 @@ async function load(sheets) {
       await client.query(
         `INSERT INTO items (item_code, name, category, show_brix, storage_method, fresh_days_stage1, fresh_days_stage2,
            stage1_uses, stage2_uses, stage3_uses, opened_note, allergens, danger_signs, recipes, source, reviewed_by,
-           stage1_state, stage2_state, keep_period, danger_note, allergen_note, cafe_note)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+           stage1_state, stage2_state, keep_period, danger_note, allergen_note, cafe_note, brix_standards, brix_standard_source)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,COALESCE($23::jsonb, '[]'::jsonb),$24)
          ON CONFLICT (item_code) DO UPDATE SET name=$2, category=$3, show_brix=$4, storage_method=$5,
            fresh_days_stage1=$6, fresh_days_stage2=$7, stage1_uses=$8, stage2_uses=$9, stage3_uses=$10,
            opened_note=$11, allergens=$12, danger_signs=$13, recipes=$14, source=$15, reviewed_by=$16,
-           stage1_state=$17, stage2_state=$18, keep_period=$19, danger_note=$20, allergen_note=$21, cafe_note=$22`,
+           stage1_state=$17, stage2_state=$18, keep_period=$19, danger_note=$20, allergen_note=$21, cafe_note=$22,
+           brix_standards=COALESCE($23::jsonb, items.brix_standards), brix_standard_source=COALESCE($24, items.brix_standard_source)`,
         [r.item_code, r.name, r.category, yes(r.show_brix), nullable(r.storage_method), nullable(r.fresh_days_stage1),
           nullable(r.fresh_days_stage2), list(r.stage1_uses), list(r.stage2_uses), list(r.stage3_uses),
           nullable(r.opened_note), list(r.allergens), list(r.danger_signs), recipesJson(r.recipes),
           nullable(r.source), nullable(r.reviewed_by),
-          nullable(r.stage1_state), nullable(r.stage2_state), nullable(r.keep_period), nullable(r.danger_note), nullable(r.allergen_note), nullable(r.cafe_note)],
+          nullable(r.stage1_state), nullable(r.stage2_state), nullable(r.keep_period), nullable(r.danger_note), nullable(r.allergen_note), nullable(r.cafe_note), nullable(r.brix_standards ?? ''), nullable(r.brix_standard_source ?? '')],
       )
     }
     for (const r of sheets['tags.csv']) {
@@ -197,15 +201,15 @@ async function load(sheets) {
     for (const r of sheets['products.csv']) {
       await client.query(
         `INSERT INTO products (product_code, seller_code, item_code, name, price, unit, stock, weight_g, count_per_box,
-           brix, brix_measured_at, harvest_date, summary, external_url, b2b_available, tags, source, image_url, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18, now())
+           brix, brix_measured_at, harvest_date, summary, external_url, b2b_available, tags, source, image_url, notice, variety, brix_photo_url, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,COALESCE($19::jsonb, '{}'::jsonb),$20,$21, now())
          ON CONFLICT (product_code) DO UPDATE SET seller_code=$2, item_code=$3, name=$4, price=$5, unit=$6, stock=$7,
            weight_g=$8, count_per_box=$9, brix=$10, brix_measured_at=$11, harvest_date=$12, summary=$13,
-           external_url=$14, b2b_available=$15, tags=$16, source=$17, image_url=COALESCE($18, products.image_url), updated_at=now()`,
+           external_url=$14, b2b_available=$15, tags=$16, source=$17, image_url=COALESCE($18, products.image_url), notice=COALESCE($19::jsonb, products.notice), variety=COALESCE($20, products.variety), brix_photo_url=COALESCE($21, products.brix_photo_url), updated_at=now()`,
         [r.product_code, r.seller_code, r.item_code, r.name, Number(r.price), r.unit, Number(r.stock),
           nullable(r.weight_g), nullable(r.count_per_box), nullable(r.brix), nullable(r.brix_measured_at),
           nullable(r.harvest_date), nullable(r.summary), nullable(r.external_url), yes(r.b2b_available),
-          list(r.tags), nullable(r.source), nullable(r.image_url ?? '')],
+          list(r.tags), nullable(r.source), nullable(r.image_url ?? ''), nullable(r.notice ?? ''), nullable(r.variety ?? ''), nullable(r.brix_photo_url ?? '')],
       )
     }
     for (const r of sheets['questions.csv']) {

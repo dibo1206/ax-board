@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { adminApi } from '../admin/api.js'
 import { OrderDetail } from '../shop/Orders.jsx'
 import { get, loadScript, ORDER_STATUS, post, send, when, won } from '../shop/shared.js'
 
@@ -13,18 +14,28 @@ function Errors({ list }) {
   return list.length > 0 ? <ul className="error">{list.map((e) => <li key={e}>{e}</li>)}</ul> : null
 }
 
+// 로그인은 한 곳에서: 이메일이면 소비자, 아이디(@ 없음)면 판매자·관리자. 로그인하면 각자 화면으로 바로 간다
 export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [otp, setOtp] = useState('')
+  const [needOtp, setNeedOtp] = useState(false)
   const [errors, setErrors] = useState([])
 
   async function submit(event) {
     event.preventDefault()
     try {
-      await post('/account/login', { email, password })
-      window.dispatchEvent(new Event('account-change'))
-      goNext()
+      if (email.includes('@')) {
+        await post('/account/login', { email, password })
+        window.dispatchEvent(new Event('account-change'))
+        goNext()
+      } else {
+        const me = await adminApi('/login', { method: 'POST', body: { loginId: email, password, otp } })
+        window.location.href = me.role === 'admin' ? '/admin' : '/seller'
+      }
     } catch (e) {
+      if (e.needOtp) setNeedOtp(true)
+      setOtp('')
       setErrors([e.message])
     }
   }
@@ -32,8 +43,9 @@ export function LoginPage() {
   return (
     <form className="box form narrow" onSubmit={submit}>
       <h2>로그인</h2>
-      <label>이메일<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" /></label>
+      <label>이메일 또는 판매자 아이디<input value={email} onChange={(e) => setEmail(e.target.value.trim())} autoComplete="username" autoCapitalize="none" /></label>
       <label>비밀번호<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></label>
+      {needOtp && <label>인증 앱 코드 (6자리)<input value={otp} onChange={(e) => setOtp(e.target.value)} inputMode="numeric" autoComplete="one-time-code" /></label>}
       <Errors list={errors} />
       <button type="submit" className="button">로그인</button>
       <p className="muted"><a href="/account/signup">회원가입</a> · <a href="/account/find">비밀번호 찾기</a> · 회원가입 없이도 주문할 수 있어요</p>
@@ -41,7 +53,46 @@ export function LoginPage() {
   )
 }
 
+// 판매자 가입: 신청 → 관리자 승인 → 상품 올리기. 가입하면 바로 로그인해서 승인 상태를 보여 준다
+function SellerSignup() {
+  const [form, setForm] = useState({ loginId: '', password: '', password2: '', farmName: '', region: '', ownerName: '', phone: '', businessNo: '', email: '', agreeTerms: false, agreePrivacy: false })
+  const [errors, setErrors] = useState([])
+  const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
+
+  async function submit(event) {
+    event.preventDefault()
+    if (form.password !== form.password2) return setErrors(['비밀번호 확인이 맞지 않아요.'])
+    try {
+      await post('/seller-signup', form)
+      await adminApi('/login', { method: 'POST', body: { loginId: form.loginId.trim().toLowerCase(), password: form.password } })
+      window.location.href = '/seller'
+    } catch (e) {
+      setErrors(e.errors ?? [e.message])
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="form">
+      <p className="muted">회사가 농가 정보를 확인하고 승인하면 상품을 올릴 수 있어요. 승인 결과는 이메일로 알려 드려요.</p>
+      <label>아이디* <span className="muted">영문 소문자·숫자·밑줄 4~20자</span><input value={form.loginId} onChange={set('loginId')} maxLength={20} autoComplete="username" autoCapitalize="none" /></label>
+      <label>비밀번호* <span className="muted">10자 이상</span><input type="password" value={form.password} onChange={set('password')} autoComplete="new-password" /></label>
+      <label>비밀번호 확인*<input type="password" value={form.password2} onChange={set('password2')} autoComplete="new-password" /></label>
+      <label>농가·상호 이름*<input value={form.farmName} onChange={set('farmName')} maxLength={30} placeholder="예: 햇살과수원" /></label>
+      <label>지역*<input value={form.region} onChange={set('region')} maxLength={30} placeholder="예: 충남 천안" /></label>
+      <label>대표자 이름*<input value={form.ownerName} onChange={set('ownerName')} maxLength={20} /></label>
+      <label>연락처*<input value={form.phone} onChange={set('phone')} inputMode="tel" placeholder="010-1234-5678" autoComplete="tel" /></label>
+      <label>사업자등록번호*<input value={form.businessNo} onChange={set('businessNo')} inputMode="numeric" placeholder="000-00-00000" /></label>
+      <label>이메일* <span className="muted">승인 결과를 받아요</span><input type="email" value={form.email} onChange={set('email')} autoComplete="email" /></label>
+      <label className="check"><input type="checkbox" checked={form.agreeTerms} onChange={set('agreeTerms')} />[필수] <a href="/policy/terms" target="_blank" rel="noreferrer">이용약관</a> 동의 (올린 상품 정보의 정확성은 판매자가 책임져요)</label>
+      <label className="check"><input type="checkbox" checked={form.agreePrivacy} onChange={set('agreePrivacy')} />[필수] <a href="/policy/privacy" target="_blank" rel="noreferrer">개인정보 수집·이용</a> 동의</label>
+      <Errors list={errors} />
+      <button type="submit" className="button">판매자 가입 신청</button>
+    </form>
+  )
+}
+
 export function SignupPage() {
+  const [type, setType] = useState(() => (new URLSearchParams(window.location.search).get('type') === 'seller' ? 'seller' : 'buyer'))
   const [form, setForm] = useState({ email: '', password: '', password2: '', name: '', phone: '', agreeTerms: false, agreePrivacy: false })
   const [errors, setErrors] = useState([])
   const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
@@ -58,9 +109,17 @@ export function SignupPage() {
     }
   }
 
+  const picker = (
+    <nav className="tabs" aria-label="가입 종류">
+      <button type="button" className={type === 'buyer' ? 'on' : ''} onClick={() => setType('buyer')}>소비자 (상품 사기)</button>
+      <button type="button" className={type === 'seller' ? 'on' : ''} onClick={() => setType('seller')}>판매자 (농가·상품 팔기)</button>
+    </nav>
+  )
+  if (type === 'seller') return <div className="box narrow"><h2>회원가입</h2>{picker}<SellerSignup /></div>
   return (
     <form className="box form narrow" onSubmit={submit}>
       <h2>회원가입</h2>
+      {picker}
       <label>이메일*<input type="email" value={form.email} onChange={set('email')} autoComplete="email" /></label>
       <label>비밀번호* <span className="muted">10자 이상</span><input type="password" value={form.password} onChange={set('password')} autoComplete="new-password" /></label>
       <label>비밀번호 확인*<input type="password" value={form.password2} onChange={set('password2')} autoComplete="new-password" /></label>

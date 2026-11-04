@@ -380,3 +380,9 @@
 /* 주문 상세: 농가별 배송 (농가마다 따로 보낸다) */
 .shop .farm-shipments { margin: 0; padding-left: 18px; }
 .shop .farm-shipments li { margin: 2px 0; }
+/* 당도 등급 (공식 기준) */
+.shop .brix-grade { padding: 2px 8px; border-radius: 4px; color: #fff; background: #5f6b5c; font-size: 0.85em; font-weight: 600; }
+.shop .brix-grade.rank-2 { background: #37833f; }
+.shop .brix-grade.rank-3 { background: #d9691c; }
+.shop .brix-filter { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 14px; white-space: nowrap; }
+.shop .pcard-tags { flex-wrap: wrap; }

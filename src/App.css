@@ -224,3 +224,9 @@ a.card { text-decoration: none; height: 100%; box-sizing: border-box; }
 /* 후기: 상품 페이지 정보와 맞았는지 (거짓 표시 막기) */
 .info-match { border: 0; padding: 0; margin: 8px 0; display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .info-match legend { width: 100%; margin-bottom: 4px; }
+
+/* 상품정보 제공 고시 표 */
+.notice-table { width: 100%; border-collapse: collapse; font-size: 0.93rem; table-layout: fixed; }
+.notice-table th, .notice-table td { padding: 8px 10px; border-top: 1px solid var(--border, #ddd); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.notice-table th { width: 38%; font-weight: 500; }
+.notice-fields { border: 1px solid var(--border, #ddd); padding: 12px; }

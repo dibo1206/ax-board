@@ -1,4 +1,7 @@
 // 관리자 화면에서 들어온 상품 입력 검사. 데이터 불러오기 스크립트와 같은 규칙을 쓴다.
+import { randomBytes } from 'node:crypto'
+import { readNotice } from './notice.js'
+
 export const FORBIDDEN = ['면역력', '다이어트', '치료', '예방', '해독', '항암', '혈압', '혈당']
 
 const isCode = (v) => /^[a-z0-9_]+$/.test(v)
@@ -12,7 +15,8 @@ const defaultFindBanned = (value) => FORBIDDEN.filter((w) => value.includes(w))
 export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew, findBanned = defaultFindBanned, itemRanges = null }) {
   const errors = []
   const p = {
-    product_code: text(input.product_code),
+    // 새 상품의 코드는 비어 있으면 서버가 만든다 (판매자는 코드를 몰라도 된다)
+    product_code: text(input.product_code) || (isNew ? `p_${randomBytes(5).toString('hex')}` : ''),
     seller_code: text(input.seller_code),
     item_code: text(input.item_code),
     name: text(input.name),
@@ -22,6 +26,7 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
     weight_g: text(input.weight_g),
     count_per_box: text(input.count_per_box),
     brix: text(input.brix),
+    variety: text(input.variety).slice(0, 30),
     brix_measured_at: text(input.brix_measured_at),
     harvest_date: text(input.harvest_date),
     summary: text(input.summary),
@@ -32,6 +37,7 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
     status: ['draft', 'pending'].includes(input.status) ? input.status : 'active',
     review_note: text(input.review_note) || null,
     // 자주 묻는 질문 [{q, a}] (AI 초안을 판매자가 고쳐서 저장)
+    notice: readNotice(input.notice), // 상품정보 제공 고시
     faq: (Array.isArray(input.faq) ? input.faq : []).slice(0, 7).map((f) => ({ q: text(f?.q), a: text(f?.a) })).filter((f) => f.q || f.a),
   }
 
@@ -74,7 +80,7 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
   if (unknown.length) errors.push(`없는 태그예요: ${unknown.join(', ')}`)
   if (p.faq.length > 6) errors.push('자주 묻는 질문은 6개까지 적어 주세요.')
   if (p.faq.some((f) => !f.q || !f.a || f.q.length > 100 || f.a.length > 300)) errors.push('자주 묻는 질문은 질문(100자)과 답(300자)을 모두 적어 주세요.')
-  const all = `${p.name} ${p.summary} ${p.description} ${p.faq.map((f) => `${f.q} ${f.a}`).join(' ')}`
+  const all = `${p.name} ${p.summary} ${p.description} ${p.faq.map((f) => `${f.q} ${f.a}`).join(' ')} ${Object.values(p.notice).filter((v) => typeof v === 'string').join(' ')}`
   const bad = findBanned(all)
   if (bad.length) errors.push(`효능 표현은 쓰지 않아요: ${bad.join(', ')}`)
   if (p.review_note && p.review_note.length > 300) errors.push('반려 사유는 300자 안으로 적어 주세요.')
@@ -89,6 +95,7 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
       weight_g: orNull(p.weight_g),
       count_per_box: orNull(p.count_per_box),
       brix: orNull(p.brix),
+      variety: orNull(p.variety),
       brix_measured_at: orNull(p.brix_measured_at),
       harvest_date: orNull(p.harvest_date),
       summary: orNull(p.summary),

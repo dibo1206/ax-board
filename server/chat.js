@@ -151,6 +151,8 @@ function describeProduct(p, item) {
     lines.push(`- 당도: ${p.brix ? `${p.brix}Brix (${p.brix_measured_at ?? '측정일 정보 없음'} 측정)` : '측정한 당도 정보 없음'}`)
   }
   if (item.category !== '가공품') lines.push(`- 수확일: ${p.harvest_date ?? '정보 없음'}`)
+  if (p.notice?.origin) lines.push(`- 원산지: ${p.notice.origin}`)
+  if (p.notice?.expiry) lines.push(`- 소비기한 또는 품질유지기한: ${p.notice.expiry}`)
   if (p.summary) lines.push(`- 소개: ${p.summary}`)
   lines.push(`- 구매: ${BUY_HOW}`)
   lines.push(`- 기업 구매 문의: ${p.b2b_available ? '받음' : '받지 않음'}`)
@@ -462,7 +464,7 @@ const SAY_ITEM = {
 // 상품(같은 품목의 여러 상품)으로 답하는 주제
 const SAY_PRODUCTS = {
   origin: (products) => {
-    const lines = products.map((p) => `${label(p)}: ${p.seller_name.replace(/\[예시\]\s*/g, '')}(${p.seller_region})에서 보내요.`)
+    const lines = products.map((p) => `${label(p)}: ${p.seller_name.replace(/\[예시\]\s*/g, '')}(${p.seller_region})에서 보내요.${p.notice?.origin ? ` 원산지: ${p.notice.origin}.` : ''}`)
     if (products[0].seller_story) lines.push(`농가 이야기: ${sentence(products[0].seller_story)}`)
     return lines.join(' ')
   },
