@@ -2,6 +2,7 @@
 // 1) 건강·환불·대량 구매·주문 조회·배송비는 정해진 답 (토큰 0)
 // 2) 가격·재고·개수·당도는 DB 값 그대로, 추천은 DB 규칙 (토큰 0)
 // 3) 보관·개봉 후·레시피·먹어도 되나·알레르기·산지·수확일·상품 비교는 품목 정보로 문장을 만든다 (토큰 0)
+//    두 품목 비교·선택("사과랑 배 중에 뭐가 나아요?")은 판단하지 않고 가격·당도·품절 여부만 품목별로 나란히 보여 준다
 // 4) 예전에 AI가 답한 비슷한 질문, 담당자가 답한 Q&A를 글자 비교로 찾아 다시 쓴다 (토큰 0)
 // 5) 그래도 못 찾으면 고를 수 있는 질문 버튼 + [AI에게 물어보기]. 손님이 그 버튼을 눌렀을 때만 AI를 부른다
 //    AI 답에서 자료에 없는 가격·당도, 효능 표현, "먹어도 돼요", 환불 약속을 찾으면 한 번 다시 시키고, 그래도 틀리면 담당자에게 넘긴다
@@ -257,6 +258,10 @@ const NEEDS_EXPLAIN = /보관|레시피|만들|개봉|먹어도|드셔도|마셔
 // ---------- 2-2. 추천 질문 (6단계) ----------
 // 말에서 조건(태그·예산)을 찾고, 못 찾으면 AI에게 태그만 고르게 한다. 상품은 항상 DB 규칙(recommend.js)이 고른다
 const WANTS_RECOMMEND = /추천|골라|뭐가 좋|뭘 사|뭐 사|뭐 살까/
+// "사과로 만들 수 있는 요리 추천해 주세요"처럼 품목 이름과 요리·레시피를 함께 물으면 상품 추천이 아니라 그 품목의 레시피 질문이다
+// (품목 없이 "요리해 먹기 좋은 상품 추천"이면 지금처럼 태그 추천)
+const ASKS_RECIPE = /레시피|요리|만들|만드|해\s?먹/
+const asksRecipeOfItem = (message, catalog) => ASKS_RECIPE.test(message) && findItems(message, catalog.items).length > 0
 
 async function pickTagsWithAi(message, tagLabel) {
   const tagList = Object.entries(tagLabel).map(([code, label]) => `- ${code}: ${label}`).join('\n')
@@ -531,6 +536,63 @@ function answerTemplate(message, catalog, ctx) {
   return { ...base, answer, sources: products.map((p) => ({ code: p.product_code, name: p.name })), productCode: products[0].product_code }
 }
 
+// ---------- 2-3-1. "사과랑 배 중에 뭐가 나아요?": 두 품목 이상을 비교·선택하는 질문 ----------
+// 건강·효능이나 누구에게 더 맞는지는 판단하지 않는다. 등록된 사실(가격·당도·품절 여부)만 품목별로 나란히 보여 주고,
+// 손님이 물은 기준이 가격·당도라서 사실로 고를 수 있을 때만 그 값을 말한다
+const ASKS_CHOICE = /비교|차이|다른\s?점|뭐가\s?달라|중(에서|에)?\s?(뭐|뭘|무엇|어느|어떤)|어느\s?(게|것|쪽|걸)|(뭐가|어떤\s?(게|걸)|뭘)\s?(더\s?)?(나아|낫|좋|살까|사야)/
+const BY_PRICE = /싸|저렴|가격|값/
+const BY_BRIX = /더\s?달|달아|달콤|단\s?(게|거|것|쪽)|당도|브릭스|brix/i
+
+// 비교·선택 질문이고 질문에 품목이 둘 이상이면 그 품목들. 먹어도 되나·상한 상태 질문은 원래 규칙(안전 안내)이 먼저다
+function choiceItems(message, catalog) {
+  if (!ASKS_CHOICE.test(message) || dangerSign(message, catalog.items)) return null
+  if (TOPICS.find((t) => t.kind === 'safety').re.test(message)) return null
+  const items = findItems(message, catalog.items)
+  return items.length >= 2 ? items : null
+}
+
+function choiceFacts(p, item) {
+  const brix = !item.show_brix ? null
+    : p.info_disputed ? '당도는 후기에서 표시와 다르다는 의견이 많아 안내하지 않음'
+    : p.brix ? `당도 ${p.brix}Brix${p.brix_measured_at ? `(${p.brix_measured_at} 측정)` : ''}`
+    : '측정한 당도 정보 없음'
+  return `${label(p)} ${won(p.price)}(${p.unit})${brix ? ` · ${brix}` : ''} · ${p.sold_out ? '품절' : '판매 중'}`
+}
+
+const nameList = (rows) => rows.map((x) => label(x.p)).join(', ')
+
+function answerChoice(items, message, catalog, ctx) {
+  const groups = items.map((item) => ({ item, products: catalog.products.filter((p) => p.item_code === item.item_code).slice(0, 3) }))
+  const lines = groups.map(({ item, products }) => `${item.name}: ${products.length ? products.map((p) => choiceFacts(p, item)).join(' / ') : '지금 판매 중인 상품이 없어요'}`)
+  const all = groups.flatMap(({ item, products }) => products.map((p) => ({ p, item })))
+  const decided = []
+  if (BY_PRICE.test(message)) {
+    const buyable = all.filter((x) => !x.p.sold_out)
+    const low = Math.min(...buyable.map((x) => Number(x.p.price)))
+    if (buyable.length >= 2) decided.push(`살 수 있는 상품 중 등록된 가장 낮은 가격은 ${won(low)}이에요(${nameList(buyable.filter((x) => Number(x.p.price) === low))}). 판매 단위가 서로 달라서 단위도 같이 확인해 주세요.`)
+    else if (all.length >= 2) decided.push(buyable.length ? `지금 살 수 있는 상품은 ${nameList(buyable)}뿐이에요. 나머지는 품절이에요.` : '지금은 모두 품절이라 살 수 없어요.')
+  }
+  if (BY_BRIX.test(message)) {
+    // 당도 빈칸은 '모름'이라 하나라도 비어 있으면 높고 낮음을 말하지 않는다
+    const measured = all.filter((x) => x.item.show_brix && x.p.brix && !x.p.info_disputed)
+    const top = Math.max(...measured.map((x) => Number(x.p.brix)))
+    decided.push(all.length >= 2 && measured.length === all.length
+      ? `등록된 당도 중 가장 높은 값은 ${top}Brix예요(${nameList(measured.filter((x) => Number(x.p.brix) === top))}).`
+      : '당도 정보가 없는 상품이 있어서 당도로는 어느 쪽이 높은지 말씀드릴 수 없어요.')
+  }
+  const canAskAi = Boolean(ctx.current) && keyLoaded() && dailyLimit() > 0
+  const closing = decided.length
+    ? decided.join(' ')
+    : `어느 쪽이 더 나은지는 등록된 사실(가격·당도·품절 여부)로 정할 수 없어서 제가 판단하지 않아요. 건강에 어떤지도 판단하지 않아요.${canAskAi ? ' 더 궁금하시면 [AI에게 물어보기]를 눌러 보세요. AI도 등록된 상품 정보 안에서만 답해요.' : ''}`
+  return {
+    answer: `등록된 정보를 품목별로 나란히 보여 드릴게요.\n${lines.map((l) => `- ${l}`).join('\n')}\n${closing} 상품 이름을 누르면 자세히 볼 수 있어요.`,
+    sources: all.map((x) => ({ code: x.p.product_code, name: x.p.name })),
+    productCode: ctx.current?.product_code ?? all[0]?.p.product_code ?? null,
+    askAi: !decided.length && canAskAi,
+    handoff: false, action: null, model: 'rule:choice', blocked: false,
+  }
+}
+
 // ---------- 2-4. 비슷한 질문 다시 쓰기: 담당자가 답한 Q&A, 최근 7일 AI 답 (글자 비교라 토큰 0) ----------
 async function loadSimilarCandidates() {
   const [logs, qna] = await Promise.all([
@@ -744,16 +806,21 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
       blocked: false,
     }
   }
-  if (WANTS_RECOMMEND.test(message)) return answerRecommend(message, allowAi)
+  // 두 품목 비교·선택: 규칙 답에서 [AI에게 물어보기]를 누른 경우(allowAi)에만 아래 규칙을 건너뛰고 AI에게 간다
+  const choosing = choiceItems(message, catalog)
+  if (choosing && !allowAi) return answerChoice(choosing, message, catalog, ctx)
+  if (!choosing) {
+    if (WANTS_RECOMMEND.test(message) && !asksRecipeOfItem(message, catalog)) return answerRecommend(message, allowAi)
 
-  const fact = answerFact(message, catalog, ctx)
-  if (fact) return { ...fact, handoff: false, action: null, model: 'rule:fact', blocked: false }
+    const fact = answerFact(message, catalog, ctx)
+    if (fact) return { ...fact, handoff: false, action: null, model: 'rule:fact', blocked: false }
 
-  const template = answerTemplate(message, catalog, ctx)
-  if (template) return template
+    const template = answerTemplate(message, catalog, ctx)
+    if (template) return template
 
-  const notSold = answerNotSold(message, catalog, ctx)
-  if (notSold) return notSold
+    const notSold = answerNotSold(message, catalog, ctx)
+    if (notSold) return notSold
+  }
 
   const material = await buildMaterial(catalog, ctx)
   const key = cacheKey('answer', message, material)
