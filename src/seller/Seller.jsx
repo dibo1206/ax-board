@@ -4,9 +4,9 @@ import { adminApi, sellerApi } from '../admin/api.js'
 import { QuestionRow } from '../admin/Inbox.jsx'
 import { ProductForm } from '../admin/ProductForm.jsx'
 import { CourierList } from '../shop/CourierList.jsx'
-import { ORDER_STATUS, when } from '../shop/shared.js'
+import { ORDER_STATUS, RETURN_STATUS, when } from '../shop/shared.js'
 
-// 판매자(농가) 화면: 로그인 → [내 상품 | 상품 문의 | 농가 소개]. 모든 요청은 /api/seller (자기 농가 것만)
+// 판매자(농가) 화면: 로그인 → [내 상품 | 상품 문의 | 주문 | 반품 | 농가 소개]. 모든 요청은 /api/seller (자기 농가 것만)
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
 
 function MyProducts({ onMessage, onError }) {
@@ -110,18 +110,20 @@ function MyQuestions({ onMessage, onError }) {
 }
 
 // 내 농가 상품이 들어 있는 주문. 다른 농가 상품과 함께 주문됐어도 내 상품은 내가 따로 보낸다 (송장·배송비가 농가마다)
-// 정산 요약: 배송 완료 7일 뒤(또는 손님이 먼저) 구매 확정된 매출이 정산 대상
+// 정산 요약: 배송 완료 7일 뒤(또는 손님이 먼저) 구매 확정된 매출이 정산 대상. 취소한 내 농가 몫은 빠지고, 반품 환불액은 뺀다
 function Settlement() {
   const [s, setS] = useState(null)
   useEffect(() => {
     sellerApi('/orders/settlement').then(setS).catch(() => setS(null))
   }, [])
   if (!s) return null
+  const refunds = s.confirmed_refunds + s.late_refunds
   return (
     <div className="box">
       <h3>정산 <span className="muted">구매 확정된 내 상품 매출 기준{s.has_test ? ' · 테스트 결제 포함' : ''}</span></h3>
-      <p>이번 달 정산 예정 <b>{won(s.confirmed_amount + s.confirmed_shipping)}</b> ({s.confirmed_orders}건, 배송비 {won(s.confirmed_shipping)} 포함)
-        · 구매 확정 기다리는 중 {won(s.waiting_amount + s.waiting_shipping)} ({s.waiting_orders}건)</p>
+      <p>이번 달 정산 예정 <b>{won(s.confirmed_amount + s.confirmed_shipping - refunds)}</b> ({s.confirmed_orders}건, 배송비 {won(s.confirmed_shipping)} 포함{refunds > 0 && `, 반품 환불 ${won(refunds)} 뺌`})
+        · 구매 확정 기다리는 중 {won(s.waiting_amount + s.waiting_shipping - s.waiting_refunds)} ({s.waiting_orders}건{s.waiting_refunds > 0 && `, 반품 환불 ${won(s.waiting_refunds)} 뺌`})</p>
+      {s.late_refunds > 0 && <p className="muted">지난달까지 확정된 주문의 반품 환불 {won(s.late_refunds)}을 이번 달 정산에서 뺐어요.</p>}
       <p className="muted">배송 완료 {s.confirmDays}일 뒤 자동으로 구매 확정돼요. 손님이 먼저 확정할 수도 있어요.</p>
     </div>
   )
@@ -148,6 +150,20 @@ function MyOrders({ onMessage, onError }) {
   }
   const setT = (no, key) => (e) => setTracking((prev) => ({ ...prev, [no]: { ...prev[no], [key]: e.target.value } }))
 
+  // 내 농가 몫만 취소 (아직 보내지 않았을 때): 내 상품 금액 + 배송비를 손님 결제에서 취소하고 재고를 돌려놓는다
+  async function cancel(o) {
+    const reason = window.prompt('취소 사유 (손님에게 보여요)')
+    if (!reason?.trim()) return
+    if (!window.confirm(`내 상품 ${won(o.items_amount)} + 배송비 ${won(o.shipping_fee)}을 손님 결제에서 바로 취소해요.`)) return
+    try {
+      await sellerApi(`/orders/${o.order_no}/cancel`, { method: 'POST', body: { reason } })
+      onMessage(`${o.order_no}: 내 농가 몫을 취소하고 결제를 돌려드렸어요`)
+    } catch (e) {
+      onError(e.message)
+    }
+    load()
+  }
+
   if (!orders) return <p className="muted">불러오는 중…</p>
   if (!orders.length) return <><Settlement /><p className="muted">아직 내 상품 주문이 없어요.</p></>
   return (
@@ -162,6 +178,8 @@ function MyOrders({ onMessage, onError }) {
             {o.farms > 1 && ` · 다른 농가 ${o.farms - 1}곳 상품과 함께 주문됐어요 (내 상품만 따로 보내면 돼요)`}</p>
           {o.receiver && <p className="muted">받는 분 {o.receiver.name} · {o.receiver.phone} · ({o.receiver.zipcode}) {o.receiver.address1} {o.receiver.address2 ?? ''}{o.receiver.memo && ` · 메모: ${o.receiver.memo}`}</p>}
           {o.tracking_no && <p className="muted">송장 {o.courier} {o.tracking_no} {o.tracking_url && <a href={o.tracking_url} target="_blank" rel="noreferrer">배송 조회</a>}</p>}
+          {o.cancel_pending && <p className="warn">취소의 결제 취소 결과를 확인하고 있어요. 회사 담당자가 확인해요.</p>}
+          {['paid', 'preparing'].includes(o.status) && !o.cancel_pending && <><button type="button" className="link" onClick={() => cancel(o)}>내 농가 몫 취소</button>{' '}</>}
           {o.status === 'paid' && <button type="button" className="button ghost" onClick={() => advance(o, 'preparing')}>배송 준비 시작</button>}
           {o.status === 'preparing' && (
             <div className="row form">
@@ -171,6 +189,50 @@ function MyOrders({ onMessage, onError }) {
               <button type="button" className="button" onClick={() => advance(o, 'shipping')}>배송 시작</button>
             </div>
           )}
+        </li>
+      ))}
+    </ul>
+    </>
+  )
+}
+
+// 내 농가 반품 신청: 손님 사유를 보고 의견을 남긴다. 승인·거절·환불은 회사 관리자가 한다
+const REASONS = { change_mind: '단순 변심', defect: '상품 하자·표시와 다름', wrong_item: '오배송' }
+function MyReturns({ onMessage, onError }) {
+  const [list, setList] = useState(null)
+  const [notes, setNotes] = useState({})
+  const load = () => sellerApi('/returns').then(setList).catch((e) => onError(e.message))
+  useEffect(() => {
+    sellerApi('/returns').then(setList).catch((e) => onError(e.message))
+  }, [onError])
+
+  async function save(r) {
+    try {
+      await sellerApi(`/returns/${r.id}`, { method: 'PATCH', body: { note: notes[r.id] ?? r.seller_note ?? '' } })
+      onMessage(`반품 #${r.id}에 의견을 남겼어요`)
+      load()
+    } catch (e) {
+      onError(e.message)
+    }
+  }
+
+  if (!list) return <p className="muted">불러오는 중…</p>
+  if (!list.length) return <p className="muted">내 농가 상품 반품 신청이 없어요.</p>
+  return (
+    <>
+    <p className="muted">반품 승인·환불은 회사 관리자가 해요. 상품 상태나 돌려받은 결과를 의견으로 남겨 주세요.</p>
+    <ul className="inbox">
+      {list.map((r) => (
+        <li key={r.id} className={`box${['rejected', 'refunded'].includes(r.status) ? ' dim' : ''}`}>
+          <p><b>#{r.id}</b> · {r.order_no} · {RETURN_STATUS[r.status]} · 신청 {when(r.created_at)} · 받은 날 {when(r.delivered_at)}</p>
+          <p>{REASONS[r.reason_type]} · {r.reason}</p>
+          <ul>{r.items.map((i) => <li key={`${i.name}:${i.option_name ?? ''}`}>{i.name} ({i.option_name ?? i.unit}) × {i.quantity}</li>)}</ul>
+          {r.admin_note && <p className="muted">회사 메모: {r.admin_note}</p>}
+          {r.status === 'refunded' && <p className="muted">{won(r.refund_amount)} 환불 ({when(r.refunded_at)})</p>}
+          <div className="row form">
+            <label>내 의견<input value={notes[r.id] ?? r.seller_note ?? ''} onChange={(e) => setNotes((n) => ({ ...n, [r.id]: e.target.value }))} maxLength={500} /></label>
+            <button type="button" className="button ghost" onClick={() => save(r)}>의견 저장</button>
+          </div>
         </li>
       ))}
     </ul>
@@ -264,6 +326,7 @@ export default function Seller() {
           <button type="button" className={tab === 'products' ? 'on' : ''} onClick={() => go('products')}>내 상품</button>
           <button type="button" className={tab === 'questions' ? 'on' : ''} onClick={() => go('questions')}>상품 문의</button>
           <button type="button" className={tab === 'orders' ? 'on' : ''} onClick={() => go('orders')}>주문</button>
+          <button type="button" className={tab === 'returns' ? 'on' : ''} onClick={() => go('returns')}>반품</button>
           <button type="button" className={tab === 'profile' ? 'on' : ''} onClick={() => go('profile')}>농가 소개</button>
         </nav>
         <span className="muted">{me.seller.name} · {me.loginId}</span>
@@ -275,6 +338,7 @@ export default function Seller() {
       {tab === 'products' && <MyProducts onMessage={setMessage} onError={setError} />}
       {tab === 'questions' && <MyQuestions onMessage={setMessage} onError={setError} />}
       {tab === 'orders' && <MyOrders onMessage={setMessage} onError={setError} />}
+      {tab === 'returns' && <MyReturns onMessage={setMessage} onError={setError} />}
       {tab === 'profile' && (
         <Profile
           seller={me.seller}

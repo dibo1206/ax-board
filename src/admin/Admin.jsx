@@ -10,6 +10,7 @@ import { Dashboard } from './Dashboard.jsx'
 import { Notifications } from './Notifications.jsx'
 import { AdminReviews } from './Reviews.jsx'
 import { Orders } from './Orders.jsx'
+import { Returns } from './Returns.jsx'
 import { ProductForm } from './ProductForm.jsx'
 
 // 관리자 화면: 로그인 → [상품 관리 | 문의함 | 상담 기록]. 모든 요청은 /api/admin (로그인 쿠키 필요)
@@ -168,6 +169,7 @@ function Admin() {
             문의함{waiting > 0 && ` (${waiting})`}
           </button>
           <button type="button" className={tab === 'orders' ? 'on' : ''} onClick={() => { setTab('orders'); setEditing(null); setMessage('') }}>주문{newOrders > 0 && ` (${newOrders})`}</button>
+          <button type="button" className={tab === 'returns' ? 'on' : ''} onClick={() => { setTab('returns'); setEditing(null); setMessage('') }}>반품{counts?.returns_requested > 0 && ` (${counts.returns_requested})`}</button>
           <button type="button" className={tab === 'reviews' ? 'on' : ''} onClick={() => { setTab('reviews'); setEditing(null); setMessage('') }}>후기</button>
           <button type="button" className={tab === 'chat' ? 'on' : ''} onClick={() => { setTab('chat'); setEditing(null); setMessage('') }}>상담 기록</button>
           <button type="button" className={tab === 'banned' ? 'on' : ''} onClick={() => { setTab('banned'); setEditing(null); setMessage('') }}>금지어</button>
@@ -188,6 +190,8 @@ function Admin() {
         <Inbox onCount={setCounts} />
       ) : tab === 'orders' ? (
         <Orders onCount={setCounts} />
+      ) : tab === 'returns' ? (
+        <Returns />
       ) : tab === 'reviews' ? (
         <AdminReviews />
       ) : tab === 'mail' ? (

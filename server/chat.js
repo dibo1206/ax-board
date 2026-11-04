@@ -17,7 +17,7 @@ import { pool } from './db.js'
 import { createLimiter } from './limit.js'
 import { maskPersonal } from './privacy.js'
 import { describeRecommendation, loadActive, readWish, recommend } from './recommend.js'
-import { SHIPPING, SHOP } from './policy.js'
+import { RETURNS, SHIPPING, SHOP } from './policy.js'
 import { mostSimilar, similarity } from './similar.js'
 import { findBanned } from './banned.js'
 import { publicItem } from './items.js'
@@ -54,8 +54,10 @@ const ROUTES = [
   {
     kind: 'refund',
     re: /환불|교환|반품|파손|불량|배송.{0,8}(안\s?와|안\s?오|늦|누락|잘못)|(받|온|왔|도착).{0,12}(상했|썩|깨졌|터졌|곰팡이|물러|멍)|(멍들|썩|상해|깨져|터져|곰팡이).{0,8}(왔|왓|도착)|(멍들|썩은|상한|깨진).{0,12}사진/,
+    // 반품 신청 위치만 안내한다. 신청해도 환불 여부는 담당자가 정한다 (환불을 약속하지 않는다). 기간은 교환·환불 정책과 같은 값
     answer: () => '불편을 드려 죄송해요. 환불·교환 여부는 제가 결정할 수 없어서 담당자에게 넘길게요. '
-      + '받은 날부터 7일 안에 주문번호와 상품 상태(사진)를 고객센터나 상품 Q&A로 알려 주시면 담당자가 확인 후 안내해 드려요. '
+      + `배송 완료된 상품은 [주문 조회](비회원) 또는 마이페이지 주문 내역에서 농가별로 [반품 신청]을 눌러 사유를 남겨 주세요 (단순 변심은 받은 날부터 ${RETURNS.changeMindDays}일, 상품 하자·오배송은 ${RETURNS.defectMonths}개월 안). `
+      + '신청하면 담당자가 확인 후 결과를 알려 드려요. 상품 사진은 고객센터나 상품 Q&A로 주문번호와 함께 보내 주세요. '
       + '자세한 기준은 화면 아래 [교환·환불 정책]에 있어요. 배송 준비 전이면 [주문 조회]에서 바로 취소할 수도 있어요.',
     handoff: true,
     action: 'qna',

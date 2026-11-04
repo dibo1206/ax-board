@@ -89,6 +89,7 @@ export function Dashboard({ onGo }) {
   const tasks = [
     ['orders', '배송 준비할 주문', todo.to_prepare], ['orders', '송장 넣을 주문', todo.to_ship], ['inbox', '답변 기다리는 문의', todo.unanswered],
     ['inbox', '새 기업 문의', todo.new_b2b], ['products', '검토 대기 상품', todo.pending_products], ['reviews', '답글 안 단 후기', todo.reviews_to_reply],
+    ['returns', '확인할 반품 신청', todo.returns_requested], ['returns', '환불 기다리는 반품', todo.returns_to_refund],
   ].filter(([, , n]) => n > 0)
 
   return (
@@ -99,12 +100,12 @@ export function Dashboard({ onGo }) {
       </div>
       <div className="tiles">
         <div className="tile"><span className="muted">오늘 매출</span><b>{won(summary.today_sales)}</b><span className="muted">주문 {summary.today_orders}건</span></div>
-        <div className="tile"><span className="muted">이번 달 매출</span><b>{won(summary.month_sales)}</b><span className="muted">주문 {summary.month_orders}건</span></div>
+        <div className="tile"><span className="muted">이번 달 매출</span><b>{won(summary.month_sales)}</b><span className="muted">주문 {summary.month_orders}건{summary.month_refunded > 0 && ` · 취소·환불 ${won(summary.month_refunded)} 뺌`}</span></div>
         <div className="tile"><span className="muted">최근 {days}일 매출</span><b>{won(periodSales)}</b><span className="muted">취소 {todo.cancelled}건</span></div>
       </div>
 
       <div className="box">
-        <h3>날짜별 매출 <span className="muted">최근 {days}일 · 결제 완료 기준</span></h3>
+        <h3>날짜별 매출 <span className="muted">최근 {days}일 · 결제 완료 기준 · 농가별 취소·반품 환불은 결제한 날에서 뺌</span></h3>
         {periodSales === 0 ? <p className="muted">이 기간에 결제된 주문이 없어요.</p> : <SalesChart series={series} />}
         <details>
           <summary>표로 보기</summary>

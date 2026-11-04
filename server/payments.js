@@ -123,3 +123,27 @@ export async function cancelPayment({ paymentKey, orderId, reason }) {
     throw error
   }
 }
+
+// 부분 취소 (아직 안 보낸 농가 몫, 반품 환불, 부분 취소 뒤 남은 금액 전체 취소): amount 만큼만 돌려준다.
+// idempotencyKey 는 부르는 쪽이 환불 기록마다 정해 둔 값 → 같은 기록으로 몇 번을 다시 보내도 토스는 한 번만 취소하고 첫 응답을 돌려준다.
+// 통신이 끊기면 결제 조회로 확인한다: 토스에서 취소된 누적 금액이 canceledBefore(우리 기록상 이미 돌려준 돈) + amount 와 같으면 성공.
+// 그래도 모르면 uncertain 오류를 그대로 던진다 → 부르는 쪽은 실패로 처리하지 말고 '결과 확인 중'으로 두고 같은 키로 다시 확인한다
+export async function cancelPartial({ paymentKey, orderId, amount, reason, idempotencyKey, canceledBefore }) {
+  const mode = paymentMode()
+  if (mode === 'mock' || paymentKey?.startsWith('mock_')) return { canceledAt: new Date().toISOString() }
+  if (mode === 'off') throw Object.assign(new Error('결제 설정이 아직 안 됐어요.'), { code: 'NOT_CONFIGURED' })
+  try {
+    const data = await request('POST', `/${encodeURIComponent(paymentKey)}/cancel`, { cancelReason: reason.slice(0, 200), cancelAmount: amount }, idempotencyKey)
+    if (Number.isInteger(data.balanceAmount) && data.totalAmount - data.balanceAmount !== canceledBefore + amount) {
+      console.warn(`[pay] ${orderId} 토스 누적 취소액이 우리 기록과 달라요 — 직접 확인 필요 (토스 ${data.totalAmount - data.balanceAmount} / 우리 ${canceledBefore + amount})`)
+    }
+    return { canceledAt: data.cancels?.at(-1)?.canceledAt ?? new Date().toISOString() }
+  } catch (error) {
+    if (!error.uncertain) throw error
+    const found = await lookupPayment(orderId).catch(() => null)
+    if (found && Number.isInteger(found.balanceAmount) && found.totalAmount - found.balanceAmount === canceledBefore + amount) {
+      return { canceledAt: found.cancels?.at(-1)?.canceledAt ?? new Date().toISOString() }
+    }
+    throw error
+  }
+}

@@ -417,3 +417,57 @@ CREATE TABLE IF NOT EXISTS product_options (
 ALTER TABLE order_items ADD COLUMN IF NOT EXISTS option_id INT REFERENCES product_options(id);
 ALTER TABLE order_items ADD COLUMN IF NOT EXISTS option_name TEXT;
 CREATE INDEX IF NOT EXISTS order_items_option_idx ON order_items (option_id) WHERE option_id IS NOT NULL;
+
+-- 농가별 부분 취소와 반품 (2026-11-04)
+-- 반품 신청: 배송 완료된 농가 배송 한 건에 손님이 사유와 함께 신청한다. 신청(requested) → 승인(approved) → 환불 완료(refunded), 또는 거절(rejected)
+-- 신청만으로는 돈이 나가지 않는다. 관리자가 승인하고 환불 금액을 확인한 뒤 눌러야 토스 취소가 실행된다 (판매자는 의견만 남긴다)
+-- items: 돌려보낼 주문 줄 [{ item_id, name, option_name, unit, price, quantity }] (주문 당시 값 그대로). reason 은 손님이 쓴 글이라 암호화해서 저장 (server/pii.js)
+CREATE TABLE IF NOT EXISTS order_returns (
+  id SERIAL PRIMARY KEY,
+  order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  seller_code TEXT NOT NULL REFERENCES sellers(seller_code),
+  status TEXT NOT NULL DEFAULT 'requested' CHECK (status IN ('requested', 'approved', 'rejected', 'refunded')),
+  reason_type TEXT NOT NULL CHECK (reason_type IN ('change_mind', 'defect', 'wrong_item')),
+  reason TEXT NOT NULL,
+  items JSONB NOT NULL DEFAULT '[]',
+  requested_by TEXT NOT NULL,
+  seller_note TEXT,
+  seller_noted_by TEXT,
+  seller_noted_at TIMESTAMPTZ,
+  admin_note TEXT, -- 승인 메모·거절 사유 (손님에게 보인다)
+  decided_by TEXT,
+  decided_at TIMESTAMPTZ,
+  refund_amount INT,
+  refunded_by TEXT,
+  refunded_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- 한 농가 배송에 진행 중인 반품은 하나만 (같은 신청을 두 번 보내도 하나만 생긴다)
+CREATE UNIQUE INDEX IF NOT EXISTS order_returns_open_key ON order_returns (order_id, seller_code) WHERE status IN ('requested', 'approved');
+CREATE INDEX IF NOT EXISTS order_returns_status_idx ON order_returns (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS order_returns_seller_idx ON order_returns (seller_code, created_at DESC);
+
+-- 돌려준 돈 기록: 토스 결제 취소 한 번이 한 줄 (누가 언제 얼마를). 매출·정산은 결제 금액에서 이 금액을 뺀다
+-- kind: cancel(아직 안 보낸 농가 몫 부분 취소) · return(반품 환불) · full(주문 전체 취소)
+-- status: requested(토스에 보냈고 결과를 아직 모름 — 같은 멱등키로 다시 확인) → done / failed(확실히 실패, 돈이 나가지 않음)
+-- 같은 대상(농가 배송·반품 신청)에는 끝났거나 결과를 기다리는 기록이 하나만 있을 수 있다 → 같은 요청이 두 번 와도 돈은 한 번만 나간다
+CREATE TABLE IF NOT EXISTS order_refunds (
+  id SERIAL PRIMARY KEY,
+  order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  seller_code TEXT REFERENCES sellers(seller_code),
+  return_id INT REFERENCES order_returns(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('cancel', 'return', 'full')),
+  amount INT NOT NULL CHECK (amount > 0),
+  status TEXT NOT NULL DEFAULT 'requested' CHECK (status IN ('requested', 'done', 'failed')),
+  idempotency_key TEXT UNIQUE NOT NULL,
+  reason TEXT,
+  processed_by TEXT NOT NULL,
+  fail_reason TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  done_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS order_refunds_order_idx ON order_refunds (order_id);
+CREATE UNIQUE INDEX IF NOT EXISTS order_refunds_cancel_key ON order_refunds (order_id, seller_code) WHERE kind = 'cancel' AND status IN ('requested', 'done');
+CREATE UNIQUE INDEX IF NOT EXISTS order_refunds_return_key ON order_refunds (return_id) WHERE kind = 'return' AND status IN ('requested', 'done');
+CREATE UNIQUE INDEX IF NOT EXISTS order_refunds_full_key ON order_refunds (order_id) WHERE kind = 'full' AND status IN ('requested', 'done');

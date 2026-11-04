@@ -108,7 +108,8 @@ adminInquiryRouter.get('/summary', async (req, res) => {
     (SELECT count(*) FROM items WHERE status = 'pending')::int AS pending_items,
     (SELECT count(*) FROM sellers WHERE status = 'pending')::int AS pending_sellers,
     (SELECT count(*) FROM products WHERE auto_approved_at IS NOT NULL AND auto_checked_at IS NULL AND status = 'active')::int AS auto_unchecked,
-    (SELECT count(*) FROM orders WHERE status = 'paid')::int AS new_orders`)
+    (SELECT count(*) FROM orders WHERE status = 'paid')::int AS new_orders,
+    (SELECT count(*) FROM order_returns WHERE status = 'requested')::int AS returns_requested`)
   res.json(rows[0])
 })
 

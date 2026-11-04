@@ -26,6 +26,7 @@ import { buildNotice } from './notice.js'
 import { ACTIVE_OPTIONS_SQL } from './options.js'
 import { adminOrderRouter, memberOrderRouter, publicOrderRouter, sellerOrderRouter, startOrderSweeper } from './orders.js'
 import { recommendRouter } from './recommend.js'
+import { adminReturnRouter, memberReturnRouter, publicReturnRouter, sellerReturnRouter } from './returns.js'
 import { adminReviewRouter, reviewRouter } from './reviews.js'
 import { sellerRouter } from './seller.js'
 import { adminSellerRouter, sellerSignupRouter } from './sellers.js'
@@ -267,6 +268,7 @@ app.get('/api/admin/me', async (req, res) => {
 app.use('/api/admin/inquiries', adminInquiryRouter)
 app.use('/api/admin/chat-logs', adminChatRouter)
 app.use('/api/admin/orders', adminOrderRouter)
+app.use('/api/admin/returns', adminReturnRouter)
 app.use('/api/admin/access-logs', adminAccessLogRouter)
 app.use('/api/admin/reviews', adminReviewRouter)
 app.use('/api/admin/dashboard', dashboardRouter)
@@ -276,13 +278,16 @@ app.use('/api/seller-signup', sellerSignupRouter)
 app.get('/api/admin/notifications', requireAdmin, async (req, res) => res.json(await listMails()))
 app.use('/api/admin', adminRouter)
 app.use('/api/seller/orders', sellerOrderRouter)
+app.use('/api/seller/returns', sellerReturnRouter)
 app.use('/api/seller', sellerRouter)
 app.use('/api', publicInquiryRouter)
 app.use('/api', chatRouter)
 app.use('/api', recommendRouter)
 app.use('/api', publicOrderRouter)
+app.use('/api', publicReturnRouter)
 app.use('/api', reviewRouter)
 app.use('/api', shopGroupRouter)
+app.use('/api/account/orders', memberReturnRouter)
 app.use('/api/account/orders', memberOrderRouter)
 app.use('/api/account', accountRouter)
 // 올린 사진은 그림으로만 쓰이게: 사진 주소를 직접 열어도 스크립트가 돌지 않는다

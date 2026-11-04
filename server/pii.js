@@ -12,6 +12,7 @@ const TABLES = {
   questions: { key: 'id', columns: ['contact'] },
   reviews: { key: 'id', columns: ['author'] },
   email_outbox: { key: 'id', columns: ['to_email', 'body'] },
+  order_returns: { key: 'id', columns: ['reason'] }, // 반품 사유 (손님이 쓴 글이라 연락처·주소가 들어갈 수 있다)
 }
 
 const openRow = (row, table) => {
@@ -27,6 +28,7 @@ export const openB2b = (row) => openRow(row, 'b2b_inquiries')
 export const openQuestion = (row) => openRow(row, 'questions')
 export const openReview = (row) => openRow(row, 'reviews')
 export const openMail = (row) => openRow(row, 'email_outbox')
+export const openReturn = (row) => openRow(row, 'order_returns')
 
 // 서버를 켤 때: 암호화 전에 저장된 값을 암호화한다. 이미 암호문인 값은 건너뛰어서 몇 번을 돌려도 같다
 export async function encryptExisting() {
