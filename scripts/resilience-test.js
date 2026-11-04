@@ -149,7 +149,7 @@ try {
   r = await confirm(child, o, 'err500_')
   const waited = r.status === 202 && r.data?.pending && (await orderRow(o.orderNo)).status === 'pending'
   await db.query("UPDATE orders SET created_at = now() - interval '31 minutes' WHERE order_no = $1", [o.orderNo])
-  await newOrder(child, 'apple_gift_5kg') // 주문을 만들 때 오래된 결제 전 주문을 정리한다
+  await newOrder(child, 'apple_10kg') // 주문을 만들 때 오래된 결제 전 주문을 정리한다
   check('결제사 오류(결과 모름) → 기다렸다가 30분 정리 때 만료·재고 복구', waited && (await orderRow(o.orderNo)).status === 'expired' && (await stock('carrot_3kg')) === s0,
     `처음 응답 ${r.status}`)
 
@@ -167,7 +167,7 @@ try {
   o = await newOrder(child)
   done(o.orderNo, `crash_${o.orderNo}`, o.amount)
   await db.query("UPDATE orders SET created_at = now() - interval '31 minutes' WHERE order_no = $1", [o.orderNo])
-  await newOrder(child, 'apple_gift_5kg')
+  await newOrder(child, 'apple_10kg')
   check('승인 후 서버가 죽음 → 정리 때 만료 대신 결제 완료로 복구', (await orderRow(o.orderNo)).status === 'paid')
 
   // 8. DB 연결이 갑자기 끊김 → 서버는 살아 있고 다음 요청은 새 연결로 처리

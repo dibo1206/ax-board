@@ -151,7 +151,7 @@ const harvestDays = (date) => (date ? Math.max(1, Math.floor((Date.parse(koreaTo
 const publicProduct = ({ review_note: _n, review_reason: _r, rejected_at: _x, admin_approved_at: _a, auto_approved_at: _o, auto_checked_at: _c, ...p }) => ({
   ...p,
   brix_grade: GRADE_LABEL[p.brix_rank] ?? null,
-  harvest_days: harvestDays(p.harvest_date),
+  harvest_days: p.category === '가공품' ? null : harvestDays(p.harvest_date),
 })
 
 app.get('/api/products', async (req, res) => {
