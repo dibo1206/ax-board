@@ -145,4 +145,10 @@ export const ORDER_STATUS = {
   expired: '시간 초과',
 }
 
+// 반품 신청 상태와 돌려준 돈 종류 (server/returns.js, server/orders.js)
+export const RETURN_STATUS = { requested: '반품 신청됨', approved: '반품 승인', rejected: '반품 거절', refunded: '반품 환불 완료' }
+export const REFUND_KIND = { cancel: '농가별 취소', return: '반품 환불', full: '주문 취소' }
+// 오늘 한국 날짜 'YYYY-MM-DD' (반품 신청 마감일과 비교. 실제 기간 검사는 서버가 한다)
+export const todayKst = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
+
 export const when = (t) => (t ? new Date(t).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '')

@@ -1,11 +1,122 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ReviewForm } from './Reviews.jsx'
-import { getPolicy, ORDER_STATUS, post, readCart, takePending, when, won, writeCart } from './shared.js'
+import { getPolicy, ORDER_STATUS, post, readCart, REFUND_KIND, RETURN_STATUS, takePending, todayKst, when, won, writeCart } from './shared.js'
 
 // 주문 결과(성공·실패) · 비회원 주문 조회 · 약관 페이지
 // phone: 비회원 후기 쓰기에 쓰는 주문자 휴대폰 (회원은 로그인으로 확인)
+// 반품 신청: 배송 완료된 농가 배송 하나에 사유와 돌려보낼 상품을 고른다. 기간·배송비 기준은 서버의 교환·환불 정책 값(/api/policy 의 returns)
+// 신청만으로 환불되지 않고 담당자가 확인해 승인한 뒤 환불한다
+function ReturnForm({ order, shipment, onSubmit, onClose }) {
+  const [policy, setPolicy] = useState(null)
+  const [reasonType, setReasonType] = useState('')
+  const [reason, setReason] = useState('')
+  const [picked, setPicked] = useState({}) // 주문 상품 순서 → 수량 (0이면 빼기)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    getPolicy().then(setPolicy).catch(() => setPolicy(null))
+  }, [])
+  const today = todayKst()
+  const canChangeMind = shipment.return_until_change_mind && today <= shipment.return_until_change_mind
+  const lines = order.items.map((item, line) => ({ item, line })).filter(({ item }) => item.seller_code === shipment.seller_code)
+  const quantity = (line, item) => picked[line] ?? item.quantity
+  const fee = policy?.shipping.fee
+
+  async function submit(event) {
+    event.preventDefault()
+    setError('')
+    const chosen = lines.filter(({ line, item }) => quantity(line, item) > 0).map(({ line, item }) => ({ line, quantity: quantity(line, item) }))
+    if (!reasonType) return setError('반품 사유 종류를 골라 주세요.')
+    if (!chosen.length) return setError('돌려보낼 상품을 골라 주세요.')
+    setBusy(true)
+    try {
+      await onSubmit({ sellerCode: shipment.seller_code, reasonType, reason, lines: chosen })
+      onClose()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form className="box form" onSubmit={submit}>
+      <h4>{shipment.seller_name} 상품 반품 신청</h4>
+      <fieldset>
+        <legend>사유 종류</legend>
+        {Object.entries(policy?.returns.reasons ?? {}).map(([key, label]) => (
+          <label key={key} className="check">
+            <input type="radio" name="reasonType" value={key} checked={reasonType === key} disabled={key === 'change_mind' && !canChangeMind} onChange={() => setReasonType(key)} />
+            {label}
+            <span className="muted"> · {key === 'change_mind'
+              ? `받은 날부터 ${policy.returns.changeMindDays}일 안 (${shipment.return_until_change_mind}까지)${canChangeMind ? '' : ' — 기간이 지났어요'}`
+              : `받은 날부터 ${policy.returns.defectMonths}개월 안 (${shipment.return_until_defect}까지)`}</span>
+          </label>
+        ))}
+      </fieldset>
+      {reasonType === 'change_mind' && fee && (
+        <p className="warn">단순 변심이면 왕복 배송비를 손님이 부담해요: 돌려보내는 배송비 {won(fee)}을 빼고{shipment.shipping_fee === 0 ? `, 처음 무료로 보낸 배송비 ${won(fee)}도 빼요` : ', 처음 낸 배송비는 돌려드리지 않아요'}. 신선식품은 단순 변심 반품이 제한될 수 있어요.</p>
+      )}
+      {reasonType && reasonType !== 'change_mind' && <p className="muted">상품 하자·오배송이면 배송비는 판매자가 부담해요. 받은 상품 사진을 고객센터로 주문번호와 함께 보내 주세요.</p>}
+      <ul className="order-items">
+        {lines.map(({ item, line }) => (
+          <li key={line}>
+            <label className="check">
+              {item.name} ({item.option_name ?? item.unit})
+              <select value={quantity(line, item)} onChange={(e) => setPicked((p) => ({ ...p, [line]: Number(e.target.value) }))}>
+                {Array.from({ length: item.quantity + 1 }, (_, n) => <option key={n} value={n}>{n === 0 ? '빼기' : `${n}개`}</option>)}
+              </select>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <label>사유 (5~500자)<textarea value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} rows={3} placeholder="어떤 문제가 있었는지 적어 주세요. 주민등록번호·카드번호는 쓰지 마세요." /></label>
+      <p className="muted">신청만으로 환불되지는 않아요. 담당자가 확인해 승인한 뒤 돌려받은 상품을 보고 환불해요.</p>
+      {error && <p className="error">{error}</p>}
+      <div className="actions">
+        <button type="submit" className="button" disabled={busy}>반품 신청하기</button>
+        <button type="button" className="button ghost" onClick={onClose}>닫기</button>
+      </div>
+    </form>
+  )
+}
+
+// 농가별 반품 신청 상태와 [반품 신청] 버튼 (배송 완료된 농가 배송만)
+function ReturnSection({ order, onReturn }) {
+  const [open, setOpen] = useState(null)
+  const today = todayKst()
+  const delivered = (order.shipments ?? []).filter((s) => s.status === 'delivered')
+  const returns = order.returns ?? []
+  if (!delivered.length && !returns.length) return null
+  return (
+    <div className="returns">
+      <h4>반품</h4>
+      <ul className="farm-shipments">
+        {returns.map((r, index) => (
+          <li key={index}>
+            <b>{r.seller_name}</b> · {RETURN_STATUS[r.status]} · {when(r.created_at)}
+            <br /><span className="muted">{r.items.map((i) => `${i.name} × ${i.quantity}`).join(', ')} · {r.reason}</span>
+            {r.status === 'rejected' && r.admin_note && <><br /><span className="warn">거절 사유: {r.admin_note}</span></>}
+            {r.status === 'approved' && <><br /><span className="muted">승인됐어요. 돌려받은 상품을 확인한 뒤 환불해요.{r.admin_note && ` 안내: ${r.admin_note}`}</span></>}
+            {r.status === 'refunded' && <><br /><span className="success">{won(r.refund_amount)} 환불했어요 ({when(r.refunded_at)})</span></>}
+          </li>
+        ))}
+      </ul>
+      {onReturn && delivered.map((s) => {
+        const busy = returns.some((r) => r.seller_code === s.seller_code && ['requested', 'approved'].includes(r.status))
+        const inTime = s.return_until_defect && today <= s.return_until_defect
+        if (busy || !inTime) return null
+        return open === s.seller_code
+          ? <ReturnForm key={s.seller_code} order={order} shipment={s} onSubmit={onReturn} onClose={() => setOpen(null)} />
+          : <p key={s.seller_code}><button type="button" className="link" onClick={() => setOpen(s.seller_code)}>{s.seller_name} 상품 반품 신청</button></p>
+      })}
+    </div>
+  )
+}
+
 // onConfirm: 배송 완료된 주문의 [구매 확정] (비회원 조회·마이페이지가 각자 주소로 넘겨준다)
-export function OrderDetail({ order, phone = '', onConfirm = null }) {
+// onReturn: 반품 신청 보내기 (비회원 조회·마이페이지가 각자 주소로 넘겨준다. 없으면 반품 신청 버튼을 안 보인다)
+export function OrderDetail({ order, phone = '', onConfirm = null, onReturn = null }) {
   const [writing, setWriting] = useState(null)
   const [written, setWritten] = useState([])
   // 농가마다 따로 오니, 그 상품을 보낸 농가의 배송이 끝났으면 후기를 쓸 수 있다
@@ -35,6 +146,14 @@ export function OrderDetail({ order, phone = '', onConfirm = null }) {
           </dd></>
         ) : order.tracking_no && <><dt>송장</dt><dd>{order.courier} {order.tracking_no} {order.tracking_url && <a href={order.tracking_url} target="_blank" rel="noreferrer">배송 조회</a>}</dd></>}
         {order.cancel_reason && <><dt>취소</dt><dd>{when(order.cancelled_at)} · {order.cancel_reason}</dd></>}
+        {(order.refunds?.length > 0 || order.refund_pending) && (
+          <><dt>돌려받은 금액</dt><dd>
+            <ul className="farm-shipments">
+              {order.refunds.map((r, index) => <li key={index}>{REFUND_KIND[r.kind]}{r.seller_name && ` (${r.seller_name})`} · {won(r.amount)} · {when(r.done_at)}</li>)}
+              {order.refund_pending && <li className="muted">결제 취소를 확인하고 있어요</li>}
+            </ul>
+          </dd></>
+        )}
         {order.status === 'delivered' && (
           <><dt>구매 확정</dt><dd>{order.confirmed_at
             ? `${when(order.confirmed_at)} 확정했어요`
@@ -52,8 +171,10 @@ export function OrderDetail({ order, phone = '', onConfirm = null }) {
             )}
           </li>
         ))}
-        <li className="muted">상품 {won(order.items_amount)} + 배송비 {won(order.shipping_fee)}{order.shipments?.length > 1 && ` (농가 ${order.shipments.length}곳)`} = <b>{won(order.total_amount)}</b></li>
+        <li className="muted">상품 {won(order.items_amount)} + 배송비 {won(order.shipping_fee)}{order.shipments?.length > 1 && ` (농가 ${order.shipments.length}곳)`} = <b>{won(order.total_amount)}</b>
+          {order.refunded_amount > 0 && <> · 돌려받은 금액 {won(order.refunded_amount)}</>}</li>
       </ul>
+      <ReturnSection order={order} onReturn={onReturn} />
     </>
   )
 }
@@ -215,7 +336,8 @@ export function OrderLookup() {
       {error && <p className="error">{error}</p>}
       {order && (
         <div className="box">
-          <OrderDetail order={order} phone={phone} onConfirm={confirmPurchase} />
+          <OrderDetail order={order} phone={phone} onConfirm={confirmPurchase}
+            onReturn={async (body) => setOrder(await post('/orders/lookup/returns', { orderNo: order.order_no, phone, ...body }))} />
           {order.status === 'paid' && (
             <div className="actions">
               <button type="button" className="button ghost" onClick={cancel} disabled={busy}>주문 취소하기</button>

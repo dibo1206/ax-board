@@ -237,7 +237,7 @@ function MyOrders() {
           } catch (e) {
             setError(e.message)
           }
-        }} />
+        }} onReturn={async (body) => setOpen(await post(`/account/orders/${open.order_no}/returns`, body))} />
         {open.status === 'paid' && <button type="button" className="button ghost" onClick={cancel}>주문 취소하기</button>}
       </div>
     )

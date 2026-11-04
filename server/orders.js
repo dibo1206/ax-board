@@ -10,11 +10,11 @@ import { COURIERS, trackingUrl } from './couriers.js'
 import { pool } from './db.js'
 import { lookupHash, sealText } from './crypto.js'
 import { createLimiter } from './limit.js'
-import { cancelPayment, checkApproved, clientKey, confirmPayment, isTestPayment, lookupPayment, orderingOpen, paymentMode } from './payments.js'
-import { POLICIES, SHIPPING, SHOP, shippingFee } from './policy.js'
+import { cancelPartial, cancelPayment, checkApproved, clientKey, confirmPayment, isTestPayment, lookupPayment, orderingOpen, paymentMode } from './payments.js'
+import { POLICIES, RETURNS, SHIPPING, SHOP, shippingFee } from './policy.js'
 import { adminEmail, publicUrl, queueMail, retryMails } from './mailer.js'
 import { lockProducts, syncOptionTotals } from './options.js'
-import { openOrder } from './pii.js'
+import { openOrder, openReturn } from './pii.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
 
 const PENDING_MINUTES = 15
@@ -38,19 +38,22 @@ function newOrderNo() {
 
 // 옵션을 고른 주문 줄은 그 옵션 재고를, 아니면 상품 재고를 돌려놓는다. 상품 줄을 먼저 잠그고(주문 만들 때와 같은 순서)
 // 옵션 재고를 돌려놓은 뒤 옵션 상품의 가격·재고 합을 다시 맞춘다 (server/options.js)
-async function restoreStock(client, orderId) {
-  const { rows } = await client.query('SELECT DISTINCT product_code FROM order_items WHERE order_id = $1', [orderId])
+// sellerCode 를 주면 그 농가 상품만 (농가별 부분 취소). 이미 취소한 농가 배송의 상품은 다시 돌려놓지 않는다
+const RESTORE_LINES = `oi.order_id = $1 AND ($2::text IS NULL OR oi.seller_code = $2)
+  AND NOT EXISTS (SELECT 1 FROM order_shipments sh WHERE sh.order_id = oi.order_id AND sh.seller_code = oi.seller_code AND sh.status = 'cancelled')`
+async function restoreStock(client, orderId, sellerCode = null) {
+  const { rows } = await client.query(`SELECT DISTINCT oi.product_code FROM order_items oi WHERE ${RESTORE_LINES}`, [orderId, sellerCode])
   const codes = rows.map((r) => r.product_code)
   await lockProducts(client, codes)
   await client.query(
     `UPDATE products p SET stock = p.stock + oi.quantity, updated_at = now()
-     FROM order_items oi WHERE oi.order_id = $1 AND p.product_code = oi.product_code AND oi.option_id IS NULL`,
-    [orderId],
+     FROM order_items oi WHERE ${RESTORE_LINES} AND p.product_code = oi.product_code AND oi.option_id IS NULL`,
+    [orderId, sellerCode],
   )
   await client.query(
     `UPDATE product_options o SET stock = o.stock + oi.quantity, updated_at = now()
-     FROM order_items oi WHERE oi.order_id = $1 AND o.id = oi.option_id`,
-    [orderId],
+     FROM order_items oi WHERE ${RESTORE_LINES} AND o.id = oi.option_id`,
+    [orderId, sellerCode],
   )
   await syncOptionTotals(client, codes)
 }
@@ -96,7 +99,7 @@ async function syncOrderStatus(client, orderId) {
   return status
 }
 
-async function inTransaction(work) {
+export async function inTransaction(work) {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
@@ -198,7 +201,7 @@ export function startOrderSweeper() {
   }, 5 * 60_000).unref()
 }
 
-async function loadOrder(orderNo, client = pool) {
+export async function loadOrder(orderNo, client = pool) {
   const { rows } = await client.query('SELECT * FROM orders WHERE order_no = $1', [orderNo])
   if (!rows.length) return null
   const items = await client.query(
@@ -208,22 +211,46 @@ async function loadOrder(orderNo, client = pool) {
     [rows[0].id],
   )
   await ensureShipments(rows[0].id, client)
+  // 반품 신청 마감일 (받은 날 = 배송 완료로 바뀐 한국 날짜, server/policy.js 의 RETURNS)
   const shipments = await client.query(
-    `SELECT sh.seller_code, s.name AS seller_name, sh.items_amount, sh.shipping_fee, sh.status, sh.courier, sh.tracking_no, sh.shipped_at, sh.delivered_at
+    `SELECT sh.seller_code, s.name AS seller_name, sh.items_amount, sh.shipping_fee, sh.status, sh.courier, sh.tracking_no, sh.shipped_at, sh.delivered_at,
+            to_char((sh.delivered_at AT TIME ZONE 'Asia/Seoul')::date + $2::int, 'YYYY-MM-DD') AS return_until_change_mind,
+            to_char((sh.delivered_at AT TIME ZONE 'Asia/Seoul')::date + make_interval(months => $3::int), 'YYYY-MM-DD') AS return_until_defect
      FROM order_shipments sh JOIN sellers s ON s.seller_code = sh.seller_code WHERE sh.order_id = $1 ORDER BY sh.id`,
-    [rows[0].id],
+    [rows[0].id, RETURNS.changeMindDays, RETURNS.defectMonths],
   )
-  return { ...openOrder(rows[0]), items: items.rows, shipments: shipments.rows }
+  const refunds = await client.query('SELECT * FROM order_refunds WHERE order_id = $1 ORDER BY id', [rows[0].id])
+  const returns = await client.query('SELECT * FROM order_returns WHERE order_id = $1 ORDER BY id', [rows[0].id])
+  return { ...openOrder(rows[0]), items: items.rows, shipments: shipments.rows, refunds: refunds.rows, returns: returns.rows.map(openReturn) }
 }
 
 // 손님에게 보여 줄 주문 (결제 키·내부 번호는 빼고). 농가 이름의 [예시] 표시는 뺀다
-function publicOrder(order) {
-  const { id: _id, payment_key: _key, customer_id: _customer, buyer_phone_hash: _hash, ...rest } = order
+// 돌려준 돈과 반품은 손님이 알아야 할 것만 (처리한 계정·멱등키·판매자 의견·내부 번호는 빼고)
+export function publicOrder(order) {
+  const { id: _id, payment_key: _key, customer_id: _customer, buyer_phone_hash: _hash, refunds = [], returns = [], ...rest } = order
+  const farmName = (code) => order.shipments?.find((s) => s.seller_code === code)?.seller_name.replace(/\[예시\]\s*/g, '') ?? null
+  const done = refunds.filter((r) => r.status === 'done')
   return {
     ...rest,
     tracking_url: trackingUrl(order.courier, order.tracking_no),
-    shipments: (order.shipments ?? []).map((s) => ({ ...s, seller_name: s.seller_name.replace(/\[예시\]\s*/g, ''), tracking_url: trackingUrl(s.courier, s.tracking_no) })),
+    shipments: (order.shipments ?? []).map((s) => ({
+      ...s, seller_name: s.seller_name.replace(/\[예시\]\s*/g, ''), tracking_url: trackingUrl(s.courier, s.tracking_no),
+      cancel_pending: refunds.some((r) => r.kind === 'cancel' && r.seller_code === s.seller_code && r.status === 'requested'),
+    })),
+    refunded_amount: done.reduce((sum, r) => sum + r.amount, 0),
+    refund_pending: refunds.some((r) => r.status === 'requested'),
+    refunds: done.map((r) => ({ kind: r.kind, seller_name: farmName(r.seller_code), amount: r.amount, done_at: r.done_at })),
+    returns: returns.map((r) => ({
+      seller_code: r.seller_code, seller_name: farmName(r.seller_code), status: r.status, reason_type: r.reason_type, reason: r.reason,
+      items: r.items.map(({ item_id: _item, ...i }) => i), admin_note: r.admin_note, refund_amount: r.refund_amount,
+      created_at: r.created_at, decided_at: r.decided_at, refunded_at: r.refunded_at,
+    })),
   }
+}
+
+// 관리자 화면용: 손님 화면 내용 + 돌려준 돈 기록 전부(누가 언제 얼마를, 결과 확인 중·실패 포함)와 반품 신청 번호·판매자 의견
+export function staffOrder(order) {
+  return { ...publicOrder(order), refunds: order.refunds, returns: order.returns }
 }
 
 // ---------- 손님용 ----------
@@ -236,7 +263,7 @@ const tooManyLookups = createLimiter({ limit: 10, windowMs: 10 * 60_000 })
 const tooManyPayments = createLimiter({ limit: 20, windowMs: 10 * 60_000 })
 
 publicOrderRouter.get('/policy', (req, res) => {
-  res.json({ shop: SHOP, shipping: SHIPPING, policies: POLICIES, couriers: COURIERS, payment: { mode: paymentMode(), test: isTestPayment() } })
+  res.json({ shop: SHOP, shipping: SHIPPING, returns: RETURNS, policies: POLICIES, couriers: COURIERS, payment: { mode: paymentMode(), test: isTestPayment() } })
 })
 
 function readOrderInput(body) {
@@ -473,7 +500,7 @@ publicOrderRouter.post('/orders/:orderNo/fail', async (req, res) => {
 })
 
 // 비회원 주문 조회: 주문번호 + 주문자 휴대폰 번호가 둘 다 맞아야 한다
-async function findMyOrder(req) {
+export async function findMyOrder(req) {
   const orderNo = text(req.body.orderNo).toUpperCase()
   const phone = digits(req.body.phone)
   if (!/^FM\d{6}-[A-Z0-9]{10}$/.test(orderNo) || !phone) return null
@@ -494,7 +521,7 @@ publicOrderRouter.post('/orders/lookup/cancel', async (req, res) => {
   if (!order) return res.status(404).json({ error: '주문을 찾지 못했어요.' })
   if (order.status !== 'paid') return res.status(409).json({ error: '배송 준비가 시작된 주문은 고객센터로 취소를 요청해 주세요.' })
   const reason = text(req.body.reason).slice(0, 100) || '손님 요청'
-  const done = await cancelOrder(order.order_no, `손님 취소: ${reason}`, ['paid'])
+  const done = await cancelOrder(order.order_no, `손님 취소: ${reason}`, ['paid'], '손님(비회원 주문 조회)')
   if (done.error) return res.status(done.status).json({ error: done.error })
   res.json(publicOrder(await loadOrder(order.order_no)))
 })
@@ -513,14 +540,14 @@ publicOrderRouter.post('/orders/lookup/purchase-confirm', async (req, res) => {
   await confirmPurchase(order, res)
 })
 
-// 결제 취소 + 재고 복구 (손님·회원·관리자 공통). allowed: 취소할 수 있는 상태
-async function cancelOrder(orderNo, reason, allowed) {
-  const result = await cancelOrderTx(orderNo, reason, allowed)
+// 결제 취소 + 재고 복구 (손님·회원·관리자 공통). allowed: 취소할 수 있는 상태, by: 처리한 사람 (돌려준 돈 기록에만, 손님에게는 안 보임)
+async function cancelOrder(orderNo, reason, allowed, by) {
+  const result = await cancelOrderTx(orderNo, reason, allowed, by)
   if (result.status === 200) notifyOrder(orderNo, 'cancelled')
   return result
 }
 
-function cancelOrderTx(orderNo, reason, allowed) {
+function cancelOrderTx(orderNo, reason, allowed, by) {
   return inTransaction(async (client) => {
     const { rows } = await client.query('SELECT * FROM orders WHERE order_no = $1 FOR UPDATE', [orderNo])
     const order = openOrder(rows[0])
@@ -529,8 +556,18 @@ function cancelOrderTx(orderNo, reason, allowed) {
     await ensureShipments(order.id, client)
     const sent = await client.query("SELECT 1 FROM order_shipments WHERE order_id = $1 AND status IN ('shipping', 'delivered')", [order.id])
     if (sent.rowCount) return { status: 409, error: '이미 보낸 농가 상품이 있어서 전체 취소할 수 없어요. 받은 뒤 반품으로 처리해요.' }
+    // 농가별로 먼저 취소한 몫이 있으면 남은 금액만 취소한다. 결과를 기다리는 취소가 있으면 그것부터 확인
+    const sums = await refundSums(client, order.id)
+    if (sums.pending) return { status: 409, error: '이 주문의 다른 취소·환불 결과를 확인하고 있어요. 그 건을 먼저 다시 확인해 주세요.' }
+    const rest = order.total_amount - sums.done
+    if (rest <= 0) return { status: 409, error: '이미 결제 금액을 모두 돌려드린 주문이에요.' }
+    const key = sums.done ? `cancel-${order.order_no}-rest` : `cancel-${order.order_no}`
     try {
-      await cancelPayment({ paymentKey: order.payment_key, orderId: order.order_no, reason })
+      if (sums.done) {
+        await cancelPartial({ paymentKey: order.payment_key, orderId: order.order_no, amount: rest, reason, idempotencyKey: key, canceledBefore: sums.done })
+      } else {
+        await cancelPayment({ paymentKey: order.payment_key, orderId: order.order_no, reason })
+      }
     } catch (error) {
       console.error(`[order] 결제 취소 실패 ${order.order_no} · ${error.status ?? ''} ${error.code ?? ''}`)
       return { status: 502, error: `결제 취소가 실패했어요. ${error.message}` }
@@ -541,9 +578,127 @@ function cancelOrderTx(orderNo, reason, allowed) {
       [order.id, reason.slice(0, 200)],
     )
     await client.query("UPDATE order_shipments SET status = 'cancelled', updated_at = now() WHERE order_id = $1", [order.id])
+    await client.query(
+      `INSERT INTO order_refunds (order_id, kind, amount, status, idempotency_key, reason, processed_by, done_at)
+       VALUES ($1, 'full', $2, 'done', $3, $4, $5, now())`,
+      [order.id, rest, key, reason.slice(0, 200), by ?? '알 수 없음'],
+    )
     console.log(`[order] 주문 취소 ${order.order_no}`)
     return { status: 200 }
   })
+}
+
+// ---------- 돌려주기: 농가별 부분 취소·반품 환불 공통 ----------
+// 돌려준 돈(완료)과 결과를 기다리는 돈. 주문 줄을 잠근 트랜잭션 안에서 부른다
+export async function refundSums(client, orderId) {
+  const { rows } = await client.query(
+    `SELECT COALESCE(sum(amount) FILTER (WHERE status = 'done'), 0)::int AS done,
+            COALESCE(sum(amount) FILTER (WHERE status = 'requested'), 0)::int AS pending
+     FROM order_refunds WHERE order_id = $1`,
+    [orderId],
+  )
+  return rows[0]
+}
+
+const won = (n) => `${n.toLocaleString('ko-KR')}원`
+const REFUND_PENDING = '결제사 응답이 늦어 결과를 아직 몰라요. 잠시 후 같은 버튼을 다시 눌러 확인해 주세요. 돈이 두 번 나가지는 않아요.'
+
+// 1) 주문 줄을 잠그고 확인한 뒤, 토스에 보내기 전에 '보냄(결과 모름)' 기록을 먼저 저장한다
+//    → 누적액(완료 + 결과 기다림 + 이번)이 결제 금액을 넘지 않는지 잠근 채로 보고, 서버가 중간에 죽어도 기록이 남는다
+// 2) 토스 부분 취소는 잠금을 푼 뒤 보낸다. 그동안 그 주문의 다른 취소·환불·전체 취소와 그 농가 배송 시작은 이 기록을 보고 막는다
+// 3) 결과를 적는다: 성공하면 그때 재고·배송·반품 상태를 바꾸고(onDone), 확실한 실패면 failed(돈이 안 나감), 모르면 그대로 둔다
+// 같은 대상(농가 배송·반품 신청)을 다시 요청하면: 끝났으면 다시 보내지 않고, 결과를 기다리면 같은 멱등키·같은 금액으로 다시 보낸다 (토스는 한 번만 취소)
+// prepare(client, order) → { kind, sellerCode, returnId, amount, reason } 또는 { status, error } / { status: 200, already: true }
+export async function runRefund(orderNo, by, prepare, onDone) {
+  const start = await inTransaction(async (client) => {
+    const { rows } = await client.query('SELECT * FROM orders WHERE order_no = $1 FOR UPDATE', [orderNo])
+    const order = openOrder(rows[0])
+    if (!order) return { status: 404, error: '주문을 찾지 못했어요.' }
+    const target = await prepare(client, order)
+    if (target.status) return target
+    if (!order.payment_key) return { status: 409, error: '결제 기록이 없는 주문이에요.' }
+    const { rows: tried } = await client.query(
+      `SELECT * FROM order_refunds WHERE order_id = $1 AND kind = $2 AND (CASE WHEN $2 = 'return' THEN return_id::text ELSE seller_code END) = $3 ORDER BY id FOR UPDATE`,
+      [order.id, target.kind, String(target.kind === 'return' ? target.returnId : target.sellerCode)],
+    )
+    const previous = tried.find((r) => r.status !== 'failed')
+    if (previous?.status === 'done') return { status: 200, already: true }
+    const sums = await refundSums(client, order.id)
+    if (previous) {
+      if (previous.amount !== target.amount) return { status: 409, error: `앞서 보낸 ${won(previous.amount)} 환불의 결과를 확인하고 있어요. 같은 금액으로 다시 확인해 주세요.` }
+      return { order, refund: previous, canceledBefore: sums.done }
+    }
+    if (sums.pending) return { status: 409, error: '이 주문의 다른 취소·환불 결과를 확인하고 있어요. 그 건을 먼저 다시 확인해 주세요.' }
+    if (!Number.isInteger(target.amount) || target.amount < 1) return { status: 400, error: '돌려줄 금액을 확인해 주세요.' }
+    if (sums.done + target.amount > order.total_amount) {
+      return { status: 409, error: `돌려줄 수 있는 금액을 넘어요. 결제 ${won(order.total_amount)} 중 ${won(sums.done)}을 이미 돌려드렸어요.` }
+    }
+    const key = `${target.kind}-${order.order_no}-${target.kind === 'return' ? `r${target.returnId}` : target.sellerCode}-${tried.length + 1}`
+    const { rows: [refund] } = await client.query(
+      `INSERT INTO order_refunds (order_id, seller_code, return_id, kind, amount, idempotency_key, reason, processed_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [order.id, target.sellerCode, target.returnId ?? null, target.kind, target.amount, key, target.reason.slice(0, 200), by],
+    )
+    return { order, refund, canceledBefore: sums.done }
+  })
+  if (start.status) return start
+  const { order, refund } = start
+  let failure = null
+  try {
+    await cancelPartial({ paymentKey: order.payment_key, orderId: order.order_no, amount: refund.amount, reason: refund.reason, idempotencyKey: refund.idempotency_key, canceledBefore: start.canceledBefore })
+  } catch (error) {
+    failure = error
+  }
+  return inTransaction(async (client) => {
+    await client.query('SELECT 1 FROM orders WHERE id = $1 FOR UPDATE', [order.id])
+    const { rows: [current] } = await client.query('SELECT * FROM order_refunds WHERE id = $1 FOR UPDATE', [refund.id])
+    if (current.status === 'done') return { status: 200, already: true } // 같은 요청이 함께 와서 다른 쪽이 먼저 끝냄
+    if (!failure) {
+      const { rows: [saved] } = await client.query("UPDATE order_refunds SET status = 'done', done_at = now() WHERE id = $1 RETURNING *", [refund.id])
+      await onDone(client, order, saved)
+      console.log(`[refund] ${by} ${order.order_no} ${saved.kind} ${saved.seller_code ?? ''} ${saved.amount}원 돌려줌`)
+      return { status: 200, done: true, refund: saved }
+    }
+    if (failure.uncertain) {
+      console.warn(`[refund] ${order.order_no} ${current.kind} 결과를 모름 (${failure.code ?? failure.message}) → 같은 멱등키로 다시 확인`)
+      return { status: 202, pending: true, error: REFUND_PENDING }
+    }
+    await client.query("UPDATE order_refunds SET status = 'failed', fail_reason = $2 WHERE id = $1", [refund.id, (failure.code ?? failure.message).slice(0, 100)])
+    console.error(`[refund] 결제 취소 실패 ${order.order_no} · ${failure.status ?? ''} ${failure.code ?? ''}`)
+    return { status: 502, error: `결제 취소가 실패했어요 (돈은 나가지 않았어요). ${failure.message}` }
+  })
+}
+
+// 아직 보내지 않은 농가 배송 한 건 취소: 그 농가의 상품 금액 + 배송비를 토스 부분 취소로 돌려주고 재고(옵션 재고 포함)를 돌려놓는다.
+// 남은 농가가 있으면 주문은 그대로 두고 상태만 다시 맞추고, 모두 취소되면 주문도 취소. 판매자는 자기 농가만 (부르는 쪽이 로그인한 농가를 넘긴다)
+export async function cancelFarm(orderNo, sellerCode, reason, by) {
+  const result = await runRefund(orderNo, by, async (client, order) => {
+    await ensureShipments(order.id, client)
+    const { rows: [sh] } = await client.query('SELECT * FROM order_shipments WHERE order_id = $1 AND seller_code = $2 FOR UPDATE', [order.id, sellerCode])
+    if (!sh) return { status: 404, error: '이 주문에 그 농가 상품이 없어요.' }
+    if (sh.status === 'cancelled') return { status: 200, already: true }
+    if (!['paid', 'preparing', 'shipping'].includes(order.status)) return { status: 409, error: '이 상태의 주문은 농가별로 취소할 수 없어요.' }
+    if (!['paid', 'preparing'].includes(sh.status)) return { status: 409, error: '이미 보낸 농가 상품은 취소할 수 없어요. 받은 뒤 반품으로 처리해요.' }
+    return { kind: 'cancel', sellerCode, amount: sh.items_amount + sh.shipping_fee, reason }
+  }, async (client, order, refund) => {
+    await restoreStock(client, order.id, sellerCode)
+    await client.query("UPDATE order_shipments SET status = 'cancelled', updated_at = now() WHERE order_id = $1 AND seller_code = $2", [order.id, sellerCode])
+    const left = await client.query("SELECT 1 FROM order_shipments WHERE order_id = $1 AND status <> 'cancelled'", [order.id])
+    if (left.rowCount) {
+      await syncOrderStatus(client, order.id)
+    } else {
+      await client.query("UPDATE orders SET status = 'cancelled', cancel_reason = $2, cancelled_at = now(), updated_at = now() WHERE id = $1", [order.id, refund.reason])
+    }
+  })
+  if (result.done) notifyOrder(orderNo, 'farm_cancelled', sellerCode)
+  return result
+}
+
+// 돌려주기 결과를 응답으로: 결과를 모르면 202 + pending (화면은 [다시 확인]을 보여 준다)
+export function sendRefundResult(res, result, body) {
+  if (result.pending) return res.status(202).json({ error: result.error, pending: true })
+  if (result.error) return res.status(result.status).json({ error: result.error })
+  return body()
 }
 
 // ---------- 관리자용 ----------
@@ -555,7 +710,8 @@ const LIST_SQL = `
          o.created_at, o.paid_at, o.tracking_no,
          (SELECT string_agg(oi.name || COALESCE(' · ' || oi.option_name, '') || ' ×' || oi.quantity, ', ' ORDER BY oi.id) FROM order_items oi WHERE oi.order_id = o.id) AS summary,
          (SELECT count(*) FROM order_shipments sh WHERE sh.order_id = o.id)::int AS farms,
-         (SELECT count(*) FROM order_shipments sh WHERE sh.order_id = o.id AND sh.status IN ('shipping', 'delivered'))::int AS farms_sent
+         (SELECT count(*) FROM order_shipments sh WHERE sh.order_id = o.id AND sh.status IN ('shipping', 'delivered'))::int AS farms_sent,
+         (SELECT COALESCE(sum(r.amount), 0) FROM order_refunds r WHERE r.order_id = o.id AND r.status = 'done' AND r.kind <> 'full')::int AS refunded
   FROM orders o`
 
 adminOrderRouter.get('/', async (req, res) => {
@@ -574,7 +730,7 @@ adminOrderRouter.get('/', async (req, res) => {
 adminOrderRouter.get('/:orderNo', async (req, res) => {
   const order = await loadOrder(req.params.orderNo)
   if (!order) return res.status(404).json({ error: '주문을 찾지 못했어요.' })
-  res.json(publicOrder(order))
+  res.json(staffOrder(order))
 })
 
 // 배송 단계 바꾸기 (농가별): 결제완료 → 배송준비 → 배송중(송장 필수) → 배송완료
@@ -605,6 +761,11 @@ function advanceTx(orderNo, body, who, onlySeller) {
     if (!shipments.length) return { status: onlySeller ? 403 : 404, error: onlySeller ? '이 주문에는 내 농가 상품이 없어요.' : '그 농가의 배송을 찾지 못했어요.' }
     const targets = shipments.filter((s) => NEXT[s.status] === status)
     if (!targets.length) return { status: 409, error: '지금 상태에서 그 단계로 바꿀 수 없어요.' }
+    // 취소 결과를 기다리는 농가 배송은 보내지 않는다 (토스에서는 이미 돈을 돌려줬을 수 있다)
+    const { rows: cancelling } = await client.query("SELECT seller_code FROM order_refunds WHERE order_id = $1 AND kind = 'cancel' AND status = 'requested'", [order.id])
+    if (targets.some((s) => cancelling.some((r) => r.seller_code === s.seller_code))) {
+      return { status: 409, error: '취소 결과를 확인하고 있는 농가 배송이에요. 취소를 먼저 다시 확인해 주세요.' }
+    }
     if (status === 'shipping') {
       if (!courier || trackingNo.length < 6) return { status: 400, error: '택배사와 송장 번호를 넣어 주세요.' }
       if (targets.length > 1) return { status: 400, error: '농가마다 송장이 달라요. 농가를 골라 하나씩 넣어 주세요.' }
@@ -629,16 +790,24 @@ function advanceTx(orderNo, body, who, onlySeller) {
 adminOrderRouter.patch('/:orderNo', async (req, res) => {
   const done = await advance(req.params.orderNo, req.body, req.admin.loginId)
   if (done.error) return res.status(done.status).json({ error: done.error })
-  res.json(publicOrder(await loadOrder(req.params.orderNo)))
+  res.json(staffOrder(await loadOrder(req.params.orderNo)))
 })
 
 adminOrderRouter.post('/:orderNo/cancel', async (req, res) => {
   const reason = text(req.body.reason)
   if (reason.length < 2) return res.status(400).json({ error: '취소 사유를 적어 주세요.' })
-  const done = await cancelOrder(req.params.orderNo, `관리자 취소: ${reason}`, ['paid', 'preparing'])
+  const done = await cancelOrder(req.params.orderNo, `관리자 취소: ${reason}`, ['paid', 'preparing'], `관리자 ${req.admin.loginId}`)
   if (done.error) return res.status(done.status).json({ error: done.error })
   console.log(`[order] ${req.admin.loginId} 주문 취소 처리 ${req.params.orderNo}`) // 취소 사유는 손님에게도 보여서 관리자 아이디를 넣지 않는다
-  res.json(publicOrder(await loadOrder(req.params.orderNo)))
+  res.json(staffOrder(await loadOrder(req.params.orderNo)))
+})
+
+// 농가 한 곳만 취소 (아직 보내지 않은 농가 배송). 결과를 모르면 202 → 같은 요청을 다시 보내 확인
+adminOrderRouter.post('/:orderNo/shipments/:sellerCode/cancel', async (req, res) => {
+  const reason = text(req.body.reason).slice(0, 100)
+  if (reason.length < 2) return res.status(400).json({ error: '취소 사유를 적어 주세요.' })
+  const done = await cancelFarm(req.params.orderNo, req.params.sellerCode, `관리자 취소: ${reason}`, `관리자 ${req.admin.loginId}`)
+  sendRefundResult(res, done, async () => res.json(staffOrder(await loadOrder(req.params.orderNo))))
 })
 
 // ---------- 판매자용: 내 농가 상품이 들어 있는 주문 ----------
@@ -652,7 +821,8 @@ sellerOrderRouter.get('/', async (req, res) => {
   const { rows } = await pool.query(`
     SELECT o.id, o.order_no, sh.status, o.status AS order_status, o.created_at, o.paid_at, sh.courier, sh.tracking_no, o.memo, o.is_test, o.confirmed_at,
            sh.items_amount, sh.shipping_fee, o.receiver_name, o.receiver_phone, o.zipcode, o.address1, o.address2,
-           (SELECT count(*) FROM order_shipments x WHERE x.order_id = o.id)::int AS farms
+           (SELECT count(*) FROM order_shipments x WHERE x.order_id = o.id)::int AS farms,
+           EXISTS (SELECT 1 FROM order_refunds r WHERE r.order_id = o.id AND r.seller_code = sh.seller_code AND r.kind = 'cancel' AND r.status = 'requested') AS cancel_pending
     FROM orders o JOIN order_shipments sh ON sh.order_id = o.id AND sh.seller_code = $1
     WHERE o.status IN ('paid', 'preparing', 'shipping', 'delivered', 'cancelled')
     ORDER BY o.created_at DESC LIMIT 200`, [seller])
@@ -670,7 +840,10 @@ sellerOrderRouter.get('/', async (req, res) => {
 })
 
 // 정산 요약: 이번 달 구매 확정된 내 상품 매출(정산 예정)과 확정 기다리는 매출 (테스트 결제 포함, 표시는 화면에서)
+// 취소한 내 농가 배송은 빼고(배송 완료된 내 배송만), 내 농가 반품으로 돌려준 돈은 뺀다.
+// 지난달 이전에 확정된 주문을 이번 달에 환불했으면 이번 달 정산에서 뺀다 (late_refunds) [가설: 정산 뒤 환불 처리는 회사가 정함]
 sellerOrderRouter.get('/settlement', async (req, res) => {
+  await ensureShipments()
   const { rows } = await pool.query(
     `SELECT
        COALESCE(sum(oi.subtotal) FILTER (WHERE o.confirmed_at >= date_trunc('month', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul'), 0)::int AS confirmed_amount,
@@ -679,25 +852,43 @@ sellerOrderRouter.get('/settlement', async (req, res) => {
        count(DISTINCT o.id) FILTER (WHERE o.confirmed_at IS NULL)::int AS waiting_orders,
        bool_or(o.is_test) AS has_test
      FROM order_items oi JOIN orders o ON o.id = oi.order_id
-     WHERE oi.seller_code = $1 AND o.status = 'delivered'`,
+     JOIN order_shipments sh ON sh.order_id = o.id AND sh.seller_code = oi.seller_code
+     WHERE oi.seller_code = $1 AND o.status = 'delivered' AND sh.status = 'delivered'`,
     [req.seller.sellerCode],
   )
   // 농가별로 받은 배송비도 그 농가 몫 (택배를 직접 보내니까)
-  await ensureShipments()
   const fees = await pool.query(
     `SELECT COALESCE(sum(sh.shipping_fee) FILTER (WHERE o.confirmed_at >= date_trunc('month', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul'), 0)::int AS confirmed_shipping,
             COALESCE(sum(sh.shipping_fee) FILTER (WHERE o.confirmed_at IS NULL), 0)::int AS waiting_shipping
      FROM order_shipments sh JOIN orders o ON o.id = sh.order_id
-     WHERE sh.seller_code = $1 AND o.status = 'delivered'`,
+     WHERE sh.seller_code = $1 AND o.status = 'delivered' AND sh.status = 'delivered'`,
     [req.seller.sellerCode],
   )
-  res.json({ ...rows[0], ...fees.rows[0], confirmDays: CONFIRM_DAYS })
+  const month = "date_trunc('month', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul'"
+  const refunds = await pool.query(
+    `SELECT COALESCE(sum(r.amount) FILTER (WHERE o.confirmed_at >= ${month}), 0)::int AS confirmed_refunds,
+            COALESCE(sum(r.amount) FILTER (WHERE o.confirmed_at IS NULL), 0)::int AS waiting_refunds,
+            COALESCE(sum(r.amount) FILTER (WHERE o.confirmed_at < ${month} AND r.done_at >= ${month}), 0)::int AS late_refunds
+     FROM order_refunds r JOIN orders o ON o.id = r.order_id
+     WHERE r.seller_code = $1 AND r.kind = 'return' AND r.status = 'done' AND o.status = 'delivered'`,
+    [req.seller.sellerCode],
+  )
+  res.json({ ...rows[0], ...fees.rows[0], ...refunds.rows[0], confirmDays: CONFIRM_DAYS })
 })
 
 sellerOrderRouter.patch('/:orderNo', async (req, res) => {
   const done = await advance(req.params.orderNo, req.body, req.seller.loginId, req.seller.sellerCode)
   if (done.error) return res.status(done.status).json({ error: done.error })
   res.status(204).end()
+})
+
+// 내 농가 몫만 취소 (아직 보내지 않았을 때). 농가는 요청에서 받지 않고 로그인한 판매자 농가로만
+sellerOrderRouter.post('/:orderNo/cancel', async (req, res) => {
+  const reason = text(req.body.reason).slice(0, 100)
+  if (reason.length < 2) return res.status(400).json({ error: '취소 사유를 적어 주세요. (손님에게 보여요)' })
+  const done = await cancelFarm(req.params.orderNo, req.seller.sellerCode, `판매자 취소: ${reason}`, `판매자 ${req.seller.loginId}`)
+  if (done.status === 404) return res.status(403).json({ error: '이 주문에는 내 농가 상품이 없어요.' })
+  sendRefundResult(res, done, () => res.status(204).end())
 })
 
 // ---------- 주문 알림 메일 (손님: 주문 때 남긴 이메일·회원 이메일 / 관리자: ADMIN_EMAIL) ----------
@@ -721,6 +912,14 @@ async function notifyOrder(orderNo, event, sellerCode = null) {
         `${order.buyer_name}님, 주문하신 상품을 ${farmName}보냈어요.\n\n${sent.courier} ${sent.tracking_no}\n배송 조회: ${trackingUrl(sent.courier, sent.tracking_no)}\n\n${sentLines}\n`],
       cancelled: [`[${SHOP.name}] 주문이 취소됐어요 (${order.order_no})`,
         `${order.buyer_name}님, 주문이 취소되어 결제를 취소했어요. 카드사에 따라 환불까지 며칠 걸릴 수 있어요.\n\n주문번호: ${order.order_no}\n${lines}\n${total}\n`],
+    }
+    if (event === 'farm_cancelled') {
+      const refund = order.refunds.find((r) => r.kind === 'cancel' && r.seller_code === sellerCode && r.status === 'done')
+      const left = order.shipments.filter((s) => s.status !== 'cancelled').length
+      mails.farm_cancelled = [`[${SHOP.name}] ${farmName}보낼 상품 주문을 취소했어요 (${order.order_no})`,
+        `${order.buyer_name}님, 주문 중 ${farmName}보낼 상품을 취소하고 그 상품 금액과 배송비 ${(refund?.amount ?? 0).toLocaleString('ko-KR')}원의 결제를 취소했어요. 카드사에 따라 환불까지 며칠 걸릴 수 있어요.\n`
+        + `사유: ${order.status === 'cancelled' ? order.cancel_reason : refund?.reason ?? ''}\n\n주문번호: ${order.order_no}\n${sentLines}\n\n`
+        + `${left ? `나머지 상품은 그대로 보내 드려요.\n주문 조회: ${lookup}\n` : '이 주문의 상품이 모두 취소됐어요.\n'}`]
     }
     const [subject, body] = mails[event]
     queueMail({ kind: `order_${event}`, to: order.buyer_email, subject, body })
@@ -760,7 +959,7 @@ memberOrderRouter.post('/:orderNo/cancel', async (req, res) => {
   const order = await myOrder(req, res)
   if (!order) return
   if (order.status !== 'paid') return res.status(409).json({ error: '배송 준비가 시작된 주문은 고객센터로 취소를 요청해 주세요.' })
-  const done = await cancelOrder(order.order_no, `회원 취소: ${text(req.body.reason).slice(0, 100) || '손님 요청'}`, ['paid'])
+  const done = await cancelOrder(order.order_no, `회원 취소: ${text(req.body.reason).slice(0, 100) || '손님 요청'}`, ['paid'], `회원 #${req.customer.id}`)
   if (done.error) return res.status(done.status).json({ error: done.error })
   res.json(publicOrder(await loadOrder(order.order_no)))
 })
