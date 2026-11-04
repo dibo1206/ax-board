@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Quiz } from '../../Recommend.jsx'
 import { RatingBadge } from '../Reviews.jsx'
-import { thumbUrl, unitPrice, won } from '../shared.js'
+import { cheapestOption, thumbUrl, unitPrice, won } from '../shared.js'
 import { FAQ, GROUP_PHOTOS, HERO, SEASON, STORY } from './content.js'
 
 // 첫 화면 (디자인 시안): 큰 제목 → 카테고리 → 이달의 상품 → 제철 달력 → 이야기 → 자주 묻는 질문
@@ -93,7 +93,10 @@ export function CategoryRows({ groups, onPick }) {
   )
 }
 
+// 옵션 상품(5kg·10kg …)은 판매 중 옵션의 가장 낮은 가격을 "~부터"로, 100g당 가격도 그 옵션으로. 모든 옵션이 품절이면 품절
 function ProductCard({ p, onOpen }) {
+  const cheapest = cheapestOption(p)
+  const unit = cheapest ? unitPrice(cheapest.price, cheapest.name) : unitPrice(p.price, p.unit)
   return (
     <a href={`/p/${encodeURIComponent(p.product_code)}`} className={`pcard${p.sold_out ? ' soldout' : ''}`} onClick={(e) => { e.preventDefault(); onOpen(p.product_code) }}>
       <span className="pcard-img">
@@ -110,8 +113,10 @@ function ProductCard({ p, onOpen }) {
       </span>
       <span className="pcard-seller">{p.seller_name.replace(/\[예시\]\s*/g, '')}</span>
       <strong className="pcard-name">{p.name}</strong>
-      <span className="pcard-price">{won(p.price)} <small>/ {p.unit}</small></span>
-      {unitPrice(p.price, p.unit) && <span className="pcard-unit">{unitPrice(p.price, p.unit)}</span>}
+      {p.has_options
+        ? <span className="pcard-price">{won(p.price)}부터 {p.options.length > 0 && <small>/ 옵션 {p.options.length}개</small>}</span>
+        : <span className="pcard-price">{won(p.price)} <small>/ {p.unit}</small></span>}
+      {unit && <span className="pcard-unit">{unit}{cheapest && p.options.length > 1 && ` (${cheapest.name})`}</span>}
       <span className="pcard-meta">
         <RatingBadge rating={p.rating} count={p.review_count} />
       </span>

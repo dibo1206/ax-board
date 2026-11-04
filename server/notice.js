@@ -45,7 +45,9 @@ export function buildNotice(product, item, seller) {
   const n = product.notice ?? {}
   const row = (label, value) => ({ label, value: value || WAITING, missing: !value })
   const filled = (key) => n[key]
-  const amount = [product.unit, product.count_per_box && `${product.count_per_box}개`, product.weight_g && `1개 ${product.weight_g}g 정도`].filter(Boolean).join(' · ')
+  // 판매 옵션(5kg·10kg …)이 있으면 옵션 이름이 포장 단위라 함께 적는다
+  const options = product.options?.length ? `옵션: ${product.options.map((o) => o.name).join(', ')}` : null
+  const amount = [product.unit, options, product.count_per_box && `${product.count_per_box}개`, product.weight_g && `1개 ${product.weight_g}g 정도`].filter(Boolean).join(' · ')
   const producer = `${plain(seller.name)}${seller.region ? ` (${seller.region})` : ''}${n.imported && n.importer ? ` / 수입자: ${n.importer}` : ''}`
   const imported = n.imported ? [row('수입 신고', IMPORT_TEXT)] : []
   const answered = Boolean(n.origin || n.ingredients) // 판매자가 표를 적은 뒤에는 고르지 않은 표시는 해당 없음

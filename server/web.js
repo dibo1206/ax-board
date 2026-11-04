@@ -64,10 +64,13 @@ seoRouter.get('/sitemap.xml', async (req, res) => {
 function loadProductMeta(code) {
   return cached(`meta:${code}`, 60_000, async () => {
     const { rows } = await pool.query(
-      `SELECT p.product_code, p.name, p.summary, p.description, p.price, p.stock, p.image_url, s.name AS seller_name, rv.rating, rv.review_count
+      `SELECT p.product_code, p.name, p.summary, p.description, p.price, p.stock, p.image_url, s.name AS seller_name, rv.rating, rv.review_count,
+              opt.n AS option_count, opt.high AS high_price
        FROM products p JOIN sellers s ON s.seller_code = p.seller_code
        LEFT JOIN (SELECT product_code, round(avg(rating)::numeric, 1)::float AS rating, count(*)::int AS review_count
                   FROM reviews WHERE NOT hidden AND product_code = $1 GROUP BY product_code) rv ON rv.product_code = p.product_code
+       -- 판매 옵션: 상품 가격은 판매 중 옵션의 최저가라 옵션이 있으면 가격 범위로 알린다
+       LEFT JOIN LATERAL (SELECT count(*)::int AS n, max(price) AS high FROM product_options WHERE product_code = p.product_code AND status = 'active') opt ON true
        WHERE p.status = 'active' AND p.product_code = $1`,
       [code],
     )
@@ -115,7 +118,7 @@ async function pageHead(req, html) {
     status: 200,
     head: {
       title: `${product.name} | ${SHOP_NAME}`,
-      description: `${summary} · ${Number(product.price).toLocaleString('ko-KR')}원`,
+      description: `${summary} · ${Number(product.price).toLocaleString('ko-KR')}원${product.option_count ? '부터' : ''}`,
       url: `${base}/p/${encodeURIComponent(product.product_code)}`,
       image,
       jsonLd: {
@@ -127,10 +130,11 @@ async function pageHead(req, html) {
         sku: product.product_code,
         brand: { '@type': 'Brand', name: product.seller_name },
         offers: {
-          '@type': 'Offer',
           url: `${base}/p/${encodeURIComponent(product.product_code)}`,
           priceCurrency: 'KRW',
-          price: product.price,
+          ...(product.option_count
+            ? { '@type': 'AggregateOffer', lowPrice: product.price, highPrice: product.high_price, offerCount: product.option_count }
+            : { '@type': 'Offer', price: product.price }),
           availability: product.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
         },
         aggregateRating: product.review_count > 0 ? { '@type': 'AggregateRating', ratingValue: product.rating, reviewCount: product.review_count } : undefined,

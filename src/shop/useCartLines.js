@@ -13,11 +13,18 @@ export function useCartLines(lines) {
       .catch((e) => setError(e.message))
   }, [])
 
+  // 옵션 상품은 고른 옵션의 가격·재고로 본다. 옵션을 안 골랐거나 판매를 멈춘 옵션이면 주문에서 뺀다
   const rows = products
     ? lines.map((l) => {
       const p = products[l.productCode]
-      const problem = !p ? '판매하지 않는 상품' : p.sold_out ? '품절' : l.quantity > p.stock ? `재고 ${p.stock}개` : ''
-      return { ...l, product: p, problem, subtotal: p ? p.price * l.quantity : 0 }
+      const option = p && l.optionId ? p.options.find((o) => o.id === l.optionId) ?? null : null
+      const { price, stock } = option ?? p ?? {}
+      const problem = !p ? '판매하지 않는 상품'
+        : p.has_options && !option ? (l.optionId ? '판매하지 않는 옵션' : '옵션을 골라 주세요')
+          : !p.has_options && l.optionId ? '판매하지 않는 옵션'
+            : stock === 0 ? '품절' : l.quantity > stock ? `재고 ${stock}개` : ''
+      const known = p && (p.has_options ? Boolean(option) : !l.optionId)
+      return { ...l, product: p, option, price, stock, problem, subtotal: known ? price * l.quantity : 0 }
     })
     : []
   const ok = rows.filter((r) => !r.problem)

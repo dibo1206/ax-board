@@ -23,6 +23,7 @@ import { checkDataKey } from './crypto.js'
 import { orderingOpen, paymentMode } from './payments.js'
 import { encryptExisting } from './pii.js'
 import { buildNotice } from './notice.js'
+import { ACTIVE_OPTIONS_SQL } from './options.js'
 import { adminOrderRouter, memberOrderRouter, publicOrderRouter, sellerOrderRouter, startOrderSweeper } from './orders.js'
 import { recommendRouter } from './recommend.js'
 import { adminReviewRouter, reviewRouter } from './reviews.js'
@@ -115,8 +116,9 @@ app.use((req, res, next) => {
 })
 
 // 상품 + 품목·농가 정보를 함께 읽는다. 품절은 재고 0으로 계산한다.
+// 옵션 상품은 판매 중 옵션(이름·가격·재고)을 options 로 붙인다. 상품 가격·재고는 옵션의 최저가·재고 합이라 품절 계산은 같다
 const PRODUCT_SELECT = `
-  SELECT p.*, (p.stock = 0) AS sold_out,
+  SELECT p.*, (p.stock = 0) AS sold_out, ${ACTIVE_OPTIONS_SQL},
          i.name AS item_name, i.category, i.show_brix,
          s.name AS seller_name, s.region AS seller_region, s.is_company,
          rv.rating, COALESCE(rv.review_count, 0) AS review_count, COALESCE(sales.sold, 0) AS sold_30d,

@@ -228,8 +228,8 @@ function Admin() {
                     {p.show_brix && p.brix && !p.brix_photo_url && <> <span className="badge pending">당도 사진 없음</span></>}
                     {p.info_no > 0 && <> <span className="badge soldout">표시와 다름 후기 {p.info_no}</span></>}
                     {p.changes > 0 && <> <span className="muted">수정 이력 {p.changes}</span></>}</td>
-                  <td>{won(p.price)}</td>
-                  <td>{p.sold_out ? <span className="badge soldout">품절</span> : `${p.stock}개`}</td>
+                  <td>{won(p.price)}{p.options.length > 0 && '부터'}</td>
+                  <td>{p.sold_out ? <span className="badge soldout">품절</span> : `${p.stock}개`}{p.options.length > 0 && <><br /><span className="muted">옵션 {p.options.length}개</span></>}</td>
                   <td><StatusLabel product={p} /></td>
                   <td className="row-actions">
                     {p.status === 'pending' && <button type="button" onClick={() => review(p, true)}>승인</button>}
@@ -237,7 +237,8 @@ function Admin() {
                     {p.auto_approved_at && !p.auto_checked_at && p.status === 'active' && <button type="button" onClick={() => checkAuto(p)}>확인</button>}
                     {p.auto_approved_at && !p.auto_checked_at && p.status === 'active' && <button type="button" onClick={() => review(p, false)}>내리기</button>}
                     <button type="button" onClick={() => { setEditing(p); setMessage('') }}>{p.status === 'pending' ? '열어 보기' : '수정'}</button>
-                    {p.sold_out ? null : <button type="button" onClick={() => quickStock(p, 0)}>품절 처리</button>}
+                    {/* 옵션 상품은 옵션마다 재고가 있어서 [수정]에서 옵션 재고를 바꾼다 */}
+                    {p.sold_out || p.options.length > 0 ? null : <button type="button" onClick={() => quickStock(p, 0)}>품절 처리</button>}
                   </td>
                 </tr>
               ))}

@@ -63,12 +63,13 @@ function MyProducts({ onMessage, onError }) {
                   {p.status === 'draft' && p.review_note && <><br /><span className="warn">반려 사유: {p.review_note}</span></>}
                   {p.status === 'pending' && p.review_reason && <><br /><span className="muted">회사 확인이 필요해요: {p.review_reason}</span></>}
                 </td>
-                <td>{won(p.price)}</td>
-                <td>{p.sold_out ? <span className="badge soldout">품절</span> : `${p.stock}개`}</td>
+                <td>{won(p.price)}{p.options.length > 0 && '부터'}</td>
+                <td>{p.sold_out ? <span className="badge soldout">품절</span> : `${p.stock}개`}{p.options.length > 0 && <><br /><span className="muted">옵션 {p.options.length}개</span></>}</td>
                 <td><StatusLabel product={p} /></td>
                 <td className="row-actions">
                   <button type="button" onClick={() => { setEditing(p); onMessage('') }}>수정</button>
-                  {!p.sold_out && <button type="button" onClick={() => soldOut(p)}>품절 처리</button>}
+                  {/* 옵션 상품은 옵션마다 재고가 있어서 [수정]에서 옵션 재고를 바꾼다 */}
+                  {!p.sold_out && p.options.length === 0 && <button type="button" onClick={() => soldOut(p)}>품절 처리</button>}
                 </td>
               </tr>
             ))}
@@ -156,7 +157,7 @@ function MyOrders({ onMessage, onError }) {
       {orders.map((o) => (
         <li key={o.order_no} className={`box${o.status === 'cancelled' ? ' dim' : ''}`}>
           <p><b>{o.order_no}</b> · 내 배송 {ORDER_STATUS[o.status]}{o.confirmed_at && ' · 구매 확정'} · {when(o.created_at)}{o.is_test && ' · 테스트'}</p>
-          <ul>{o.items.map((i) => <li key={i.name}>{i.name} ({i.unit}) × {i.quantity}</li>)}</ul>
+          <ul>{o.items.map((i) => <li key={`${i.name}:${i.option_name ?? ''}`}>{i.name} ({i.option_name ?? i.unit}) × {i.quantity}</li>)}</ul>
           <p className="muted">내 상품 {won(o.items_amount)} + 배송비 {o.shipping_fee ? won(o.shipping_fee) : '무료'}
             {o.farms > 1 && ` · 다른 농가 ${o.farms - 1}곳 상품과 함께 주문됐어요 (내 상품만 따로 보내면 돼요)`}</p>
           {o.receiver && <p className="muted">받는 분 {o.receiver.name} · {o.receiver.phone} · ({o.receiver.zipcode}) {o.receiver.address1} {o.receiver.address2 ?? ''}{o.receiver.memo && ` · 메모: ${o.receiver.memo}`}</p>}

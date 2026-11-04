@@ -1,4 +1,4 @@
-// 한 상품을 한 주문에 담을 수 있는 수 (서버 server/orders.js 의 MAX_QTY 와 같게)
+// 한 상품(옵션 상품은 옵션마다)을 한 주문에 담을 수 있는 수 (서버 server/orders.js 의 MAX_QTY 와 같게)
 export const MAX_QTY = 20
 
 // 쇼핑 화면 공통: API 호출, 장바구니(브라우저에 저장), 외부 스크립트 불러오기, 주문 상태 이름
@@ -17,6 +17,10 @@ export function unitPrice(price, unit) {
   if (!amount) return null
   return `${/g/i.test(found[2]) ? '100g' : '100ml'}당 ${won(Math.round((Number(price) / amount) * 100))}`
 }
+
+// 판매 옵션(5kg·10kg …): 옵션 이름이 판매 단위 역할을 한다. 목록에는 가장 낮은 가격을 "~부터"로 보여 준다
+export const cheapestOption = (product) => (product.options?.length ? product.options.reduce((a, b) => (b.price < a.price ? b : a)) : null)
+export const optionLabel = (name, optionName) => (optionName ? `${name} · ${optionName}` : name)
 
 // 목록에는 서버가 만든 400px 썸네일을 쓴다 (예전 png·jpg 사진은 그대로)
 export const thumbUrl = (url) => (url?.endsWith('.webp') ? url.replace(/\.webp$/, '-thumb.webp') : url)
@@ -57,13 +61,17 @@ export function getPolicy() {
   return policyPromise
 }
 
-// ---------- 장바구니: [{ productCode, quantity }]. 가격은 저장하지 않는다 (주문할 때 서버가 다시 계산) ----------
+// ---------- 장바구니: [{ productCode, optionId, quantity }]. 가격은 저장하지 않는다 (주문할 때 서버가 다시 계산) ----------
+// optionId 는 옵션 상품에서 고른 옵션 (옵션 없는 상품은 null). 같은 상품이라도 옵션이 다르면 다른 줄이다
 const CART_KEY = 'farm-cart'
 
 export function readCart() {
   try {
     const items = JSON.parse(localStorage.getItem(CART_KEY) ?? '[]')
-    return Array.isArray(items) ? items.filter((i) => typeof i?.productCode === 'string' && Number.isInteger(i.quantity) && i.quantity > 0) : []
+    return Array.isArray(items)
+      ? items.filter((i) => typeof i?.productCode === 'string' && Number.isInteger(i.quantity) && i.quantity > 0)
+        .map((i) => ({ ...i, optionId: Number.isInteger(i.optionId) ? i.optionId : null }))
+      : []
   } catch {
     return []
   }
@@ -78,11 +86,13 @@ export function writeCart(items) {
   window.dispatchEvent(new Event('cart-change'))
 }
 
-export function addToCart(productCode, quantity) {
+export const sameLine = (a, b) => a.productCode === b.productCode && a.optionId === b.optionId
+
+export function addToCart(productCode, quantity, optionId = null) {
   const items = readCart()
-  const found = items.find((i) => i.productCode === productCode)
+  const found = items.find((i) => sameLine(i, { productCode, optionId }))
   if (found) found.quantity = Math.min(MAX_QTY, found.quantity + quantity)
-  else items.push({ productCode, quantity })
+  else items.push({ productCode, optionId, quantity })
   writeCart(items)
 }
 

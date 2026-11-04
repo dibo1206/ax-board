@@ -209,7 +209,7 @@ accountRouter.post('/password-reset/confirm', async (req, res) => {
 accountRouter.get('/orders', requireCustomer, async (req, res) => {
   const { rows } = await pool.query(`
     SELECT o.order_no, o.status, o.total_amount, o.created_at, o.courier, o.tracking_no,
-           (SELECT string_agg(oi.name || ' ×' || oi.quantity, ', ' ORDER BY oi.id) FROM order_items oi WHERE oi.order_id = o.id) AS summary
+           (SELECT string_agg(oi.name || COALESCE(' · ' || oi.option_name, '') || ' ×' || oi.quantity, ', ' ORDER BY oi.id) FROM order_items oi WHERE oi.order_id = o.id) AS summary
     FROM orders o WHERE o.customer_id = $1 AND o.status NOT IN ('pending', 'failed', 'expired')
     ORDER BY o.created_at DESC LIMIT 100`, [req.customer.id])
   res.json(rows)

@@ -10,6 +10,7 @@ import { fillItem, listTemplates, productDraft } from './content.js'
 import { pool } from './db.js'
 import { approveItem, listReview, requestItem, saveItem } from './items.js'
 import { noticeMissing } from './notice.js'
+import { ALL_OPTIONS_SQL, currentOptions, optionPriceChanges, saveOptions } from './options.js'
 import { validateProduct } from './validate.js'
 
 export const UPLOAD_DIR = new URL('../uploads/', import.meta.url)
@@ -53,16 +54,35 @@ export async function itemRanges() {
 // 판매 중인 상품의 가격·당도·수확일이 바뀌면 누가 언제 무엇을 바꿨는지 남긴다 (거짓 표시를 나중에 따져 볼 수 있게)
 const WATCHED = [['price', '가격'], ['brix', '당도'], ['variety', '품종'], ['brix_measured_at', '당도 잰 날'], ['harvest_date', '수확일'], ['notice.origin', '원산지'], ['notice.expiry', '소비기한']]
 const watched = (product, key) => (key.startsWith('notice.') ? product.notice?.[key.slice(7)] : product[key])
-export async function recordChanges(before, after, who) {
+// optionChanges: 옵션이 있는 상품은 판매 중 옵션의 가격 변경을 옵션마다 남긴다 ([{ label, old, new }], options.js).
+// 이때 상품 가격은 옵션 최저가를 따라 바뀌는 값이라 따로 남기지 않는다
+export async function recordChanges(before, after, who, optionChanges = null) {
   if (before.status !== 'active') return
   // 숫자는 숫자로 비교한다 (DB 의 "14.0" 과 화면의 "14" 는 같은 값)
   const norm = (v) => (v == null || v === '' ? null : /^\d+(\.\d+)?$/.test(String(v)) ? String(Number(v)) : String(v))
-  for (const [key, label] of WATCHED) {
-    if (norm(watched(before, key)) === norm(watched(after, key))) continue
+  const changes = WATCHED
+    .filter(([key]) => !(optionChanges && key === 'price'))
+    .filter(([key]) => norm(watched(before, key)) !== norm(watched(after, key)))
+    .map(([key, label]) => ({ label, old: watched(before, key), new: watched(after, key) }))
+  for (const c of [...changes, ...(optionChanges ?? [])]) {
     await pool.query('INSERT INTO product_changes (product_code, field, old_value, new_value, changed_by) VALUES ($1, $2, $3, $4, $5)',
-      [before.product_code, label, norm(watched(before, key)), norm(watched(after, key)), who])
+      [before.product_code, c.label, norm(c.old), norm(c.new), who])
   }
 }
+
+// 옵션을 보냈으면 저장 전 옵션과 맞춰 본다. 이 상품에 없는 옵션 번호가 있으면 error,
+// 판매 중 옵션의 가격 변경은 changes (옵션 없는 상품이면 null → 수정 이력에 상품 가격으로 남긴다)
+export async function checkOptions(code, product) {
+  if (!product.options) return { changes: null }
+  const before = code ? await currentOptions(code) : []
+  if (product.options.some((o) => o.id && !before.some((b) => b.id === o.id))) {
+    return { error: '이 상품에 없는 옵션이 들어 있어요. 화면을 새로 고친 뒤 다시 저장해 주세요.' }
+  }
+  return { changes: product.options.length ? optionPriceChanges(before, product.options) : null }
+}
+
+// 판매 중지로 바꾼 옵션이 있으면 저장 안내에 붙인다
+export const stoppedNote = (stopped) => (stopped.length ? ` (주문 기록이 있는 옵션(${stopped.join(', ')})은 지우지 않고 판매 중지로 바꿨어요)` : '')
 
 // 바로 판매된 상품을 관리자가 확인했다고 표시
 adminRouter.post('/products/:code/checked', async (req, res) => {
@@ -89,7 +109,7 @@ adminRouter.get('/options', async (req, res) => {
 // 임시 저장 상품까지 모두
 adminRouter.get('/products', async (req, res) => {
   const { rows } = await pool.query(`
-    SELECT p.*, (p.stock = 0) AS sold_out, i.name AS item_name, i.category, i.status AS item_status, i.show_brix, s.name AS seller_name,
+    SELECT p.*, (p.stock = 0) AS sold_out, i.name AS item_name, i.category, i.status AS item_status, i.show_brix, s.name AS seller_name, ${ALL_OPTIONS_SQL},
            (SELECT count(*) FROM reviews r WHERE r.product_code = p.product_code AND r.info_match = 'no' AND NOT r.hidden)::int AS info_no,
            (SELECT count(*) FROM product_changes c WHERE c.product_code = p.product_code)::int AS changes
     FROM products p JOIN items i ON i.item_code = p.item_code JOIN sellers s ON s.seller_code = p.seller_code
@@ -140,10 +160,13 @@ adminRouter.post('/products', async (req, res) => {
   if (errors) return res.status(400).json({ error: errors.join(' '), errors })
   const problem = product.status === 'active' ? await noticeProblem(product) : null
   if (problem) return res.status(400).json({ error: problem, errors: [problem] })
+  const checked = await checkOptions(null, product)
+  if (checked.error) return res.status(400).json({ error: checked.error, errors: [checked.error] })
   const row = await insertProduct(product, '관리자 화면 등록')
   if (!row) return res.status(409).json({ error: '같은 상품 코드가 이미 있어요. 다른 코드를 써 주세요.' })
+  const saved = await saveOptions(product.product_code, product.options)
   console.log(`[admin] ${req.admin.loginId} 상품 등록 ${product.product_code} (${product.status})`)
-  res.status(201).json(row)
+  res.status(201).json(saved.product)
 })
 
 adminRouter.patch('/products/:code', async (req, res) => {
@@ -161,9 +184,12 @@ adminRouter.patch('/products/:code', async (req, res) => {
     const problem = await noticeProblem(product)
     if (problem) return res.status(400).json({ error: problem, errors: [problem] })
   }
+  const checked = await checkOptions(req.params.code, product)
+  if (checked.error) return res.status(400).json({ error: checked.error, errors: [checked.error] })
   if (product.status !== 'draft') product.review_note = null // 승인하면 반려 사유는 지운다
-  await recordChanges(current.rows[0], product, `관리자 ${req.admin.loginId}`)
-  const row = await updateProduct(req.params.code, product)
+  await recordChanges(current.rows[0], product, `관리자 ${req.admin.loginId}`, checked.changes)
+  await updateProduct(req.params.code, product)
+  const { product: row, stopped } = await saveOptions(req.params.code, product.options) // 옵션 저장, 상품 가격·재고를 옵션에 맞추기
   // 승인 기록 (믿을 만한 농가 판단에 쓴다). 반려·내리기는 관리자가 다시 승인할 때까지 그 농가의 자동 승인을 멈춘다
   const before = current.rows[0]
   if (before.status !== 'active' && product.status === 'active') {
@@ -174,7 +200,7 @@ adminRouter.patch('/products/:code', async (req, res) => {
   const what = current.rows[0].status === 'pending' && product.status !== 'pending'
     ? (product.status === 'active' ? ' (승인)' : ' (반려)') : ''
   console.log(`[admin] ${req.admin.loginId} 상품 수정 ${req.params.code}${what}`)
-  res.json(row)
+  res.json({ ...row, saved_note: stoppedNote(stopped) })
 })
 
 // 형식마다 파일 맨 앞에 오는 고정된 바이트
