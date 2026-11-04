@@ -55,6 +55,9 @@ export default defineConfig(({ mode }) => {
     server: {
       port,
       strictPort: true,
+      // Codespaces 의 포트 연결은 컨테이너 밖에서 들어온다. 127.0.0.1 로만 받으면 [포트] 탭 주소가 연결을 거부당한다
+      // 공용 실습 서버에서는 다른 계정이 들어오지 못하게 지금처럼 이 컴퓨터 안에서만 받는다
+      host: process.env.CODESPACES === 'true' || /\.app\.github\.dev/.test(env.PUBLIC_URL ?? '') ? true : undefined,
       // Vite 는 모르는 주소로 들어온 요청을 막는다. Codespaces 처럼 https://<이름>-3066.app.github.dev 로 들어오는 경우
       // npm run setup 이 .env 에 적어 둔 PUBLIC_URL 의 주소를 허용한다 (환경변수가 안 넘어오는 터미널에서도 되게)
       allowedHosts: [
