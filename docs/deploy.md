@@ -60,8 +60,9 @@ npm run admin-2fa -- <관리자 아이디>
 | `TRUST_PROXY_HOPS` | `1` | nginx 한 단 (손님 실제 IP로 횟수 제한) |
 | `SESSION_SECRET`, `DATA_KEY` | 새로 만들기 (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`) | 실습서버 값을 그대로 쓰지 않기 |
 | `PROXY_SECRET` | 비워도 됨 | `npm start`(배포 모드)는 이 서버가 맨 앞이라 검사하지 않음 |
-| `TOSS_CLIENT_KEY`, `TOSS_SECRET_KEY` | 계약 전: 테스트 키(`test_…`) / 계약 후: 라이브 키 | 운영(`NODE_ENV=production`)에서는 키 없이 결제할 수 없음 |
-| `REQUIRE_2FA` | `1` | 관리자 2단계 인증 필수 |
+| `TOSS_CLIENT_KEY`, `TOSS_SECRET_KEY` | 라이브 키 | 운영에서 테스트 키(`test_…`)면 돈 없이 결제 완료가 되어 주문을 받지 않음 |
+| `ALLOW_TEST_PAYMENTS` | 오픈 전 리허설 때만 `1`, 끝나면 지우기 | 운영에서 테스트 키로 주문 시험 |
+| `REQUIRE_2FA` | 비워 두기 | 운영에서는 기본으로 필수. `0`을 넣어야만 꺼짐. 켜기 전에 `npm run admin-2fa -- 아이디`로 등록 |
 | `ADMIN_ALLOWED_IPS` | 회사 사무실 IP | 관리자 화면은 사무실에서만 |
 | `SMTP_*`, `MAIL_FROM`, `ADMIN_EMAIL` | 회사 메일 계정 | 주문·문의 알림 |
 | `AI_DAILY_LIMIT` | 상황에 맞게 (0이면 AI 끄기) | 상담은 대부분 AI 없이 답함 |
@@ -112,7 +113,7 @@ sudo systemctl restart farm-mall      # DB 구조 변경(schema.sql)은 켤 때 
 ## 8. 열기 전 점검
 
 - [ ] `https://도메인` 접속, 자물쇠 표시, `http://` 는 https로 넘어감
-- [ ] 테스트 키로 주문 → 결제 → 관리자 [주문]에 보임 → 취소까지
+- [ ] `ALLOW_TEST_PAYMENTS=1`과 테스트 키로 주문 → 결제 → 관리자 [주문]에 보임 → 취소까지. 끝나면 지우고 라이브 키로 바꾸기
 - [ ] 결제창(토스)이 콘텐츠 보안 정책(CSP)에 막히지 않는지: 브라우저 개발자 도구 콘솔에 `Content-Security-Policy` 오류가 없는지 (막히면 `server/web.js` 의 CSP 에 그 주소 추가)
 - [ ] 관리자 로그인이 사무실 IP + 2단계 인증에서만 됨
 - [ ] 주문 알림 메일이 손님·관리자에게 감

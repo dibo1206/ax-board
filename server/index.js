@@ -20,6 +20,7 @@ import { adminInquiryRouter, maskName, publicInquiryRouter } from './inquiry.js'
 import { publicItem } from './items.js'
 import { GRADE_LABEL } from './brix.js'
 import { checkDataKey } from './crypto.js'
+import { orderingOpen, paymentMode } from './payments.js'
 import { encryptExisting } from './pii.js'
 import { buildNotice } from './notice.js'
 import { adminOrderRouter, memberOrderRouter, publicOrderRouter, sellerOrderRouter, startOrderSweeper } from './orders.js'
@@ -41,6 +42,12 @@ try {
   process.exit(1)
 }
 const SERVE = process.argv.includes('--serve') // 배포 모드: 화면까지 이 서버가 보낸다
+if (process.env.NODE_ENV === 'production' && !process.env.ADMIN_ALLOWED_IPS) {
+  console.warn('[server] ADMIN_ALLOWED_IPS 가 없어서 관리자 로그인이 인터넷 전체에 열려 있어요. 회사 IP를 넣어 주세요')
+}
+if (paymentMode() !== 'off' && !orderingOpen()) {
+  console.warn('[server] 운영에 테스트 결제 키가 들어 있어 주문을 받지 않아요. 라이브 키를 넣거나, 리허설이면 ALLOW_TEST_PAYMENTS=1')
+}
 if (process.env.NODE_ENV === 'production' && !process.env.PUBLIC_URL) {
   console.warn('[server] PUBLIC_URL 이 없어요. 운영에서는 꼭 넣어 주세요 (메일 링크·sitemap·요청 출처 확인에 쓰임)')
 }
@@ -148,7 +155,7 @@ app.get('/api/health', async (req, res) => {
 // 수확 며칠째인지와 당도 등급 이름을 붙인다 (신선도 등급은 매기지 않고 사실만 보여 준다)
 const koreaToday = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
 const harvestDays = (date) => (date ? Math.max(1, Math.floor((Date.parse(koreaToday()) - Date.parse(String(date).slice(0, 10))) / 86_400_000) + 1) : null)
-const publicProduct = ({ review_note: _n, review_reason: _r, rejected_at: _x, admin_approved_at: _a, auto_approved_at: _o, auto_checked_at: _c, ...p }) => ({
+const publicProduct = ({ review_note: _n, review_reason: _r, rejected_at: _x, admin_approved_at: _a, auto_approved_at: _o, auto_checked_at: _c, source: _s, external_url: _u, ...p }) => ({
   ...p,
   brix_grade: GRADE_LABEL[p.brix_rank] ?? null,
   harvest_days: p.category === '가공품' ? null : harvestDays(p.harvest_date),

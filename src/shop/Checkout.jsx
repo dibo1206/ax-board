@@ -67,7 +67,7 @@ function PaymentStep({ order, buyer }) {
       {order.payment.test && <p className="warn">테스트 결제예요. 실제로 돈이 나가지 않아요.</p>}
       {order.payment.mode === 'toss' ? <><div id="payment-method" /><div id="payment-agreement" /></> : <p className="muted">결제 키가 아직 없어서 개발용 테스트 결제로 진행해요.</p>}
       {error && <p className="error">{error}</p>}
-      <p className="muted">30분 안에 결제하지 않으면 주문이 취소돼요.</p>
+      <p className="muted">15분 안에 결제하지 않으면 주문이 취소돼요.</p>
       <button type="button" className="button" onClick={pay} disabled={!ready}>{ready ? `${won(order.amount)} 결제하기` : '결제창 준비 중…'}</button>
     </section>
   )
