@@ -64,7 +64,7 @@ const ROUTES = [
   },
   {
     kind: 'order',
-    re: /주문.{0,6}(확인|조회|어디|언제|취소|상태)|배송.{0,6}(언제|어디|조회|출발|상태)|송장|운송장|택배.{0,4}(언제|어디|조회)/,
+    re: /(?<!(오늘|지금)\s?)주문.{0,6}(확인|조회|어디|언제|취소|상태)|배송.{0,6}(언제|어디|조회|출발|상태)|송장|운송장|택배.{0,4}(언제|어디|조회)/,
     answer: () => '주문 상태와 송장 번호는 [주문 조회]에서 주문번호와 주문자 휴대폰 번호로 확인할 수 있어요. '
       + '배송 준비가 시작되기 전(결제 완료 상태)이면 거기서 바로 취소도 할 수 있어요. 주문 정보는 상담창에서 확인하지 않아요.',
     handoff: false,
@@ -87,6 +87,34 @@ const ROUTES = [
     action: 'lookup',
   },
   {
+    kind: 'payment',
+    re: /결제|결재|카드|무통장|계좌|네이버\s?페이|카카오\s?페이|토스(?!트)|현금\s?영수증|영수증/,
+    answer: () => `결제는 주문서에서 토스페이먼츠 결제창으로 해요. 쓸 수 있는 결제 수단은 결제창에서 볼 수 있어요. 계좌 번호나 카드 번호는 상담창에 적지 말아 주세요. 영수증이나 다른 결제 문의는 고객센터 ${SHOP.phone}로 알려 주세요 (${SHOP.hours}).`,
+    handoff: false,
+    action: null,
+  },
+  {
+    kind: 'member',
+    re: /^(?!.*(쿠폰|할인|포인트|적립)).*(비회원|회원\s?(아니|없이|가입)|가입\s?(안|없이|해야))/,
+    answer: () => '회원이 아니어도 주문할 수 있어요. 비회원 주문은 주문번호와 휴대폰 번호로 [주문 조회]에서 확인해요. 회원으로 가입하면 마이페이지에서 주문 내역과 배송지를 관리할 수 있어요.',
+    handoff: false,
+    action: null,
+  },
+  {
+    kind: 'whoami',
+    re: /(봇|챗봇|사람|상담사|상담원|AI).{0,4}(이에요|예요|인가요|이야|야\?|임\?|맞아요)/i,
+    answer: () => `저는 쇼핑몰 상담 챗봇이에요. 상품, 배송, 주문을 안내하고, 판단이 필요한 내용은 담당자에게 넘겨요. 사람과 상담하려면 고객센터 ${SHOP.phone}로 연락해 주세요.`,
+    handoff: false,
+    action: null,
+  },
+  {
+    kind: 'greeting',
+    re: /^(안녕|안녕하세요|하이|반가워요?|감사합니다|감사해요|감사요|고마워요?|고맙습니다|ㅇㅋ\s?감사요?|네\s?감사합니다|넵\s?감사합니다)[\s!.~ㅎㅋ^]*$/,
+    answer: () => '네. 상품, 배송, 주문에 궁금한 점이 있으면 편하게 물어봐 주세요.',
+    handoff: false,
+    action: null,
+  },
+  {
     kind: 'no_subscription',
     re: /정기\s?배송|구독/,
     answer: () => `정기배송은 지금 하지 않아요. 필요할 때마다 주문해 주세요. 정기적으로 많이 필요하면 상품 페이지의 [기업 구매 문의]로 알려 주세요.`,
@@ -95,8 +123,8 @@ const ROUTES = [
   },
   {
     kind: 'shipping',
-    re: /배송비|무료\s?배송|택배비|언제\s?(와|도착|받)|며칠.{0,4}(걸|와)/,
-    answer: () => `배송비는 농가마다 따로 붙어요. 농가별로 ${SHIPPING.fee.toLocaleString('ko-KR')}원이고, 그 농가 상품을 ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상 사면 그 농가 배송비는 무료예요. 장바구니에서 농가별 배송비를 볼 수 있어요. ${SHIPPING.leadTime}.`,
+    re: /배송비|무료\s?배송|택배비|언제\s?(와|도착|받|출고|발송)|며칠.{0,4}(걸|와)|몇일|영업일|내일.{0,6}(오|와|도착|받)|오늘.{0,8}(출고|발송|도착)|당일\s?(발송|배송|출고)|주말.{0,6}(배송|출고)/,
+    answer: () => `배송비는 농가마다 따로 붙어요. 농가별로 ${SHIPPING.fee.toLocaleString('ko-KR')}원이고, 그 농가 상품을 ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상 사면 그 농가 배송비는 무료예요. 장바구니에서 농가별 배송비를 볼 수 있어요. ${SHIPPING.leadTime}. 도착 날짜는 택배사 사정에 따라 달라서 약속드리기 어려워요.`,
     handoff: false,
     action: null,
   },
@@ -150,7 +178,8 @@ function loadCatalog() {
 
 // 질문(과 앞선 질문)에 나온 품목을 찾는다. 긴 이름부터 찾고 지워서 '배즙' 안의 '배'가 다시 잡히지 않게 한다
 function findItems(text, items) {
-  let rest = text.replace(/배송|배달|배합|배치|배려/g, ' ')
+  let rest = text.replace(/배송|배달|배합|배치|배려/g, ' ').replace(/메실/g, '매실').replace(/황도/g, '복숭아')
+  if (!/랑|하고|비교|차이/.test(text)) rest = rest.replace(/부사|후지/g, '사과')
   const found = []
   for (const item of [...items].sort((a, b) => b.name.length - a.name.length)) {
     if (rest.includes(item.name)) {
@@ -262,8 +291,8 @@ const FACTS = [
       : `${p.label} 가격은 ${won(p.price)}이에요 (판매 단위: ${p.unit}).${p.sold_out ? ' 다만 지금은 품절이라 살 수 없어요.' : ''}`),
   },
   {
-    re: /살 수 있|구매.{0,4}(가능|돼|되나)|재고|품절|남았|있어요\?|있나요/,
-    explicit: /살 수 있|재고|품절|남았/,
+    re: /팔아|파나|파니|파냐|파시|파세요|파는지|판매\s?(해|하|중)|살\s?수\s?있|주문\s?(돼|되|가능|할\s?수)|구매.{0,4}(가능|돼|되나)|구입|재고|품절|남았|재입고|다시\s?(들어|나와)|^\S+(\s[\d.]+\S*)?\s?(있어|있나|있냐|있음|있니)/,
+    explicit: /살\s?수\s?있|재고|품절|남았|팔아|파나/,
     say: (p) => (p.sold_out
       ? `${p.label} 상품은 지금 품절이라 살 수 없어요. 다시 들어오는 날짜는 아직 안내된 정보가 없어요.`
       : p.picked.length
@@ -301,7 +330,7 @@ const NEEDS_EXPLAIN = /보관|레시피|만들|개봉|먹어도|드셔도|마셔
 
 // ---------- 2-2. 추천 질문 (6단계) ----------
 // 말에서 조건(태그·예산)을 찾고, 못 찾으면 AI에게 태그만 고르게 한다. 상품은 항상 DB 규칙(recommend.js)이 고른다
-const WANTS_RECOMMEND = /추천|골라|뭐가 좋|뭘 사|뭐 사|뭐 살까/
+const WANTS_RECOMMEND = /추천|골라|뭐가 좋|뭘 사|뭐 사|뭐 살까|쓸\s?만한|먹을\s?만한|살\s?만한|달콤한\s?(과일|거|것)|먹을\s?(달콤|새콤|담백)/
 // "사과로 만들 수 있는 요리 추천해 주세요"처럼 품목 이름과 요리·레시피를 함께 물으면 상품 추천이 아니라 그 품목의 레시피 질문이다
 // (품목 없이 "요리해 먹기 좋은 상품 추천"이면 지금처럼 태그 추천)
 const ASKS_RECIPE = /레시피|요리|만들|만드|해\s?먹/
@@ -365,8 +394,11 @@ function narrow(products, message, catalog) {
   return narrowed.length ? narrowed : products
 }
 
+// 자료에 없을 수 있는 속성을 묻는 말: 파는지·재고 답으로 넘겨짚지 않는다
+const ATTRIBUTE_WORD = /유기농|무농약|농약|친환경|인증|왁스|설탕|첨가|gap|원액|국산|섞어|혼합|묶어/i
 function answerFact(message, catalog, ctx) {
-  if (NEEDS_EXPLAIN.test(message) || TOPICS.some((t) => t.re.test(message)) || dangerSign(message, catalog.items)) return null
+  if (ATTRIBUTE_WORD.test(message)) return null
+  if (NEEDS_EXPLAIN.test(message.replace(/(가격|값|얼마).{0,4}어떻게/, '')) || TOPICS.some((t) => t.re.test(message)) || dangerSign(message, catalog.items)) return null
   let facts = FACTS.filter((f) => f.re.test(message))
   if (!facts.length) return null
   // "당도는 얼마예요?", "몇 개 들어 있어요?"처럼 겹치면 구체적인 쪽(당도·개수)만 답한다
@@ -384,8 +416,7 @@ function answerFact(message, catalog, ctx) {
     const item = catalog.items.find((i) => i.item_code === p.item_code)
     const labeled = { ...p, label: p.name.replace(/\[예시\]\s*/g, ''), picked: pickOptions(p, message) }
     for (const f of facts) {
-      if (f.needsBrix && !item.show_brix) return null
-      sentences.push(f.say(labeled))
+      sentences.push(f.needsBrix && !item.show_brix ? `${labeled.label} 상품은 당도를 표시하지 않는 품목이에요.` : f.say(labeled))
     }
   }
   return {
@@ -447,14 +478,14 @@ function dangerSign(message, items) {
 
 // 위에서부터 먼저 맞는 주제 하나로 답한다 ("먹어도 돼요?"가 "보관"보다 먼저)
 const TOPICS = [
-  { kind: 'safety', word: '먹어도 괜찮은지', re: new RegExp(`(먹어|드셔|마셔|섭취해)도|싹(이|\\s?났)|상했|상한\\s?(것|거)|변했|변색|곰팡|이상한\\s?냄새|냄새가\\s?(나|이상)|(술|발효|시큼한|썩은)\\s?냄새|물렀|물러졌|썩|끈적|미끈|점액|쭈글|초록색으로|${ELAPSED.source}`) },
+  { kind: 'safety', word: '먹어도 괜찮은지', re: new RegExp(`(먹어|드셔|마셔|섭취해)도|드실\\s?수|마실\\s?수|상하면|싹(이|\\s?났)|상했|상한\\s?(것|거)|변했|변색|곰팡|이상한\\s?냄새|냄새가\\s?(나|이상)|(술|발효|시큼한|썩은)\\s?냄새|물렀|물러졌|썩|끈적|미끈|점액|쭈글|초록색으로|${ELAPSED.source}`) },
   { kind: 'compare', word: '차이', re: /차이|비교|뭐가\s?달라|다른\s?점|뭐가\s?나아|어떤\s?게\s?나아/ },
   { kind: 'recipe', word: '레시피', re: /레시피|만들|만드|요리|활용|먹는\s?(법|방법)|어떻게\s?먹|해\s?먹|비율|음료|에이드/ },
-  { kind: 'storage', word: '보관법', re: /보관|냉장|냉동|상온|실온|어디에?\s?(둬|두|놔)|(같이|함께)\s?(둬|두|놔|넣)|(둬|두어|놔)도|넣어도|개봉|뜯(은|으면|고)|언제까지|며칠|유통\s?기한|얼마나\s?(가|두|오래)/ },
+  { kind: 'storage', word: '보관법', re: /보관|오래\s?두|둬야|두는\s?법|냉장|냉동|상온|실온|어디에?\s?(둬|두|놔)|(같이|함께)\s?(둬|두|놔|넣)|(둬|두어|놔)도|넣어도|개봉|뜯(은|으면|고)|언제까지|며칠|유통\s?기한|얼마나\s?(가|두|오래)/ },
   { kind: 'taste', word: '맛', re: /맛있|맛이\s?(어때|좋|괜찮)|맛은|무슨\s?맛/ },
   { kind: 'allergy', word: '알레르기 정보', re: /알레르기|알러지/ },
-  { kind: 'origin', word: '산지', re: /어디서(?!\s?(사|살|구매|주문))|산지|원산지|농가|누가\s?(키|만들)|재배|키운|생산/ },
-  { kind: 'harvest', word: '수확일', re: /수확|언제\s?딴|딴\s?지/ },
+  { kind: 'origin', word: '산지', re: /어디서(?!\s?(사|살|구매|주문))|어디\s?(꺼|거|산)|국산|국내산|어느\s?(농장|농원)|산지|원산지|농가|누가\s?(키|만들)|재배|키운|생산/ },
+  { kind: 'harvest', word: '수확일', re: /수확|언제\s?(딴|캔|캐|땄)|딴\s?지|캔\s?지/ },
 ]
 
 // 품목 하나로 답하는 주제
@@ -582,9 +613,14 @@ function answerTemplate(message, catalog, ctx) {
 }
 
 // ---------- 2-3-0. 상품이 없는 등급, 알아볼 수 없는 말: 비슷한 상품 답으로 넘겨짚지 않는다 ----------
-const GRADE_WORD = /못난이|등외|흠과|파지/
+const GRADE_WORD = /못난이|등외|흠과|흠집|파지/
+const ASKS_CATALOG = /(뭐|뭘|무엇|무슨|어떤)\s?(상품|과일|채소|걸|것|거)?\s?(을|를|이|가)?\s?(팔|파나|파세|판매|있어|있나|있음)|상품\s?(목록|종류)|판매\s?(목록|품목)/
 function answerOddWords(message, catalog, ctx) {
   const base = { sources: [], productCode: ctx.current?.product_code ?? null, handoff: false, action: null, blocked: false }
+  const selling = catalog.items.filter((i) => catalog.products.some((p) => p.item_code === i.item_code)).map((i) => i.name)
+  if (ASKS_CATALOG.test(message) && !findItems(message, catalog.items).length && selling.length) {
+    return { ...base, answer: `지금 파는 품목: ${selling.join(', ')}. 품목 이름을 넣어 물어보시면 가격과 당도를 알려 드려요.`, suggestions: selling.slice(0, 3).map((name) => `${name} 가격`), model: 'rule:list' }
+  }
   if (GRADE_WORD.test(message) && !catalog.products.some((p) => GRADE_WORD.test(p.name))) {
     return { ...base, answer: `못난이·등외 상품은 지금 따로 팔지 않아요. 지금 파는 품목 ${catalog.items.filter((i) => catalog.products.some((p) => p.item_code === i.item_code)).map((i) => i.name).join(', ')} 중에서 골라 주세요.`, model: 'rule:grade' }
   }
@@ -700,8 +736,10 @@ async function answerSimilar(message, catalog, ctx, fallbackProduct) {
 
 // ---------- 2-4-1. "수박도 팔아요?": 파는 품목이 아니면 지어내지 않고 지금 파는 품목을 알려 준다 ----------
 const ASKS_SELLING = /팔아|파나요|파시|파세요|파는지|판매\s?(해|하|중)/
+const ASKS_HAVE = /^[가-힣]{1,8}\s?(도|은|는|이|가)?\s?(언제\s?)?(있어요|있나요|있어|있나|있냐|있음|있습니까|나와요|나오나요)[?!.~ㅎㅋ\s]*$/
+const NOT_A_PRODUCT = /재고|쿠폰|포인트|적립|영수증|옵션|사이즈|규격|인증|선물|포장|상담|문의|번호|배송|택배|결제|카드|할인|후기|리뷰|품절|이거|그거|저거|뭐|무엇|아무|상품|과일|채소/
 function answerNotSold(message, catalog, ctx) {
-  if (ctx.items.length || !ASKS_SELLING.test(message)) return null
+  if (ctx.items.length || !(ASKS_SELLING.test(message) || (ASKS_HAVE.test(message.trim()) && !NOT_A_PRODUCT.test(message)))) return null
   // "선물세트 팔아요?"처럼 상품 이름 조각을 말했으면 파는 상품일 수 있어서 넘어간다
   const nameWords = catalog.products.flatMap((p) => label(p).split(/\s+/)).filter((w) => w.length >= 2 && !/\d/.test(w))
   if (nameWords.some((w) => message.includes(w))) return null
@@ -719,6 +757,7 @@ function askFirst(ctx, fallbackProduct) {
   const item = ctx.items[0]
   // 상품과 상관없는 질문(날씨 등)은 AI에게 물어도 답할 자료가 없어서 AI 버튼을 보여 주지 않는다
   const canAskAi = Boolean(item) && keyLoaded() && dailyLimit() > 0
+  const facts = item ? ctx.products.filter((p) => p.item_code === item.item_code).slice(0, 2).map((p) => choiceFacts(p, item)).join(' / ') : ''
   if (!item) {
     return {
       answer: `저는 이 쇼핑몰의 상품·배송·주문 질문에 답해 드려요. 아래에서 고르시거나 상품 이름을 넣어 다시 물어봐 주세요. ${QNA_HINT}`,
@@ -727,7 +766,7 @@ function askFirst(ctx, fallbackProduct) {
     }
   }
   return {
-    answer: `등록된 상품 정보에서 바로 맞는 답을 찾지 못했어요. 아래 질문 중에 고르시거나${canAskAi ? ', [AI에게 물어보기]를 누르면 AI가 상품 정보를 읽고 답해 드려요' : ''}. ${QNA_HINT}`,
+    answer: `등록된 상품 정보에서 바로 맞는 답을 찾지 못했어요. ${facts ? `참고로 등록된 ${item.name} 정보는 이래요: ${facts}. ` : ''}아래 질문 중에 고르시거나${canAskAi ? ', [AI에게 물어보기]를 누르면 AI가 상품 정보를 읽고 답해 드려요' : ''}. ${QNA_HINT}`,
     suggestions: [`${item.name} 보관법`, `${item.name} 레시피`, `${item.name} 가격`],
     askAi: canAskAi,
     sources: [],
@@ -943,6 +982,12 @@ const tooMany = createLimiter({ limit: 15, windowMs: 10 * 60_000 })
 // [AI에게 물어보기]는 따로 더 적게: 비회원은 IP당 10분에 3번, 회원은 계정당 10분에 10번 (하루 전체 상한은 ai.js)
 const tooManyAiGuest = createLimiter({ limit: 3, windowMs: 10 * 60_000 })
 const tooManyAiMember = createLimiter({ limit: 10, windowMs: 10 * 60_000, key: (req) => `customer:${req.customerId}` })
+// 하루 전체 상한은 모든 손님이 함께 쓰므로, 한 사람이 혼자 다 쓰지 못하게 하루 몫을 따로 둔다 (.env 의 AI_DAILY_PER_USER, 질문 수).
+// 기본은 전체 상한의 1/10 — 질문 하나가 AI를 최대 3번 부르니 한 사람이 하루 전체의 30% 안쪽만 쓴다.
+// 개발 중에는 팀 모두가 같은 IP(SSH 터널)라 따로 두지 않는다
+const aiShare = Number(process.env.AI_DAILY_PER_USER || (process.env.NODE_ENV === 'production' ? Math.max(1, Math.floor(dailyLimit() / 10)) : dailyLimit()))
+const aiTodayGuest = createLimiter({ limit: aiShare, windowMs: 24 * 3_600_000 })
+const aiTodayMember = createLimiter({ limit: aiShare, windowMs: 24 * 3_600_000, key: (req) => `customer:${req.customerId}` })
 
 function cleanHistory(history) {
   if (!Array.isArray(history)) return []
@@ -965,6 +1010,9 @@ chatRouter.post('/chat', async (req, res) => {
     req.customerId = customer?.id
     if (customer ? tooManyAiMember(req) : tooManyAiGuest(req)) {
       return res.status(429).json({ error: `AI 질문은 잠시 후 다시 해 주세요.${customer ? '' : ' 로그인하면 더 많이 물어볼 수 있어요.'} ${QNA_HINT}` })
+    }
+    if (customer ? aiTodayMember(req) : aiTodayGuest(req)) {
+      return res.status(429).json({ error: `오늘 물어볼 수 있는 AI 질문을 다 썼어요. 내일 다시 물어봐 주세요. ${QNA_HINT}` })
     }
   }
 

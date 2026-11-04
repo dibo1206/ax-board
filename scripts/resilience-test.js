@@ -17,7 +17,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 // ---------- 가짜 토스 결제 서버 ----------
 // paymentKey 앞부분으로 상황을 고른다: ok_ 정상, slow_ 승인 후 늦게 답함, drop_ 승인 후 연결 끊음,
-// err500_ 승인 안 하고 500, reject_ 카드 거절, lookupdown_ 승인 후 늦게 답하고 조회도 안 됨
+// err500_ 승인 안 하고 500, reject_ 카드 거절, lookupdown_ 승인 후 늦게 답하고 조회도 안 됨,
+// forged_ 이 주문의 결제가 아닌 키(주문번호만 아는 사람이 지어낸 키 — 토스는 결제 없음으로 거절)
 const payments = new Map() // orderId → 결제
 const idem = new Map() // Idempotency-Key → 첫 응답
 let lookupDown = false
@@ -50,7 +51,11 @@ const fake = http.createServer((req, res) => {
     if (req.method === 'POST' && path === '/confirm') {
       const { paymentKey, orderId, amount } = JSON.parse(raw)
       if (paymentKey.startsWith('ok_')) return remember(200, done(orderId, paymentKey, amount))
-      if (paymentKey.startsWith('reject_')) return remember(400, { code: 'REJECT_CARD_PAYMENT', message: '한도 초과' })
+      if (paymentKey.startsWith('reject_')) { // 토스처럼 거절된 결제도 조회하면 ABORTED로 남는다
+        payments.set(orderId, { paymentKey, orderId, status: 'ABORTED', method: '카드', totalAmount: amount })
+        return remember(400, { code: 'REJECT_CARD_PAYMENT', message: '한도 초과' })
+      }
+      if (paymentKey.startsWith('forged_')) return remember(404, { code: 'NOT_FOUND_PAYMENT', message: '존재하지 않는 결제 정보' })
       if (paymentKey.startsWith('err500_')) return remember(500, { code: 'FAILED_INTERNAL_SYSTEM_PROCESSING', message: '일시 오류' })
       const payment = done(orderId, paymentKey, amount) // 아래는 모두 "토스에서는 승인됨"
       if (key) idem.set(key, [200, payment])
@@ -126,6 +131,8 @@ try {
   let o = await newOrder(child)
   let r = await confirm(child, o, 'ok_')
   check('정상 결제', r.status === 200 && (await orderRow(o.orderNo)).status === 'paid')
+  const leaked = ['buyer_name', 'buyer_phone', 'buyer_email', 'receiver_name', 'receiver_phone', 'zipcode', 'address1', 'address2', 'memo'].filter((k) => k in (r.data ?? {}))
+  check('결제 승인 응답에 이름·연락처·주소 없음', r.status === 200 && !leaked.length, leaked.join(', '))
 
   // 2. 승인됐는데 답이 시간 초과로 안 옴 → 조회로 확인해 결제 완료
   o = await newOrder(child)
@@ -142,6 +149,24 @@ try {
   o = await newOrder(child)
   r = await confirm(child, o, 'reject_')
   check('카드 거절 → 주문 실패, 재고 복구', r.status === 402 && (await orderRow(o.orderNo)).status === 'failed' && (await stock('carrot_3kg')) === s0)
+
+  // 4-1. 주문번호만 아는 사람이 남의 결제 전 주문을 닫으려 함 (지어낸 결제키, 틀린 금액, 결제용 표 없는 실패 처리)
+  //      → 주문은 그대로 결제 전이고 재고도 잡혀 있어서, 주인은 그대로 결제할 수 있다
+  s0 = await stock('carrot_3kg')
+  o = await newOrder(child)
+  const forged = await confirm(child, o, 'forged_')
+  const wrongAmount = await call(child, 'POST', `/orders/${o.orderNo}/confirm`, { paymentKey: `ok_${o.orderNo}`, amount: o.amount + 1000 })
+  const noToken = await call(child, 'POST', `/orders/${o.orderNo}/fail`, { code: 'PAY_PROCESS_CANCELED' })
+  const stillPending = (await orderRow(o.orderNo)).status === 'pending' && (await stock('carrot_3kg')) === s0 - 1
+  r = await confirm(child, o, 'ok_')
+  check('주문번호만으로는 남의 주문을 못 닫음 → 주인은 그대로 결제', forged.status === 402 && wrongAmount.status === 400 && noToken.status === 403 && stillPending
+    && r.status === 200 && (await orderRow(o.orderNo)).status === 'paid', `지어낸 키 ${forged.status}, 틀린 금액 ${wrongAmount.status}, 표 없는 실패 ${noToken.status}, 결제 ${r.status}`)
+
+  // 4-2. 결제창에서 취소하고 돌아옴 (주문을 만든 화면의 결제용 표) → 바로 실패·재고 복구
+  s0 = await stock('carrot_3kg')
+  o = await newOrder(child)
+  r = await call(child, 'POST', `/orders/${o.orderNo}/fail`, { code: 'PAY_PROCESS_CANCELED', token: o.payToken })
+  check('결제창 취소 → 결제용 표로 실패 처리, 재고 복구', r.status === 204 && (await orderRow(o.orderNo)).status === 'failed' && (await stock('carrot_3kg')) === s0)
 
   // 5. 결제사 500(결과 모름) + 조회해도 결제 없음 → 실패로 단정하지 않고 기다림 → 30분 정리 때 만료·재고 복구
   s0 = await stock('carrot_3kg')

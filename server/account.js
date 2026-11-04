@@ -2,7 +2,7 @@
 // 비회원 주문은 그대로 되고, 로그인한 손님의 주문은 계정에 묶여 마이페이지에서 본다.
 import { createHash, randomBytes } from 'node:crypto'
 import express from 'express'
-import { clearFails, hashPassword, isLocked, noteFail, passwordMatches, readCookie, setCookie, signToken, verifyPassword, verifyToken } from './auth.js'
+import { clearFails, hashPassword, passwordMatches, readCookie, reserveAttempt, setCookie, signToken, undoAttempt, verifyPassword, verifyToken } from './auth.js'
 import { lookupHash, openText, sealText } from './crypto.js'
 import { pool } from './db.js'
 import { createLimiter } from './limit.js'
@@ -87,12 +87,13 @@ accountRouter.post('/login', async (req, res) => {
   const email = text(req.body.email).toLowerCase().slice(0, 254)
   const password = typeof req.body.password === 'string' ? req.body.password.slice(0, 200) : ''
   const key = `c:${email}`
-  if (isLocked(key, req.ip)) return res.status(429).json({ error: '로그인을 여러 번 틀렸어요. 10분 뒤에 다시 시도해 주세요.' })
+  // 실패는 비밀번호를 확인하기 전에 미리 센다 (동시에 여러 번 보내 잠금을 피하지 못하게, server/auth.js)
+  if (!reserveAttempt(key, req.ip)) return res.status(429).json({ error: '로그인을 여러 번 틀렸어요. 10분 뒤에 다시 시도해 주세요.' })
   const { rows } = await pool.query('SELECT * FROM customers WHERE email_hash = $1 AND deleted_at IS NULL', [lookupHash(email)])
   if (!(await passwordMatches(password, rows[0]?.password_hash))) {
-    noteFail(key, req.ip)
     return res.status(401).json({ error: '이메일 또는 비밀번호가 맞지 않아요.' })
   }
+  undoAttempt(key, req.ip)
   clearFails(key)
   await pool.query('UPDATE customers SET last_login_at = now() WHERE id = $1', [rows[0].id])
   startSession(res, rows[0])
@@ -130,11 +131,12 @@ accountRouter.patch('/me', requireCustomer, async (req, res) => {
 // 비밀번호 변경: 지금 비밀번호 확인 → 바꾸면 다른 기기의 로그인은 모두 끊긴다
 accountRouter.post('/password', requireCustomer, async (req, res) => {
   // 로그인 쿠키를 훔친 사람이 지금 비밀번호를 맞춰 보지 못하게 로그인과 같은 잠금을 쓴다
-  if (isLocked(`c:${req.customer.email}`, req.ip)) return res.status(429).json({ error: '여러 번 틀렸어요. 10분 뒤에 다시 시도해 주세요.' })
+  const key = `c:${req.customer.email}`
+  if (!reserveAttempt(key, req.ip)) return res.status(429).json({ error: '여러 번 틀렸어요. 10분 뒤에 다시 시도해 주세요.' })
   if (!(await verifyPassword(String(req.body.current ?? ''), req.customer.password_hash))) {
-    noteFail(`c:${req.customer.email}`, req.ip)
     return res.status(401).json({ error: '지금 비밀번호가 맞지 않아요.' })
   }
+  undoAttempt(key, req.ip)
   const weak = checkPassword(req.body.next, req.customer.email)
   if (weak) return res.status(400).json({ error: weak })
   const { rows } = await pool.query(
@@ -148,11 +150,12 @@ accountRouter.post('/password', requireCustomer, async (req, res) => {
 
 // 탈퇴: 비밀번호 확인 → 계정 개인정보를 지운다. 주문 기록은 전자상거래법에 따라 5년 보관(주문에 담긴 배송 정보만)
 accountRouter.delete('/me', requireCustomer, async (req, res) => {
-  if (isLocked(`c:${req.customer.email}`, req.ip)) return res.status(429).json({ error: '여러 번 틀렸어요. 10분 뒤에 다시 시도해 주세요.' })
+  const key = `c:${req.customer.email}`
+  if (!reserveAttempt(key, req.ip)) return res.status(429).json({ error: '여러 번 틀렸어요. 10분 뒤에 다시 시도해 주세요.' })
   if (!(await verifyPassword(String(req.body.password ?? ''), req.customer.password_hash))) {
-    noteFail(`c:${req.customer.email}`, req.ip)
     return res.status(401).json({ error: '비밀번호가 맞지 않아요.' })
   }
+  undoAttempt(key, req.ip)
   await pool.query(
     `UPDATE customers SET email = $2, email_hash = NULL, name = '탈퇴 회원', phone = '', zipcode = NULL, address1 = NULL, address2 = NULL,
        password_hash = $3, session_version = session_version + 1, deleted_at = now() WHERE id = $1`,

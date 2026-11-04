@@ -131,7 +131,8 @@ export function OrderDetail({ order, phone = '', onConfirm = null, onReturn = nu
         <dt>상태</dt><dd>{ORDER_STATUS[order.status] ?? order.status}{order.is_test && <span className="badge pending"> 테스트 결제</span>}</dd>
         <dt>주문일</dt><dd>{when(order.created_at)}</dd>
         {order.payment_method && <><dt>결제</dt><dd>{order.payment_method} · {won(order.total_amount)}</dd></>}
-        <dt>받는 분</dt><dd>{order.receiver_name} · ({order.zipcode}) {order.address1} {order.address2 ?? ''}</dd>
+        {/* 결제 완료 화면의 응답에는 받는 분·주소가 없다 (주문 조회에서 휴대폰 번호로 확인한 뒤에 보인다) */}
+        {order.receiver_name && <><dt>받는 분</dt><dd>{order.receiver_name} · ({order.zipcode}) {order.address1} {order.address2 ?? ''}</dd></>}
         {/* 농가마다 따로 보낸다: 농가별 배송 상태·송장 (한 농가만이면 송장 한 줄) */}
         {order.shipments?.length > 1 ? (
           <><dt>배송</dt><dd>
@@ -262,10 +263,13 @@ export function OrderFail() {
   useEffect(() => {
     if (started.current) return
     started.current = true
-    // 결제창에서 그냥 닫으면 orderId가 안 오기도 해서, 결제 시작할 때 저장해 둔 주문번호를 쓴다
+    // 결제창에서 그냥 닫으면 orderId가 안 오기도 해서, 결제 시작할 때 저장해 둔 주문번호를 쓴다.
+    // 실패 처리에는 주문을 만들 때 받은 결제용 표가 필요하다 (없으면 서버가 15분 정리 때 닫는다)
     const query = new URLSearchParams(window.location.search)
-    const orderNo = query.get('orderId') ?? takePending()?.orderNo
-    if (orderNo) post(`/orders/${encodeURIComponent(orderNo)}/fail`, { code: query.get('code'), message: query.get('message') }).catch(() => {})
+    const pending = takePending()
+    const orderNo = query.get('orderId') ?? pending?.orderNo
+    const token = pending?.orderNo === orderNo ? pending.payToken : null
+    if (orderNo && token) post(`/orders/${encodeURIComponent(orderNo)}/fail`, { code: query.get('code'), message: query.get('message'), token }).catch(() => {})
   }, [])
 
   const canceled = code === 'PAY_PROCESS_CANCELED'

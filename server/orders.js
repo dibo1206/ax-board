@@ -5,7 +5,7 @@
 import { randomBytes } from 'node:crypto'
 import express from 'express'
 import { currentCustomer, requireCustomer } from './account.js'
-import { requireAdmin, requireSeller } from './auth.js'
+import { requireAdmin, requireSeller, signToken, verifyToken } from './auth.js'
 import { COURIERS, trackingUrl } from './couriers.js'
 import { pool } from './db.js'
 import { lookupHash, sealText } from './crypto.js'
@@ -253,6 +253,26 @@ export function staffOrder(order) {
   return { ...publicOrder(order), refunds: order.refunds, returns: order.returns }
 }
 
+// 결제 승인 응답: 주문번호와 결제키만 있으면 받을 수 있는 응답이라 이름·연락처·주소 같은 개인정보는 넣지 않는다.
+// 받는 분·주소는 휴대폰 번호(또는 로그인)를 확인하는 [주문 조회]·마이페이지에서만 보여 준다
+function paidSummary(order) {
+  const full = publicOrder(order)
+  const keep = ['order_no', 'status', 'is_test', 'created_at', 'paid_at', 'payment_method', 'items_amount', 'shipping_fee', 'total_amount', 'items']
+  return {
+    ...Object.fromEntries(keep.map((k) => [k, full[k]])),
+    shipments: full.shipments.map(({ seller_code, seller_name, status, shipping_fee }) => ({ seller_code, seller_name, status, shipping_fee })),
+  }
+}
+
+// 결제용 표: 주문을 만든 화면에만 준다. 결제창에서 실패·취소로 돌아왔을 때 이 표가 있어야 주문을 실패로 닫을 수 있다
+// (주문번호만 아는 사람이 남의 결제 전 주문을 닫지 못하게)
+const PAY_TOKEN_MINUTES = 60
+const payTokenFor = (orderNo) => signToken({ kind: 'checkout', orderNo, exp: Date.now() + PAY_TOKEN_MINUTES * 60_000 })
+const payTokenMatches = (token, orderNo) => {
+  const payload = typeof token === 'string' ? verifyToken(token) : null
+  return payload?.kind === 'checkout' && payload.orderNo === orderNo
+}
+
 // ---------- 손님용 ----------
 export const publicOrderRouter = express.Router()
 // 같은 곳(IP)에서 30분에 주문 6번. 개발 중에는 팀 모두가 같은 IP(SSH 터널)라 넉넉하게
@@ -416,7 +436,7 @@ publicOrderRouter.post('/orders', async (req, res) => {
       await pool.query('UPDATE customers SET zipcode = $2, address1 = $3, address2 = $4 WHERE id = $1',
         [customer.id, sealText(input.zipcode), sealText(input.address1), sealText(input.address2 || null)])
     }
-    res.status(201).json({ ...order, payment: { mode: paymentMode(), clientKey: clientKey(), test: isTestPayment() } })
+    res.status(201).json({ ...order, payToken: payTokenFor(order.orderNo), payment: { mode: paymentMode(), clientKey: clientKey(), test: isTestPayment() } })
   } catch (error) {
     if (error.status === 409) return res.status(409).json({ error: error.message })
     throw error
@@ -439,11 +459,11 @@ publicOrderRouter.post('/orders/:orderNo/confirm', async (req, res) => {
       const why = { expired: `결제 시간(${PENDING_MINUTES}분)이 지나 주문이 만료됐어요. 다시 주문해 주세요.`, failed: '이미 실패 처리된 주문이에요. 다시 주문해 주세요.' }
       return { status: 409, error: why[order.status] ?? '이미 처리된 주문이에요.' }
     }
-    // 금액 조작 확인: 결제창에서 돌아온 금액이 서버가 계산한 금액과 같아야 한다
+    // 금액 조작 확인: 결제창에서 돌아온 금액이 서버가 계산한 금액과 같아야 승인한다.
+    // 다르면 승인하지 않고 주문은 그대로 둔다 — 주문번호만 아는 사람이 틀린 금액을 보내 남의 주문을 실패로 만들지 못하게.
+    // 승인하지 않은 결제는 결제사에서 끝나고, 주문은 15분 정리 때 만료·재고 복구된다
     if (amount !== order.total_amount) {
-      await restoreStock(client, order.id)
-      await client.query("UPDATE orders SET status = 'failed', fail_reason = $2, updated_at = now() WHERE id = $1", [order.id, '결제 금액 불일치'])
-      console.warn(`[order] ${order.order_no} 결제 금액 불일치 (요청 ${amount} / 주문 ${order.total_amount})`)
+      console.warn(`[order] ${order.order_no} 결제 금액 불일치 (요청 ${amount} / 주문 ${order.total_amount}) — 승인 안 함`)
       return { status: 400, error: '결제 금액이 주문 금액과 달라요. 다시 주문해 주세요.' }
     }
     try {
@@ -470,25 +490,39 @@ publicOrderRouter.post('/orders/:orderNo/confirm', async (req, res) => {
         if (result === 'wait') return { status: 202, pending: true, error: '결제 확인이 늦어지고 있어요. 잠시 후 [다시 확인]을 눌러 주세요. 돈이 두 번 나가지는 않아요.' }
         return { status: 402, error: '결제가 승인되지 않았어요. 돈은 나가지 않았어요. 다시 주문해 주세요.' }
       }
+      const failed = { status: 402, error: error.code === 'UNSUPPORTED_STATUS' ? error.message : `결제를 완료하지 못했어요. ${error.message}` }
       // 승인은 됐는데 정보가 다르거나 지원하지 않는 상태면 바로 취소해서 돈이 묶이지 않게 한다
       if (error.payment?.paymentKey) {
         await cancelPayment({ paymentKey: error.payment.paymentKey, orderId: order.order_no, reason: '주문 확인 실패로 자동 취소' })
           .catch((e) => console.error(`[order] ${order.order_no} 자동 취소 실패 — 직접 확인 필요 · ${e.message}`))
+        await restoreStock(client, order.id)
+        await client.query("UPDATE orders SET status = 'failed', fail_reason = $2, updated_at = now() WHERE id = $1", [order.id, (error.code ?? error.message).slice(0, 100)])
+        console.warn(`[order] 결제 승인 실패 ${order.order_no} · ${error.status ?? ''} ${error.code ?? ''}`)
+        return failed
       }
-      await restoreStock(client, order.id)
-      await client.query("UPDATE orders SET status = 'failed', fail_reason = $2, updated_at = now() WHERE id = $1", [order.id, (error.code ?? error.message).slice(0, 100)])
-      console.warn(`[order] 결제 승인 실패 ${order.order_no} · ${error.status ?? ''} ${error.code ?? ''}`)
-      return { status: 402, error: error.code === 'UNSUPPORTED_STATUS' ? error.message : `결제를 완료하지 못했어요. ${error.message}` }
+      // 결제사가 승인을 거절함: 요청에 담긴 결제키가 이 주문 것이 아닐 수도 있다(주문번호만 아는 사람).
+      // 그래서 거절만 보고 주문을 닫지 않고, 이 주문의 실제 결제 상태를 조회해서 끝난 결제일 때만 실패로 닫는다
+      console.warn(`[order] 결제 승인 거절 ${order.order_no} · ${error.status ?? ''} ${error.code ?? ''} → 결제 조회`)
+      let found
+      try {
+        found = await lookupPayment(order.order_no)
+      } catch {
+        return failed // 조회가 안 되면 주문은 그대로 두고 15분 정리 때 다시 본다
+      }
+      if ((await settleWithToss(client, order, found, 'failed')) === 'paid') return { status: 200, newlyPaid: true }
+      return failed
     }
   })
   if (result.error) return res.status(result.status).json({ error: result.error, pending: result.pending === true })
   if (result.newlyPaid) notifyOrder(req.params.orderNo, 'paid')
-  res.json(publicOrder(await loadOrder(req.params.orderNo)))
+  res.json(paidSummary(await loadOrder(req.params.orderNo)))
 })
 
-// 결제창에서 취소하거나 실패해서 failUrl로 돌아왔을 때: 재고를 바로 돌려놓는다
+// 결제창에서 취소하거나 실패해서 failUrl로 돌아왔을 때: 재고를 바로 돌려놓는다.
+// 주문을 만든 화면이 받은 결제용 표(payToken)가 있어야 한다. 표가 없으면 주문은 15분 정리 때 결제사 조회 후 닫힌다
 publicOrderRouter.post('/orders/:orderNo/fail', async (req, res) => {
   if (tooManyPayments(req)) return res.status(429).json({ error: '요청이 너무 많아요.' })
+  if (!payTokenMatches(req.body.token, req.params.orderNo)) return res.status(403).json({ error: '주문을 확인하지 못했어요.' })
   const reason = text(req.body.code || req.body.message).slice(0, 100) || '결제 취소'
   await inTransaction(async (client) => {
     const { rows } = await client.query("SELECT id FROM orders WHERE order_no = $1 AND status = 'pending' FOR UPDATE", [req.params.orderNo])

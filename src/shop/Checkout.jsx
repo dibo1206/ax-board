@@ -126,7 +126,7 @@ export function Checkout() {
         items: cart.ok.map((r) => ({ productCode: r.productCode, optionId: r.optionId, quantity: r.quantity })),
       }
       const created = await post('/orders', body)
-      savePending({ orderNo: created.orderNo, fromCart: !buyNow })
+      savePending({ orderNo: created.orderNo, payToken: created.payToken, fromCart: !buyNow })
       setOrder(created)
       window.scrollTo({ top: 0 })
     } catch (e) {

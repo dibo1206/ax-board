@@ -90,6 +90,12 @@ function addFail(map, key) {
   }
 }
 
+function undoFail(map, key) {
+  const record = map.get(key)
+  if (record && record.count > 1) record.count -= 1
+  else map.delete(key)
+}
+
 // 관리자 접속 허용 IP: .env 의 ADMIN_ALLOWED_IPS (쉼표로 여러 개, "203.0.113." 처럼 끝이 점이면 그 대역 전체). 비우면 제한 없음
 export function adminIpAllowed(ip) {
   const list = (process.env.ADMIN_ALLOWED_IPS ?? '').split(',').map((v) => v.trim()).filter(Boolean)
@@ -102,10 +108,18 @@ export function adminIpAllowed(ip) {
 const twoFactorRequired = () => process.env.REQUIRE_2FA === '1' || (process.env.NODE_ENV === 'production' && process.env.REQUIRE_2FA !== '0')
 
 // 손님 회원 로그인도 같은 잠금 규칙을 쓴다 (key 앞에 'c:'를 붙여 관리자 아이디와 섞이지 않게)
-export const isLocked = (key, ip) => locked(ipFails, ip, MAX_IP_FAILS) || locked(fails, key, MAX_FAILS)
-export function noteFail(key, ip) {
+// 비밀번호 확인(scrypt)은 느려서, 확인이 끝난 뒤에 실패를 세면 동시에 들어온 요청이 모두 '0번 틀림'을 보고 통과한다.
+// 그래서 확인하기 전에 이번 시도를 실패 1번으로 미리 센다(잠금 검사와 같은 순간, 사이에 await 없음).
+// 비밀번호가 맞으면 undoAttempt로 되돌린다. 잠겨 있으면 false
+export function reserveAttempt(key, ip) {
+  if (locked(ipFails, ip, MAX_IP_FAILS) || locked(fails, key, MAX_FAILS)) return false
   addFail(fails, key)
   addFail(ipFails, ip)
+  return true
+}
+export function undoAttempt(key, ip) {
+  undoFail(fails, key)
+  undoFail(ipFails, ip)
 }
 export const clearFails = (key) => fails.delete(key)
 
@@ -114,7 +128,7 @@ export async function login(req, res) {
   const password = typeof req.body.password === 'string' ? req.body.password.slice(0, 200) : ''
   const otp = typeof req.body.otp === 'string' ? req.body.otp.replace(/\s/g, '') : ''
   const log = (action, extra = {}) => writeAccessLog({ loginId, action, ip: req.ip, ...extra })
-  if (locked(ipFails, req.ip, MAX_IP_FAILS) || locked(fails, loginId, MAX_FAILS)) {
+  if (!reserveAttempt(loginId, req.ip)) {
     log('login_locked')
     return res.status(429).json({ error: `로그인을 여러 번 틀렸어요. ${LOCK_MINUTES}분 뒤에 다시 시도해 주세요.` })
   }
@@ -124,11 +138,12 @@ export async function login(req, res) {
   )
   const ok = (await passwordMatches(password, rows[0]?.password_hash)) && rows.length === 1
   if (!ok) {
-    addFail(fails, loginId)
-    addFail(ipFails, req.ip)
-    log('login_fail')
+    log('login_fail') // 실패는 위에서 이미 셌다
     return res.status(401).json({ error: '아이디 또는 비밀번호가 맞지 않아요.' })
   }
+  // 비밀번호는 맞았으니 미리 센 1번을 되돌린다. 아이디의 실패 기록은 2단계 인증까지 통과해야 지운다
+  // (비밀번호를 아는 사람이 인증 코드를 계속 넣어 보지 못하게)
+  undoAttempt(loginId, req.ip)
   const { id, login_id: account, role, seller_code: sellerCode, totp_secret_enc: sealed, totp_last_counter: lastCounter, session_version: sv } = rows[0]
   if (role === 'admin' && !adminIpAllowed(req.ip)) {
     log('login_blocked_ip', { role })
@@ -164,7 +179,7 @@ export function logout(req, res) {
 export function currentAdmin(req) {
   try {
     const payload = verifyToken(readCookie(req, COOKIE))
-    return payload && payload.kind !== 'customer' ? payload : null // 손님 쿠키를 관리자 쿠키 자리에 넣어도 통과하지 못하게
+    return payload?.kind === 'staff' ? payload : null // 손님 쿠키나 결제용 표를 관리자 쿠키 자리에 넣어도 통과하지 못하게
   } catch {
     return null
   }
