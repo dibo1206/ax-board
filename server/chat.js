@@ -30,7 +30,7 @@ const QNA_HINT = '상품 페이지 아래 Q&A에 질문을 남겨 주시면 담�
 const ROUTES = [
   {
     kind: 'health',
-    re: /당뇨|임신|임산부|수유|(?<!이)아기|유아|이유식|혈압|혈당|복용|질환|환자|수술|아토피|신장|통풍|알레르기(가|이)?\s?(있|반응)|알레르기\s?체질/,
+    re: /당뇨|임신|임산부|수유|(?<!이)아기|애기|유아|이유식|먹여도|혈압|혈당|복용|질환|환자|수술|아토피|신장|통풍|감기|기침|변비|소화|다이어트|체중|살\s?(빠|찌)|면역|효능|효과|건강에|몸에\s?(좋|나쁘|안\s?좋)|알레르기(가|이)?\s?(있|반응)|알레르기\s?체질/,
     answer: (ctx) => {
       const allergy = ctx.items.filter((i) => i.allergens.length).map((i) => `${i.name}: ${i.allergens.join(', ')}`)
       return '건강 상태에 따라 드셔도 되는지는 제가 판단할 수 없어요. 의사·약사 같은 전문가와 꼭 상의해 주세요. '
@@ -60,7 +60,7 @@ const ROUTES = [
   {
     kind: 'shipping',
     re: /배송비|무료\s?배송|택배비|언제\s?(와|도착|받)|며칠.{0,4}(걸|와)/,
-    answer: () => `배송비는 ${SHIPPING.fee.toLocaleString('ko-KR')}원이고, ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상 사면 무료예요. ${SHIPPING.leadTime}.`,
+    answer: () => `배송비는 농가마다 따로 붙어요. 농가별로 ${SHIPPING.fee.toLocaleString('ko-KR')}원이고, 그 농가 상품을 ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상 사면 그 농가 배송비는 무료예요. 장바구니에서 농가별 배송비를 볼 수 있어요. ${SHIPPING.leadTime}.`,
     handoff: false,
     action: null,
   },
@@ -79,7 +79,7 @@ const ROUTES = [
     // 할인·쿠폰 기능이 없다: 약속하지 않고 정해진 정책이 없다고만 말한다
     kind: 'discount',
     re: /할인|쿠폰|깎아|에누리|적립금/,
-    answer: () => `할인·쿠폰은 지금 정해진 정책이 없어서 제가 약속드릴 수 없어요. 상품은 상품 페이지에 적힌 가격으로 팔고, ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상 사면 배송비가 무료예요. 대량 구매는 상품 페이지의 [기업 구매 문의]로 견적을 받아 보실 수 있어요.`,
+    answer: () => `할인·쿠폰은 지금 정해진 정책이 없어서 제가 약속드릴 수 없어요. 상품은 상품 페이지에 적힌 가격으로 팔고, 한 농가 상품을 ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상 사면 그 농가 배송비는 무료예요. 대량 구매는 상품 페이지의 [기업 구매 문의]로 견적을 받아 보실 수 있어요.`,
     handoff: false,
     action: null,
   },
