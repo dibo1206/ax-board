@@ -181,6 +181,8 @@ export async function fillItem(req, res) {
   const { rows } = await pool.query('SELECT * FROM items WHERE item_code = $1', [req.params.code])
   const item = rows[0]
   if (!item) return res.status(404).json({ error: '품목을 찾지 못했어요.' })
+  // 품목 정보는 여러 농가가 함께 쓰고 손님 화면·상담에 그대로 나간다. 판매자는 자기가 요청한 검수 전 품목만 채운다 (검수 때 관리자가 본다)
+  if (req.seller && !(item.status === 'pending' && item.requested_by === req.seller.sellerCode)) return res.json({ filled: 0, item })
   const b = req.body ?? {}
   const sets = []
   const params = [item.item_code]

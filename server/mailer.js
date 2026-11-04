@@ -78,5 +78,7 @@ export async function listMails() {
   const { rows } = await pool.query(
     'SELECT id, kind, to_email, subject, body, status, attempts, last_error, created_at, sent_at FROM email_outbox ORDER BY id DESC LIMIT 200',
   )
-  return { configured: mailConfigured(), mails: rows.map(openMail) }
+  // 비밀번호 찾기 메일은 보내기 전까지 링크가 살아 있어서 관리자 화면에도 본문을 보여 주지 않는다
+  const safe = (m) => (m.kind === 'password_reset' ? { ...m, body: '(비밀번호 찾기 링크라 내용을 숨겼어요)' } : m)
+  return { configured: mailConfigured(), mails: rows.map(openMail).map(safe) }
 }

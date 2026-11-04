@@ -98,8 +98,8 @@ export function adminIpAllowed(ip) {
   return list.some((rule) => (rule.endsWith('.') ? plain.startsWith(rule) : plain === rule))
 }
 
-// REQUIRE_2FA=1 이면 2단계 인증을 등록하지 않은 계정은 로그인할 수 없다 (운영에서 켜기)
-const twoFactorRequired = () => process.env.REQUIRE_2FA === '1'
+// 2단계 인증을 등록하지 않은 계정은 로그인할 수 없다: REQUIRE_2FA=1 이거나, 운영(NODE_ENV=production)이면 기본으로 켜진다 (REQUIRE_2FA=0 으로만 끈다)
+const twoFactorRequired = () => process.env.REQUIRE_2FA === '1' || (process.env.NODE_ENV === 'production' && process.env.REQUIRE_2FA !== '0')
 
 // 손님 회원 로그인도 같은 잠금 규칙을 쓴다 (key 앞에 'c:'를 붙여 관리자 아이디와 섞이지 않게)
 export const isLocked = (key, ip) => locked(ipFails, ip, MAX_IP_FAILS) || locked(fails, key, MAX_FAILS)

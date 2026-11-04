@@ -1,7 +1,7 @@
 // 7단계: 자체 주문·결제
 // 1) 주문 만들기: 금액은 서버가 DB 가격으로 계산하고, 재고를 바로 잡아 둔다 (동시에 사도 초과 판매 없음)
 // 2) 결제 승인: 토스가 돌려준 paymentKey·금액을 우리 주문과 맞춰 본 뒤 서버에서만 승인한다
-// 3) 결제를 안 하고 30분이 지나면 주문을 만료하고 잡아 둔 재고를 돌려놓는다
+// 3) 결제를 안 하고 15분이 지나면 주문을 만료하고 잡아 둔 재고를 돌려놓는다
 import { randomBytes } from 'node:crypto'
 import express from 'express'
 import { currentCustomer, requireCustomer } from './account.js'
@@ -10,13 +10,13 @@ import { COURIERS, trackingUrl } from './couriers.js'
 import { pool } from './db.js'
 import { lookupHash, sealText } from './crypto.js'
 import { createLimiter } from './limit.js'
-import { cancelPayment, checkApproved, clientKey, confirmPayment, isTestPayment, lookupPayment, paymentMode } from './payments.js'
+import { cancelPayment, checkApproved, clientKey, confirmPayment, isTestPayment, lookupPayment, orderingOpen, paymentMode } from './payments.js'
 import { POLICIES, SHIPPING, SHOP, shippingFee } from './policy.js'
 import { adminEmail, publicUrl, queueMail, retryMails } from './mailer.js'
 import { openOrder } from './pii.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
 
-const PENDING_MINUTES = 30
+const PENDING_MINUTES = 15
 // 결제 전 주문은 재고를 잡아 두므로, 결제하지 않는 주문으로 재고를 묶어 두지 못하게 한도를 둔다
 // (더 많이 필요하면 기업 구매 문의로)
 export const MAX_QTY = 20 // 한 상품을 한 주문에
@@ -102,7 +102,7 @@ async function inTransaction(work) {
 // 토스에 물어본 실제 결제 상태(found)로 결제 전 주문을 맞춘다. 돌려주는 값: 'paid' | 'closed'(실패·만료 처리) | 'wait'(아직 모름)
 // 승인 응답을 못 받은 채 끊겼거나 서버가 중간에 죽었어도, 토스에서 승인된 주문은 여기서 결제 완료로 되살린다.
 // closeAs 'failed'(승인 요청 직후): 결제가 아직 안 보이거나 진행 중이면 곧 승인될 수 있으니 닫지 않고 기다린다.
-// closeAs 'expired'(30분 정리): 그때까지 승인되지 않은 결제는 토스에서도 끝난 것이라 닫는다.
+// closeAs 'expired'(만료 정리): 그때까지 승인되지 않은 결제는 토스에서도 끝난 것이라 닫는다.
 const STILL_OPEN = ['READY', 'IN_PROGRESS']
 
 async function settleWithToss(client, order, found, closeAs) {
@@ -133,7 +133,7 @@ async function settleWithToss(client, order, found, closeAs) {
   return 'closed'
 }
 
-// 결제하지 않고 30분이 지난 주문 → 토스에 실제로 결제됐는지 물어보고, 결제가 없으면 만료·재고 복구
+// 결제하지 않고 시간이 지난 주문 → 토스에 실제로 결제됐는지 물어보고, 결제가 없으면 만료·재고 복구
 // 토스에 물어볼 수 없으면(통신 장애) 이번에는 건너뛰고 다음 정리 때 다시 본다 — 결제된 주문을 잘못 만료시키지 않기 위해
 export async function expirePending() {
   const { rows } = await pool.query(
@@ -206,7 +206,7 @@ async function loadOrder(orderNo, client = pool) {
 
 // 손님에게 보여 줄 주문 (결제 키·내부 번호는 빼고). 농가 이름의 [예시] 표시는 뺀다
 function publicOrder(order) {
-  const { id: _id, payment_key: _key, customer_id: _customer, ...rest } = order
+  const { id: _id, payment_key: _key, customer_id: _customer, buyer_phone_hash: _hash, ...rest } = order
   return {
     ...rest,
     tracking_url: trackingUrl(order.courier, order.tracking_no),
@@ -218,6 +218,8 @@ function publicOrder(order) {
 export const publicOrderRouter = express.Router()
 // 같은 곳(IP)에서 30분에 주문 6번. 개발 중에는 팀 모두가 같은 IP(SSH 터널)라 넉넉하게
 const tooManyOrders = createLimiter({ limit: process.env.NODE_ENV === 'production' ? 6 : 30, windowMs: 30 * 60_000 })
+// 번호를 바꿔 가며 결제하지 않는 주문으로 전 상품을 품절로 만들지 못하게, 같은 곳(IP)에서 재고를 잡는 수량에도 한도를 둔다 (주문 1건 최대치만큼)
+const tooManyHeldUnits = createLimiter({ limit: process.env.NODE_ENV === 'production' ? MAX_TOTAL_QTY : MAX_TOTAL_QTY * 10, windowMs: PENDING_MINUTES * 60_000 })
 const tooManyLookups = createLimiter({ limit: 10, windowMs: 10 * 60_000 })
 const tooManyPayments = createLimiter({ limit: 20, windowMs: 10 * 60_000 })
 
@@ -269,10 +271,13 @@ function readOrderInput(body) {
 }
 
 publicOrderRouter.post('/orders', async (req, res) => {
-  if (paymentMode() === 'off') return res.status(503).json({ error: '지금은 주문을 받을 수 없어요. 잠시 후 다시 시도해 주세요.' })
+  if (!orderingOpen()) return res.status(503).json({ error: '지금은 주문을 받을 수 없어요. 잠시 후 다시 시도해 주세요.' })
   const { input, items, errors } = readOrderInput(req.body)
   if (errors.length) return res.status(400).json({ error: errors.join(' '), errors })
   if (tooManyOrders(req)) return res.status(429).json({ error: '주문 시도가 너무 많아요. 잠시 후 다시 시도해 주세요.' })
+  if (items.some(({ quantity }) => Array.from({ length: quantity }).some(() => tooManyHeldUnits(req)))) {
+    return res.status(429).json({ error: `짧은 시간에 너무 많은 수량을 주문했어요. ${PENDING_MINUTES}분 뒤에 다시 시도하거나 상품 페이지의 [기업 구매 문의]를 이용해 주세요.` })
+  }
   await expirePending()
   const { rows: [{ n: pending }] } = await pool.query(
     "SELECT count(*)::int AS n FROM orders WHERE buyer_phone_hash = $1 AND status = 'pending' AND created_at > now() - make_interval(mins => $2)",
@@ -360,7 +365,7 @@ publicOrderRouter.post('/orders/:orderNo/confirm', async (req, res) => {
     if (!order) return { status: 404, error: '주문을 찾지 못했어요.' }
     if (order.status === 'paid' && order.payment_key === paymentKey) return { status: 200 } // 새로고침 등으로 다시 불림
     if (order.status !== 'pending') {
-      const why = { expired: '결제 시간(30분)이 지나 주문이 만료됐어요. 다시 주문해 주세요.', failed: '이미 실패 처리된 주문이에요. 다시 주문해 주세요.' }
+      const why = { expired: `결제 시간(${PENDING_MINUTES}분)이 지나 주문이 만료됐어요. 다시 주문해 주세요.`, failed: '이미 실패 처리된 주문이에요. 다시 주문해 주세요.' }
       return { status: 409, error: why[order.status] ?? '이미 처리된 주문이에요.' }
     }
     // 금액 조작 확인: 결제창에서 돌아온 금액이 서버가 계산한 금액과 같아야 한다
@@ -586,8 +591,9 @@ adminOrderRouter.patch('/:orderNo', async (req, res) => {
 adminOrderRouter.post('/:orderNo/cancel', async (req, res) => {
   const reason = text(req.body.reason)
   if (reason.length < 2) return res.status(400).json({ error: '취소 사유를 적어 주세요.' })
-  const done = await cancelOrder(req.params.orderNo, `관리자 취소(${req.admin.loginId}): ${reason}`, ['paid', 'preparing'])
+  const done = await cancelOrder(req.params.orderNo, `관리자 취소: ${reason}`, ['paid', 'preparing'])
   if (done.error) return res.status(done.status).json({ error: done.error })
+  console.log(`[order] ${req.admin.loginId} 주문 취소 처리 ${req.params.orderNo}`) // 취소 사유는 손님에게도 보여서 관리자 아이디를 넣지 않는다
   res.json(publicOrder(await loadOrder(req.params.orderNo)))
 })
 

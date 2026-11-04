@@ -17,6 +17,14 @@ export function paymentMode() {
   return process.env.NODE_ENV === 'production' ? 'off' : 'mock'
 }
 
+// 운영에서 테스트 키로 주문을 받으면 돈을 내지 않아도 '결제 완료'가 되어 농가가 물건을 보낼 수 있다 → 막는다.
+// 오픈 전 리허설만 ALLOW_TEST_PAYMENTS=1 로 연다. 이미 들어온 주문의 조회·취소는 그대로 된다
+export function orderingOpen() {
+  if (paymentMode() === 'off') return false
+  const testKeyInProduction = process.env.NODE_ENV === 'production' && process.env.TOSS_SECRET_KEY?.startsWith('test_')
+  return !testKeyInProduction || process.env.ALLOW_TEST_PAYMENTS === '1'
+}
+
 // 테스트 키(test_…)나 개발용 결제로 들어온 주문은 실제 판매가 아니라고 표시한다
 export function isTestPayment() {
   const mode = paymentMode()

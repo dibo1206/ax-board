@@ -159,7 +159,7 @@ CREATE TABLE IF NOT EXISTS chat_cache (
 
 -- 7단계: 자체 주문·결제 (토스페이먼츠). 금액은 서버가 DB 가격으로 계산하고, 결제 승인 때 다시 확인한다
 -- 상태: pending(결제 전, 재고 잡아 둠) → paid → preparing → shipping → delivered
---       pending → failed / expired(30분 지나면 재고 돌려놓음), paid·preparing → cancelled(결제 취소·재고 복구)
+--       pending → failed / expired(15분 지나면 재고 돌려놓음), paid·preparing → cancelled(결제 취소·재고 복구)
 CREATE TABLE IF NOT EXISTS orders (
   id SERIAL PRIMARY KEY,
   order_no TEXT UNIQUE NOT NULL,

@@ -6,8 +6,16 @@ import { get, loadScript, ORDER_STATUS, post, send, when, won } from '../shop/sh
 // 손님 회원: 로그인 · 가입 · 비밀번호 찾기 · 마이페이지(주문 내역 · 내 정보·배송지 · 비밀번호 · 탈퇴)
 const POSTCODE_SDK = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js'
 const goNext = () => {
-  const next = new URLSearchParams(window.location.search).get('next')
-  window.location.href = next && next.startsWith('/') && !next.startsWith('//') ? next : '/account'
+  const next = new URLSearchParams(window.location.search).get('next') ?? ''
+  // 브라우저는 /\\evil.example 도 다른 사이트로 읽는다 → 글자가 아니라 풀어 본 주소로 우리 사이트인지 확인한다
+  let target = '/account'
+  try {
+    const url = new URL(next, window.location.origin)
+    if (next.startsWith('/') && url.origin === window.location.origin) target = url.pathname + url.search + url.hash
+  } catch {
+    // 잘못된 주소면 마이페이지로
+  }
+  window.location.href = target
 }
 
 function Errors({ list }) {

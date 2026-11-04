@@ -17,7 +17,7 @@ import { pool } from './db.js'
 import { createLimiter } from './limit.js'
 import { maskPersonal } from './privacy.js'
 import { describeRecommendation, loadActive, readWish, recommend } from './recommend.js'
-import { SHIPPING } from './policy.js'
+import { SHIPPING, SHOP } from './policy.js'
 import { mostSimilar, similarity } from './similar.js'
 import { findBanned } from './banned.js'
 import { publicItem } from './items.js'
@@ -620,7 +620,9 @@ async function answerSimilar(message, catalog, ctx, fallbackProduct) {
   const mine = ctx.items.map((i) => i.item_code)
   const base = { handoff: false, action: null, blocked: false }
   // 담당자 답이 가장 믿을 만하다. 같은 품목의 상품 Q&A만 본다
-  const staff = mine.length ? mostSimilar(message, qna.filter((q) => mine.includes(q.item_code)), 0.5) : null
+  // 판매자가 쓴 답이 다른 농가 상품 질문에 나가지 않게, 상품 페이지에서는 그 상품의 답만 쓴다
+  const usable = qna.filter((q) => mine.includes(q.item_code) && !hasContact(q.answer) && (!ctx.current || q.product_code === ctx.current.product_code))
+  const staff = mine.length ? mostSimilar(message, usable, 0.5) : null
   if (staff) {
     return {
       ...base,
@@ -714,7 +716,12 @@ function nameCodes(answer, catalog) {
   return text
 }
 
+// 답에 외부 연락처를 넣어 손님을 다른 곳으로 끌지 못하게 한다 (회사 대표 전화는 괜찮다)
+const CONTACT = /(?<!\d)0\d{1,2}[-\s.]?\d{3,4}[-\s.]?\d{4}(?!\d)|https?:\/\/|www\.|계좌|입금|카카오\s?톡|카톡|오픈\s?채팅|텔레그램/i
+const hasContact = (text) => CONTACT.test(String(text ?? '').replaceAll(SHOP.phone, ''))
+
 function findProblem(answer, catalog) {
+  if (hasContact(answer)) return '전화번호·주소·계좌 같은 외부 연락처를 쓰면 안 돼요. 문의는 상품 Q&A나 고객센터로 안내해 주세요'
   // 무료 모델이 한국어 사이에 영어 조각을 섞는 경우가 있다 (배lds, 포도 jam). 단위·Q&A는 빼고 본다
   const latin = answer.replace(/Brix|Q&A|AI|\d+(\.\d+)?\s*(kg|g|ml|mL|L)\b/g, '').match(/[A-Za-z]{2,}/)
   if (latin) return `영어 조각("${latin[0]}")이 섞였어요. 한국어로만 써 주세요`
