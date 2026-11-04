@@ -337,7 +337,15 @@ ALTER TABLE sellers ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE sellers ADD COLUMN IF NOT EXISTS reject_note TEXT;
 ALTER TABLE sellers ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ;
 ALTER TABLE sellers ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
-CREATE UNIQUE INDEX IF NOT EXISTS sellers_business_no_key ON sellers (business_no) WHERE business_no IS NOT NULL;
+-- 개인정보 저장 암호화 (server/pii.js): 암호문으로는 찾을 수 없어서 찾기용 HMAC 을 따로 둔다. 비교와 중복 검사는 이 칸으로 한다
+ALTER TABLE sellers ADD COLUMN IF NOT EXISTS business_no_hash TEXT;
+DROP INDEX IF EXISTS sellers_business_no_key;
+CREATE UNIQUE INDEX IF NOT EXISTS sellers_business_no_hash_key ON sellers (business_no_hash);
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS email_hash TEXT; -- 탈퇴하면 비운다
+ALTER TABLE customers DROP CONSTRAINT IF EXISTS customers_email_key;
+CREATE UNIQUE INDEX IF NOT EXISTS customers_email_hash_key ON customers (email_hash);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS buyer_phone_hash TEXT;
+CREATE INDEX IF NOT EXISTS orders_buyer_phone_hash_idx ON orders (buyer_phone_hash, created_at);
 -- 상품 자동 승인: 관리자가 승인한 개수로 믿을 만한 농가를 가리고, 바로 판매한 상품은 관리자가 나중에 확인한다
 ALTER TABLE products ADD COLUMN IF NOT EXISTS admin_approved_at TIMESTAMPTZ;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMPTZ;

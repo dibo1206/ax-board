@@ -2,7 +2,9 @@
 // 손님용(로그인 없음)과 관리자용(로그인 필요) API를 나눈다. 연락처는 관리자 화면에서만 보인다.
 import express from 'express'
 import { requireAdmin } from './auth.js'
+import { sealText } from './crypto.js'
 import { pool } from './db.js'
+import { openB2b, openQuestion } from './pii.js'
 import { createLimiter } from './limit.js'
 import { adminEmail, publicUrl, queueMail } from './mailer.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
@@ -47,7 +49,7 @@ publicInquiryRouter.post('/products/:code/questions', async (req, res) => {
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (product_code, question) DO NOTHING
      RETURNING id, author, question, answer, created_at`,
-    [req.params.code, author, question, contact || null],
+    [req.params.code, author, question, sealText(contact || null)],
   )
   if (!rows.length) return res.status(409).json({ error: '같은 질문이 이미 올라와 있어요.' })
   queueMail({ kind: 'admin_new_question', to: adminEmail(), subject: `[상품 문의] ${req.params.code}`, body: `새 상품 문의가 올라왔어요.\n\n${question}\n\n답변하기: ${publicUrl()}/admin\n` })
@@ -82,7 +84,7 @@ publicInquiryRouter.post('/b2b-inquiries', async (req, res) => {
   const { rows } = await pool.query(
     `INSERT INTO b2b_inquiries (company, contact_name, contact, product_code, quantity, message, privacy_agreed_at)
      VALUES ($1, $2, $3, $4, $5, $6, now()) RETURNING id, created_at`,
-    [body.company, body.contactName, body.contact, body.productCode || null, body.quantity || null, body.message || null],
+    [body.company, sealText(body.contactName), sealText(body.contact), body.productCode || null, body.quantity || null, body.message || null],
   )
   console.log(`[b2b] 새 기업 구매 문의 #${rows[0].id}`)
   queueMail({ kind: 'admin_new_b2b', to: adminEmail(), subject: `[기업 구매 문의] ${body.company}`, body: `새 기업 구매 문의가 들어왔어요.\n\n회사: ${body.company}\n수량: ${body.quantity || '-'}\n요청: ${body.message || '-'}\n\n확인하기: ${publicUrl()}/admin\n` })
@@ -114,7 +116,7 @@ adminInquiryRouter.get('/questions', async (req, res) => {
   const { rows } = await pool.query(`
     SELECT q.*, p.name AS product_name FROM questions q JOIN products p ON p.product_code = q.product_code
     ORDER BY (q.answer IS NULL) DESC, q.created_at DESC`)
-  res.json(rows)
+  res.json(rows.map(openQuestion))
 })
 
 // 답변 쓰기·고치기({ answer }) 또는 숨기기·다시 보이기({ hidden }). 보낸 것만 바꾼다
@@ -138,14 +140,14 @@ adminInquiryRouter.patch('/questions/:id', async (req, res) => {
   )
   if (!rows.length) return res.status(404).json({ error: '질문을 찾지 못했어요.' })
   console.log(`[qna] ${req.admin.loginId} 질문 #${rows[0].id} ${hasAnswer ? '답변' : hidden ? '숨김' : '다시 보임'}`)
-  res.json(rows[0])
+  res.json(openQuestion(rows[0]))
 })
 
 adminInquiryRouter.get('/b2b-inquiries', async (req, res) => {
   const { rows } = await pool.query(`
     SELECT b.*, p.name AS product_name FROM b2b_inquiries b LEFT JOIN products p ON p.product_code = b.product_code
     ORDER BY CASE b.status WHEN '접수' THEN 0 WHEN '확인' THEN 1 ELSE 2 END, b.created_at DESC`)
-  res.json(rows)
+  res.json(rows.map(openB2b))
 })
 
 adminInquiryRouter.patch('/b2b-inquiries/:id', async (req, res) => {
@@ -154,5 +156,5 @@ adminInquiryRouter.patch('/b2b-inquiries/:id', async (req, res) => {
   const { rows } = await pool.query('UPDATE b2b_inquiries SET status = $1 WHERE id = $2 RETURNING *', [status, req.params.id])
   if (!rows.length) return res.status(404).json({ error: '문의를 찾지 못했어요.' })
   console.log(`[b2b] ${req.admin.loginId} 문의 #${rows[0].id} → ${status}`)
-  res.json(rows[0])
+  res.json(openB2b(rows[0]))
 })
