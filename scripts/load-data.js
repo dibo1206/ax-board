@@ -5,6 +5,7 @@
 import 'dotenv/config'
 import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
+import { sealText } from '../server/crypto.js'
 import { initDb, pool } from '../server/db.js'
 import { parseCsv } from './csv.js'
 
@@ -167,10 +168,10 @@ async function load(sheets) {
     await client.query('BEGIN')
     for (const r of sheets['sellers.csv']) {
       await client.query(
-        `INSERT INTO sellers (seller_code, name, region, intro, story, is_company, source)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)
-         ON CONFLICT (seller_code) DO UPDATE SET name=$2, region=$3, intro=$4, story=$5, is_company=$6, source=$7`,
-        [r.seller_code, r.name, nullable(r.region), nullable(r.intro), nullable(r.story), yes(r.is_company), nullable(r.source)],
+        `INSERT INTO sellers (seller_code, name, region, intro, story, is_company, source, owner_name, phone)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         ON CONFLICT (seller_code) DO UPDATE SET name=$2, region=$3, intro=$4, story=$5, is_company=$6, source=$7, owner_name=$8, phone=$9`,
+        [r.seller_code, r.name, nullable(r.region), nullable(r.intro), nullable(r.story), yes(r.is_company), nullable(r.source), sealText(nullable(r.owner_name ?? '')), sealText(nullable(r.phone ?? ''))],
       )
     }
     for (const r of sheets['items.csv']) {
@@ -220,6 +221,13 @@ async function load(sheets) {
         [r.product_code, r.author, r.question, nullable(r.answer)],
       )
     }
+    // 표에서 빠진 예시 상품은 손님 화면에서 내린다. 주문 기록이 있을 수 있어 지우지 않고, 직접 등록한 상품은 건드리지 않는다
+    const kept = sheets['products.csv'].map((r) => r.product_code)
+    const dropped = await client.query(
+      "UPDATE products SET status = 'draft', updated_at = now() WHERE source LIKE '[예시%' AND status <> 'draft' AND NOT (product_code = ANY($1)) RETURNING product_code",
+      [kept],
+    )
+    await client.query('UPDATE questions SET hidden = true WHERE product_code = ANY($1)', [dropped.rows.map((r) => r.product_code)])
     await client.query('COMMIT')
   } catch (error) {
     await client.query('ROLLBACK')

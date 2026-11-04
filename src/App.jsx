@@ -163,7 +163,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {item.show_brix && product.brix && product.info_disputed && (
           <><dt>당도</dt><dd className="muted">구매 후기에서 표시와 다르다는 의견이 많아 당도 표시를 잠시 내렸어요</dd></>
         )}
-        {product.harvest_date && <><dt>수확일</dt><dd>{product.harvest_date.slice(0, 10)} <span className="muted">(수확 {product.harvest_days}일째)</span></dd></>}
+        {product.harvest_date && <><dt>수확일</dt><dd>{product.harvest_date.slice(0, 10)}{product.harvest_days != null && <span className="muted"> (수확 {product.harvest_days}일째)</span>}</dd></>}
         {item.keep_period && <><dt>보관 참고</dt><dd>{item.keep_period}</dd></>}
         {product.info_answers >= 3 && <><dt>구매자 확인</dt><dd>표시와 맞았어요 {product.info_matched}/{product.info_answers}</dd></>}
         <dt>판매 농가</dt><dd>{seller.name} · {seller.region}</dd>
