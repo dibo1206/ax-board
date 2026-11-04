@@ -17,7 +17,8 @@
     "admin-2fa": "node scripts/admin-2fa.js",
     "test-resilience": "node scripts/resilience-test.js",
     "eval-chat": "node scripts/eval-chat.js",
-    "count-ai": "node scripts/count-ai.js"
+    "count-ai": "node scripts/count-ai.js",
+    "chat-eval": "node scripts/chat-eval.js"
   },
   "dependencies": {
     "compression": "^1.8.2",
