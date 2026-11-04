@@ -1,5 +1,6 @@
 // 6단계: 추천. 상품 태그로 점수를 매겨 고르고, 왜 골랐는지 이유를 같이 준다.
 // 고르는 건 항상 DB 규칙이라 매번 같은 결과가 나오고, 품절 상품은 추천하지 않는다.
+// 옵션 상품의 가격은 판매 중 옵션의 최저가라 "~부터"로 보여 준다 (has_options)
 import express from 'express'
 import { cached } from './cache.js'
 import { pool } from './db.js'
@@ -12,6 +13,7 @@ export function loadActive() {
     const [products, tags] = await Promise.all([
       pool.query(`SELECT p.*, (p.stock = 0) AS sold_out, i.name AS item_name, i.category, i.show_brix,
                          s.name AS seller_name, s.region AS seller_region,
+                         EXISTS (SELECT 1 FROM product_options o WHERE o.product_code = p.product_code) AS has_options,
                          (SELECT count(*) FILTER (WHERE r.info_match = 'no') >= 3 AND count(*) FILTER (WHERE r.info_match = 'no') * 2 >= count(r.info_match) FROM reviews r WHERE r.product_code = p.product_code AND NOT r.hidden) AS info_disputed
                   FROM products p JOIN items i ON i.item_code = p.item_code JOIN sellers s ON s.seller_code = p.seller_code
                   WHERE p.status = 'active'`),
@@ -46,7 +48,7 @@ export function recommend({ products, tagLabel }, { want = [], budget = null, ex
 
 function card(p) {
   return {
-    product_code: p.product_code, name: p.name, price: p.price, unit: p.unit, category: p.category,
+    product_code: p.product_code, name: p.name, price: p.price, unit: p.unit, category: p.category, has_options: p.has_options,
     seller_name: p.seller_name, image_url: p.image_url, brix: p.show_brix ? p.brix : null,
   }
 }
@@ -80,7 +82,7 @@ export function readWish(text) {
 export function describeRecommendation(items, { want, budget }, tagLabel) {
   const condition = [...want.map((t) => tagLabel[t] ?? t), budget ? `${won(budget)} 이하` : null].filter(Boolean).join(' · ')
   if (!items.length) return `${condition ? `${condition} 조건에 ` : ''}맞는 상품이 지금은 없어요. 조건을 바꿔 보시거나 상품 목록 위의 [추천 받기]를 써 보세요.`
-  const list = items.map((x) => `${x.name.replace(/\[예시\]\s*/g, '')} (${[won(x.price), ...x.reasons].join(' · ')})`).join(', ')
+  const list = items.map((x) => `${x.name.replace(/\[예시\]\s*/g, '')} (${[`${won(x.price)}${x.has_options ? '부터' : ''}`, ...x.reasons].join(' · ')})`).join(', ')
   return `${condition ? `${condition} 조건으로 ` : ''}이런 상품을 추천해요: ${list}. 상품 이름을 누르면 자세히 볼 수 있어요.`
 }
 

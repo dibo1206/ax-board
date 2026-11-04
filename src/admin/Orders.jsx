@@ -69,7 +69,7 @@ function OrderPanel({ orderNo, onChanged, onClose }) {
         {order.cancel_reason && <><dt>취소</dt><dd>{when(order.cancelled_at)} · {order.cancel_reason}</dd></>}
       </dl>
       <ul className="order-items">
-        {order.items.map((i) => <li key={i.product_code}>{i.name} × {i.quantity} — {won(i.subtotal)} <span className="muted">({i.seller_code})</span></li>)}
+        {order.items.map((i) => <li key={`${i.product_code}:${i.option_name ?? ''}`}>{i.name}{i.option_name && ` · ${i.option_name}`} × {i.quantity} — {won(i.subtotal)} <span className="muted">({i.seller_code})</span></li>)}
         <li className="muted">상품 {won(order.items_amount)} + 배송비 {won(order.shipping_fee)}{many && ` (농가 ${order.shipments.length}곳)`}</li>
       </ul>
       <h4>{many ? '농가별 배송 (농가마다 따로 보내요)' : '배송'}</h4>

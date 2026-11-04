@@ -10,7 +10,9 @@ export function OrderDetail({ order, phone = '', onConfirm = null }) {
   const [written, setWritten] = useState([])
   // 농가마다 따로 오니, 그 상품을 보낸 농가의 배송이 끝났으면 후기를 쓸 수 있다
   const arrived = (i) => order.status === 'delivered' || order.shipments?.some((s) => s.seller_code === i.seller_code && s.status === 'delivered')
-  const canReview = (i) => arrived(i) && !i.reviewed && !written.includes(i.product_code)
+  // 후기는 주문·상품마다 하나라서, 같은 상품을 옵션 여러 개로 샀으면 첫 줄에서만 쓴다
+  const firstOf = (i, index) => order.items.findIndex((x) => x.product_code === i.product_code) === index
+  const canReview = (i, index) => arrived(i) && !i.reviewed && !written.includes(i.product_code) && firstOf(i, index)
   return (
     <>
       <dl className="detail-list">
@@ -40,12 +42,12 @@ export function OrderDetail({ order, phone = '', onConfirm = null }) {
         )}
       </dl>
       <ul className="order-items">
-        {order.items.map((i) => (
-          <li key={i.product_code}>
-            {i.name} ({i.unit}) × {i.quantity} — {won(i.subtotal)}
-            {canReview(i) && writing !== i.product_code && <button type="button" className="link" onClick={() => setWriting(i.product_code)}> 후기 쓰기</button>}
-            {written.includes(i.product_code) && <span className="success"> 후기를 남겼어요</span>}
-            {writing === i.product_code && (
+        {order.items.map((i, index) => (
+          <li key={`${i.product_code}:${i.option_name ?? ''}`}>
+            {i.name} ({i.option_name ?? i.unit}) × {i.quantity} — {won(i.subtotal)}
+            {canReview(i, index) && writing !== i.product_code && <button type="button" className="link" onClick={() => setWriting(i.product_code)}> 후기 쓰기</button>}
+            {written.includes(i.product_code) && firstOf(i, index) && <span className="success"> 후기를 남겼어요</span>}
+            {writing === i.product_code && firstOf(i, index) && (
               <ReviewForm orderNo={order.order_no} phone={phone} item={i} onDone={() => { setWritten((w) => [...w, i.product_code]); setWriting(null) }} />
             )}
           </li>

@@ -74,30 +74,54 @@ function Description({ text }) {
   )
 }
 
-// 7단계: 수량 고르기 → 장바구니 담기 / 바로 구매 (가격은 주문할 때 서버가 다시 계산)
-function BuyBox({ product, onAsk }) {
+// 7단계: (옵션 상품은 옵션 고르기 →) 수량 고르기 → 장바구니 담기 / 바로 구매 (가격은 주문할 때 서버가 다시 계산)
+// 옵션 상품은 옵션을 고르기 전에는 담거나 살 수 없다. 옵션마다 가격·재고가 다르다
+function BuyBox({ product, option, onPick, onAsk }) {
   const [quantity, setQuantity] = useState(1)
   const [added, setAdded] = useState(false)
-  if (product.sold_out) {
+  const soldOut = (
+    <div className="actions">
+      <span className="button ghost">품절</span>
+      <button type="button" className="button ghost" onClick={onAsk}>입고 문의하기</button>
+    </div>
+  )
+  if (product.sold_out) return soldOut
+  const pick = product.has_options && (
+    <label className="qty">옵션
+      <select value={option?.id ?? ''} onChange={(e) => { onPick(Number(e.target.value) || null); setQuantity(1); setAdded(false) }}>
+        <option value="">옵션을 골라 주세요</option>
+        {product.options.map((o) => <option key={o.id} value={o.id}>{o.name} — {won(o.price)}{o.stock === 0 ? ' (품절)' : ''}</option>)}
+      </select>
+    </label>
+  )
+  if (product.has_options && !option) {
     return (
-      <div className="actions">
-        <span className="button ghost">품절</span>
-        <button type="button" className="button ghost" onClick={onAsk}>입고 문의하기</button>
+      <div className="buy">
+        {pick}
+        <p className="muted">옵션을 고르면 장바구니에 담거나 바로 살 수 있어요.</p>
+        <div className="actions">
+          <button type="button" className="button ghost" disabled>장바구니 담기</button>
+          <button type="button" className="button" disabled>바로 구매</button>
+        </div>
       </div>
     )
   }
-  const max = Math.min(product.stock, 99)
+  if (option?.stock === 0) return <div className="buy">{pick}{soldOut}</div>
+  const price = option ? option.price : product.price
+  const max = Math.min(option ? option.stock : product.stock, 99)
+  const buyUrl = `/checkout?item=${encodeURIComponent(product.product_code)}${option ? `&option=${option.id}` : ''}&qty=${quantity}`
   return (
     <div className="buy">
+      {pick}
       <label className="qty">수량
         <select value={quantity} onChange={(e) => { setQuantity(Number(e.target.value)); setAdded(false) }}>
           {Array.from({ length: Math.min(max, 20) }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
       </label>
-      <span className="price">{won(product.price * quantity)}</span>
+      <span className="price">{won(price * quantity)}</span>
       <div className="actions">
-        <button type="button" className="button ghost" onClick={() => { addToCart(product.product_code, quantity); setAdded(true) }}>장바구니 담기</button>
-        <a className="button" href={`/checkout?item=${encodeURIComponent(product.product_code)}&qty=${quantity}`}>바로 구매</a>
+        <button type="button" className="button ghost" onClick={() => { addToCart(product.product_code, quantity, option?.id ?? null); setAdded(true) }}>장바구니 담기</button>
+        <a className="button" href={buyUrl}>바로 구매</a>
       </div>
       {added && <p className="success">장바구니에 담았어요. <a href="/cart">장바구니 보기</a></p>}
     </div>
@@ -110,6 +134,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   const [error, setError] = useState('')
   const [showB2b, setShowB2b] = useState(focus === 'b2b')
   const [sentMessage, setSentMessage] = useState('')
+  const [optionId, setOptionId] = useState(null) // 옵션 상품에서 고른 옵션
   const qnaRef = useRef(null)
 
   useEffect(() => {
@@ -137,19 +162,25 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   if (!product) return <p className="muted">불러오는 중…</p>
   const { item, seller } = product
   const fresh = item.category !== '가공품'
+  // 옵션을 고르면 가격·100g당 가격·품절 여부가 그 옵션 기준으로 바뀐다 (옵션 이름이 판매 단위)
+  const option = product.options?.find((o) => o.id === optionId) ?? null
+  const price = option ? option.price : product.price
+  const unit = option ? option.name : product.unit
 
   return (
     <article className="detail">
       <button type="button" className="link" onClick={onBack}>← 목록</button>
       <Gallery product={product} />
       <h2>{product.name}</h2>
-      <p className="price">{won(product.price)} <span className="muted">/ {product.unit}</span></p>
+      {product.has_options && !option
+        ? <p className="price">{won(product.price)}부터 <span className="muted">/ {product.options.length > 0 ? `옵션 ${product.options.length}개 중 골라 주세요` : '판매 중인 옵션이 없어요'}</span></p>
+        : <p className="price">{won(price)} <span className="muted">/ {unit}</span></p>}
       <p className="unit-price muted">
-        {unitPrice(product.price, product.unit) && <>{unitPrice(product.price, product.unit)} · </>}
+        {(option || !product.has_options) && unitPrice(price, unit) && <>{unitPrice(price, unit)} · </>}
         {product.price_updated_at && <>가격 기준 {product.price_updated_at.slice(0, 10)}</>}
       </p>
       <RatingBadge rating={product.rating} count={product.review_count} />
-      {product.sold_out && <p className="badge soldout">품절</p>}
+      {(product.sold_out || option?.stock === 0) && <p className="badge soldout">품절</p>}
 
       <dl>
         {product.weight_g && <><dt>1개 무게</dt><dd>{product.weight_g}g</dd></>}
@@ -168,7 +199,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {product.info_answers >= 3 && <><dt>구매자 확인</dt><dd>표시와 맞았어요 {product.info_matched}/{product.info_answers}</dd></>}
         <dt>판매 농가</dt><dd>{seller.name} · {seller.region}</dd>
       </dl>
-      <BuyBox product={product} onAsk={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })} />
+      <BuyBox product={product} option={option} onPick={setOptionId} onAsk={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })} />
 
       <Description text={product.description} />
       {product.notice_table && (

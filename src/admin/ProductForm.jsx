@@ -6,7 +6,7 @@ import { adminApi } from './api.js'
 const EMPTY = {
   product_code: '', seller_code: '', item_code: '', name: '', price: '', unit: '', stock: '',
   weight_g: '', count_per_box: '', brix: '', variety: '', brix_measured_at: '', harvest_date: '', summary: '', description: '',
-  external_url: '', b2b_available: false, tags: [], faq: [], notice: { imported: false },
+  external_url: '', b2b_available: false, tags: [], faq: [], notice: { imported: false }, options: [],
 }
 
 function toForm(product) {
@@ -17,7 +17,37 @@ function toForm(product) {
     form[key] = value === null || value === undefined ? EMPTY[key] : (typeof EMPTY[key] === 'string' ? String(value) : value)
   }
   form.notice = { imported: false, ...product.notice }
+  form.options = (product.options ?? []).map((o) => ({ ...o, price: String(o.price), stock: String(o.stock) }))
   return form
+}
+
+// 판매 옵션 (예: 같은 사과를 5kg·10kg 로): 옵션마다 이름·가격·재고를 따로 적는다. 옵션이 있으면 손님은 옵션을 골라야 살 수 있다.
+// 주문 기록이 있는 옵션은 지울 수 없어서 판매 중지로만 내린다 (서버도 같은 규칙)
+const MAX_OPTIONS = 20 // 서버 server/validate.js 의 MAX_OPTIONS 와 같게
+function OptionFields({ options, onChange }) {
+  const set = (index, key) => (e) => onChange(options.map((o, i) => (i === index ? { ...o, [key]: e.target.value } : o)))
+  const toggle = (index) => onChange(options.map((o, i) => (i === index ? { ...o, status: o.status === 'stopped' ? 'active' : 'stopped' } : o)))
+  return (
+    <fieldset className="tags faq-edit">
+      <legend>판매 옵션 (선택, {MAX_OPTIONS}개까지) — 같은 상품을 5kg·10kg 처럼 나눠 팔 때. 옵션이 있으면 가격·재고는 옵션마다 적어요</legend>
+      {options.map((o, i) => (
+        <div key={o.id ?? `new-${i}`} className={`row${o.status === 'stopped' ? ' dim' : ''}`}>
+          <label>옵션 이름*<input value={o.name} onChange={set(i, 'name')} maxLength={30} placeholder="예: 5kg 1박스" /></label>
+          <label>가격(원)*<input value={o.price} onChange={set(i, 'price')} inputMode="numeric" /></label>
+          <label>재고*<input value={o.stock} onChange={set(i, 'stock')} inputMode="numeric" placeholder="없으면 0" /></label>
+          <span className="muted">{o.status === 'stopped' ? '판매 중지' : unitPrice(o.price, o.name) ?? ''}</span>
+          {o.id && <button type="button" className="link" onClick={() => toggle(i)}>{o.status === 'stopped' ? '다시 판매' : '판매 중지'}</button>}
+          {o.ordered
+            ? <span className="muted">주문 기록이 있어 지울 수 없어요</span>
+            : <button type="button" className="link" onClick={() => onChange(options.filter((_, j) => j !== i))}>빼기</button>}
+        </div>
+      ))}
+      {options.length < MAX_OPTIONS && (
+        <button type="button" className="link" onClick={() => onChange([...options, { id: null, name: '', price: '', stock: '', status: 'active' }])}>+ 옵션 추가</button>
+      )}
+      {options.length > 0 && <p className="muted">상품 가격은 판매 중 옵션의 가장 낮은 가격으로 자동으로 맞춰지고 목록에 "~부터"로 보여요. 판매 중 옵션이 모두 품절이면 품절로 보여요. 옵션 이름이 판매 단위로 보여서 100g당 가격도 옵션 이름(예: 5kg)으로 계산해요.</p>}
+    </fieldset>
+  )
 }
 
 // 당도 등급: 품종과 측정값으로 자동으로 정해진다 (판매자가 고를 수 없다). 기준이 없으면 측정값만 보인다
@@ -128,6 +158,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
   const items = [...options.items, ...extraItems.filter((x) => !options.items.some((i) => i.item_code === x.item_code))]
 
   const item = items.find((i) => i.item_code === form.item_code)
+  const hasOptions = form.options.length > 0
   const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
   const toggleTag = (code) => setForm((prev) => ({
     ...prev,
@@ -179,7 +210,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
         if (saved.status === 'active') return onSaved(saved, '검사를 통과해서 바로 판매를 시작했어요')
         return onSaved(saved, `회사 확인 뒤 판매돼요 (${saved.reasons.join(' / ')})`)
       }
-      onSaved(saved, SAVED[saved.status] ?? '저장했어요')
+      onSaved(saved, `${SAVED[saved.status] ?? '저장했어요'}${saved.saved_note ?? ''}`)
     } catch (e) {
       setErrors(e.errors ?? [e.message])
     } finally {
@@ -257,12 +288,14 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
         </label>
       )}
       <label>상품 이름*<input value={form.name} onChange={set('name')} placeholder="예: [예시] 사과 선물세트 5kg" /></label>
+      {/* 옵션이 있으면 상품 가격·재고는 옵션에서 정해진다 (판매 중 옵션의 최저가·재고 합) */}
       <div className="row">
-        <label>가격(원)*<input value={form.price} onChange={set('price')} inputMode="numeric" /></label>
-        <label>판매 단위*<input value={form.unit} onChange={set('unit')} placeholder="예: 5kg 1박스" /></label>
-        <label>재고*<input value={form.stock} onChange={set('stock')} inputMode="numeric" placeholder="없으면 0" /></label>
+        {!hasOptions && <label>가격(원)*<input value={form.price} onChange={set('price')} inputMode="numeric" /></label>}
+        <label>판매 단위*<input value={form.unit} onChange={set('unit')} placeholder={hasOptions ? '예: 1박스 (옵션 이름에 양을 적어요)' : '예: 5kg 1박스'} /></label>
+        {!hasOptions && <label>재고*<input value={form.stock} onChange={set('stock')} inputMode="numeric" placeholder="없으면 0" /></label>}
       </div>
-      {unitPrice(form.price, form.unit) && <p className="muted">손님 화면에 {unitPrice(form.price, form.unit)} 로 함께 보여요 (가격을 바꾸면 가격 기준일도 오늘로)</p>}
+      {!hasOptions && unitPrice(form.price, form.unit) && <p className="muted">손님 화면에 {unitPrice(form.price, form.unit)} 로 함께 보여요 (가격을 바꾸면 가격 기준일도 오늘로)</p>}
+      <OptionFields options={form.options} onChange={(options) => setForm((prev) => ({ ...prev, options }))} />
       <div className="row">
         <label>1개 무게(g)<input value={form.weight_g} onChange={set('weight_g')} inputMode="numeric" /></label>
         <label>박스당 개수<input value={form.count_per_box} onChange={set('count_per_box')} inputMode="numeric" /></label>

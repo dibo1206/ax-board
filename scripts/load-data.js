@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { sealText } from '../server/crypto.js'
 import { initDb, pool } from '../server/db.js'
+import { syncOptionTotals } from '../server/options.js'
 import { parseCsv } from './csv.js'
 
 const DATA = new URL('../data/', import.meta.url)
@@ -18,6 +19,7 @@ const OWNERS = {
   'items.csv': '김가온(과일·채소), 이현서(가공품)',
   'tags.csv': '이희석',
   'products.csv': '김재훈',
+  'product_options.csv': '김재훈',
   'questions.csv': '박형우',
   'chatbot_tests.csv': '박형우',
 }
@@ -30,6 +32,8 @@ const COLUMNS = {
   'products.csv': ['product_code', 'seller_code', 'item_code', 'name', 'price', 'unit', 'stock', 'weight_g',
     'count_per_box', 'brix', 'brix_measured_at', 'harvest_date', 'summary', 'external_url', 'b2b_available',
     'tags', 'source'],
+  // 판매 옵션 (예: 같은 사과를 5kg·10kg 로). 옵션이 있는 상품은 옵션을 골라야 살 수 있고, products.csv 의 가격·재고는 옵션에서 다시 계산한다
+  'product_options.csv': ['product_code', 'name', 'price', 'stock', 'source'],
   'questions.csv': ['product_code', 'author', 'question', 'answer', 'source'],
   'chatbot_tests.csv': ['question_type', 'question', 'expected', 'expected_source'],
 }
@@ -84,7 +88,7 @@ function checkCommon(file, rows, codeKey, issues, needsExampleMark = false) {
 
 function validate(sheets, issues) {
   const { 'sellers.csv': sellers, 'items.csv': items, 'tags.csv': tags, 'products.csv': products,
-    'questions.csv': questions, 'chatbot_tests.csv': tests } = sheets
+    'product_options.csv': options, 'questions.csv': questions, 'chatbot_tests.csv': tests } = sheets
 
   const sellerCodes = checkCommon('sellers.csv', sellers, 'seller_code', issues, true)
   sellers.forEach((r, i) => { if (!isYesNo(r.is_company)) issues.error('sellers.csv', i + 2, 'is_company는 예/아니오') })
@@ -141,6 +145,18 @@ function validate(sheets, issues) {
     productTags.filter((t) => !tagCodes.has(t)).forEach((t) => issues.error('products.csv', line, `태그 "${t}"가 tags.csv에 없어요`))
     if (productTags.length < 3 || productTags.length > 5) issues.warn('products.csv', line, `태그가 ${productTags.length}개예요 (3~5개 권장)`)
   })
+
+  const optionNames = new Set()
+  options.forEach((r, i) => {
+    const line = i + 2
+    if (!productCodes.has(r.product_code)) issues.error('product_options.csv', line, `상품 코드 "${r.product_code}"가 products.csv에 없어요`)
+    if (!r.name || r.name.length > 30) issues.error('product_options.csv', line, '옵션 이름을 30자 안으로 적어 주세요 (예: 5kg 1박스)')
+    if (optionNames.has(`${r.product_code}:${r.name}`)) issues.error('product_options.csv', line, `옵션 "${r.name}"가 같은 상품에 두 번 나와요`)
+    optionNames.add(`${r.product_code}:${r.name}`)
+    if (!isInt(r.price) || Number(r.price) === 0) issues.error('product_options.csv', line, `가격 "${r.price}"는 0보다 큰 숫자(원)만`)
+    if (!isInt(r.stock)) issues.error('product_options.csv', line, `재고 "${r.stock}"는 숫자만`)
+  })
+  checkCommon('product_options.csv', options, null, issues)
 
   questions.forEach((r, i) => {
     if (!productCodes.has(r.product_code)) issues.error('questions.csv', i + 2, `상품 코드 "${r.product_code}"가 products.csv에 없어요`)
@@ -213,6 +229,23 @@ async function load(sheets) {
           list(r.tags), nullable(r.source), nullable(r.image_url ?? ''), nullable(r.notice ?? ''), nullable(r.variety ?? ''), nullable(r.brix_photo_url ?? '')],
       )
     }
+    // 판매 옵션: 표의 순서대로. 표에 있는 상품의 옵션 중 표에서 빠진 것은 주문 기록이 없으면 지우고, 있으면 판매 중지
+    const optionRows = sheets['product_options.csv']
+    for (const [index, r] of optionRows.entries()) {
+      await client.query(
+        `INSERT INTO product_options (product_code, name, price, stock, status, sort_order)
+         VALUES ($1,$2,$3,$4,'active',$5)
+         ON CONFLICT (product_code, name) DO UPDATE SET price=$3, stock=$4, status='active', sort_order=$5, updated_at=now()`,
+        [r.product_code, r.name, Number(r.price), Number(r.stock), index],
+      )
+    }
+    const csvCodes = sheets['products.csv'].map((r) => r.product_code)
+    const keptOptions = optionRows.map((r) => `${r.product_code}:${r.name}`)
+    const leftOver = "o.product_code = ANY($1) AND NOT (o.product_code || ':' || o.name = ANY($2))"
+    const ordered = 'EXISTS (SELECT 1 FROM order_items oi WHERE oi.option_id = o.id)'
+    await client.query(`DELETE FROM product_options o WHERE ${leftOver} AND NOT ${ordered}`, [csvCodes, keptOptions])
+    await client.query(`UPDATE product_options o SET status = 'stopped', updated_at = now() WHERE ${leftOver} AND ${ordered}`, [csvCodes, keptOptions])
+    await syncOptionTotals(client, csvCodes) // 옵션 상품의 가격·재고를 판매 중 옵션의 최저가·재고 합으로
     for (const r of sheets['questions.csv']) {
       await client.query(
         `INSERT INTO questions (product_code, author, question, answer, answered_at)
@@ -252,8 +285,8 @@ if (!CHECK_ONLY && errors.length === 0) {
   const { rows } = await pool.query(`SELECT
     (SELECT count(*) FROM sellers) AS sellers, (SELECT count(*) FROM items) AS items,
     (SELECT count(*) FROM tags) AS tags, (SELECT count(*) FROM products) AS products,
-    (SELECT count(*) FROM questions) AS questions`)
-  loaded = `DB에 넣었어요 → 농가 ${rows[0].sellers}, 품목 ${rows[0].items}, 태그 ${rows[0].tags}, 상품 ${rows[0].products}, Q&A ${rows[0].questions}`
+    (SELECT count(*) FROM product_options) AS options, (SELECT count(*) FROM questions) AS questions`)
+  loaded = `DB에 넣었어요 → 농가 ${rows[0].sellers}, 품목 ${rows[0].items}, 태그 ${rows[0].tags}, 상품 ${rows[0].products}, 옵션 ${rows[0].options}, Q&A ${rows[0].questions}`
 } else if (errors.length > 0) {
   loaded = `오류 ${errors.length}건이 있어 DB에 넣지 않았어요`
 }

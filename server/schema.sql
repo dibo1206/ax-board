@@ -397,3 +397,23 @@ SELECT w, k FROM (VALUES
 ) AS v(w, k)
 WHERE NOT EXISTS (SELECT 1 FROM banned_words);
 
+
+-- 판매 옵션 (예: 같은 사과를 5kg·10kg 로). 옵션마다 이름·가격·재고가 따로 있다. 옵션이 없는 상품은 지금처럼 상품 가격·재고로 판다
+-- 옵션이 하나라도 있는 상품은 옵션을 골라야 살 수 있고, products.price·stock 은 판매 중 옵션의 최저가·재고 합으로 맞춰 둔다 (server/options.js)
+-- 주문 기록이 있는 옵션은 지우지 않고 판매 중지(stopped)로 내린다 (order_items 가 참조해서 지울 수도 없다)
+CREATE TABLE IF NOT EXISTS product_options (
+  id SERIAL PRIMARY KEY,
+  product_code TEXT NOT NULL REFERENCES products(product_code) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  price INTEGER NOT NULL CHECK (price > 0),
+  stock INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'stopped')),
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (product_code, name)
+);
+-- 주문 줄에 고른 옵션과 그때의 옵션 이름을 남긴다 (가격은 price 칸에 그때 옵션 가격). 옵션 없는 주문은 비어 있다
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS option_id INT REFERENCES product_options(id);
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS option_name TEXT;
+CREATE INDEX IF NOT EXISTS order_items_option_idx ON order_items (option_id) WHERE option_id IS NOT NULL;

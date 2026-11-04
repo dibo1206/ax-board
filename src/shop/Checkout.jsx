@@ -1,17 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { Totals } from './Cart.jsx'
-import { getAccount, loadScript, MAX_QTY, post, readCart, savePending, won } from './shared.js'
+import { getAccount, loadScript, MAX_QTY, optionLabel, post, readCart, savePending, won } from './shared.js'
 import { useCartLines } from './useCartLines.js'
 
 // 주문서 → (주문 만들기: 서버가 금액 계산·재고 잡아 둠) → 결제 단계(토스 결제위젯)
 const POSTCODE_SDK = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js'
 const TOSS_SDK = 'https://js.tosspayments.com/v2/standard'
 
+// 바로 구매: /checkout?item=상품코드&option=옵션번호&qty=수량 (옵션 없는 상품은 option 없이)
 function buyNowLine() {
   const params = new URLSearchParams(window.location.search)
   const code = params.get('item')
   const qty = Number(params.get('qty') || 1)
-  return code ? [{ productCode: code, quantity: Number.isInteger(qty) && qty > 0 ? Math.min(qty, MAX_QTY) : 1 }] : null
+  const option = Number(params.get('option'))
+  return code ? [{ productCode: code, optionId: Number.isInteger(option) && option > 0 ? option : null, quantity: Number.isInteger(qty) && qty > 0 ? Math.min(qty, MAX_QTY) : 1 }] : null
 }
 
 function PaymentStep({ order, buyer }) {
@@ -121,7 +123,7 @@ export function Checkout() {
         ...form,
         receiverName: form.same ? form.buyerName : form.receiverName,
         receiverPhone: form.same ? form.buyerPhone : form.receiverPhone,
-        items: cart.ok.map((r) => ({ productCode: r.productCode, quantity: r.quantity })),
+        items: cart.ok.map((r) => ({ productCode: r.productCode, optionId: r.optionId, quantity: r.quantity })),
       }
       const created = await post('/orders', body)
       savePending({ orderNo: created.orderNo, fromCart: !buyNow })
@@ -144,7 +146,7 @@ export function Checkout() {
       <h2>주문서</h2>
       <section className="box">
         <h3>주문 상품</h3>
-        <ul>{cart.ok.map((r) => <li key={r.productCode}>{r.product.name} × {r.quantity} — {won(r.subtotal)}</li>)}</ul>
+        <ul>{cart.ok.map((r) => <li key={`${r.productCode}:${r.optionId ?? ''}`}>{optionLabel(r.product.name, r.option?.name)} × {r.quantity} — {won(r.subtotal)}</li>)}</ul>
         {cart.rows.length > cart.ok.length && <p className="warn">품절·재고 부족 상품은 빠졌어요.</p>}
         <Totals {...cart} />
       </section>

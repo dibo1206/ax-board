@@ -1,12 +1,13 @@
 // 판매자(농가) API. 로그인한 농가의 상품·질문·소개만 다룬다 (다른 농가 것은 없는 것처럼 404)
 // 새 상품은 '검토 대기'로 올라가고 회사 관리자가 승인해야 판매된다. 이미 판매 중인 상품의 수정(가격·재고 등)은 바로 반영된다.
 import express from 'express'
-import { codeSets, insertProduct, itemRanges, noticeProblem, rawImage, recordChanges, removeImage, storeImage, updateProduct } from './admin.js'
+import { checkOptions, codeSets, insertProduct, itemRanges, noticeProblem, rawImage, recordChanges, removeImage, stoppedNote, storeImage, updateProduct } from './admin.js'
 import { requireSeller } from './auth.js'
 import { bannedMessage, findBanned } from './banned.js'
 import { fillItem, listTemplates, productDraft } from './content.js'
 import { pool } from './db.js'
 import { requestItem } from './items.js'
+import { ALL_OPTIONS_SQL, saveOptions } from './options.js'
 import { submitProduct } from './sellers.js'
 import { validateProduct } from './validate.js'
 
@@ -69,7 +70,7 @@ sellerRouter.get('/options', async (req, res) => {
 
 sellerRouter.get('/products', async (req, res) => {
   const { rows } = await pool.query(`
-    SELECT p.*, (p.stock = 0) AS sold_out, i.name AS item_name, i.category
+    SELECT p.*, (p.stock = 0) AS sold_out, i.name AS item_name, i.category, ${ALL_OPTIONS_SQL}
     FROM products p JOIN items i ON i.item_code = p.item_code
     WHERE p.seller_code = $1
     ORDER BY (p.status = 'draft' AND p.review_note IS NOT NULL) DESC, p.updated_at DESC`, [mine(req)])
@@ -82,10 +83,13 @@ sellerRouter.post('/products', async (req, res) => {
   if (errors) return res.status(400).json({ error: errors.join(' '), errors })
   const problem = product.status === 'pending' ? await noticeProblem(product) : null // 임시 저장은 비어 있어도 된다
   if (problem) return res.status(400).json({ error: problem, errors: [problem] })
+  const checked = await checkOptions(null, product)
+  if (checked.error) return res.status(400).json({ error: checked.error, errors: [checked.error] })
   const row = await insertProduct(product, `판매자 화면 등록 (${req.seller.loginId})`)
   if (!row) return res.status(409).json({ error: '같은 상품 코드가 이미 있어요. 다른 코드를 써 주세요.' })
+  const saved = await saveOptions(product.product_code, product.options)
   console.log(`[seller] ${req.seller.loginId} 상품 등록 ${product.product_code} (${product.status})`)
-  res.status(201).json(row)
+  res.status(201).json(saved.product)
 })
 
 sellerRouter.patch('/products/:code', ownProduct, async (req, res) => {
@@ -100,16 +104,20 @@ sellerRouter.patch('/products/:code', ownProduct, async (req, res) => {
     const problem = await noticeProblem(product)
     if (problem) return res.status(400).json({ error: problem, errors: [problem] })
   }
-  await recordChanges(current, product, `판매자 ${req.seller.loginId}`)
-  let row = await updateProduct(current.product_code, product)
+  const checked = await checkOptions(current.product_code, product)
+  if (checked.error) return res.status(400).json({ error: checked.error, errors: [checked.error] })
+  await recordChanges(current, product, `판매자 ${req.seller.loginId}`, checked.changes)
+  await updateProduct(current.product_code, product)
+  const saved = await saveOptions(current.product_code, product.options) // 옵션 저장, 상품 가격·재고를 옵션에 맞추기
+  let row = saved.product
   // 당도를 바꾸면 옛 당도계 사진은 새 값의 증거가 아니라서 내린다 (새 사진을 올리면 다시 붙는다)
   const brixOf = (v) => (v == null || v === '' ? null : Number(v)) // DB 의 "14.0" 과 화면의 "14" 는 같은 값
   // 품종을 바꾸면 적용되는 등급 기준도 달라지니, 당도를 바꿀 때처럼 사진부터 다시 받는다
   if ((brixOf(current.brix) !== brixOf(product.brix) || (current.variety ?? '') !== (product.variety ?? '')) && current.brix_photo_url) {
-    row = (await pool.query('UPDATE products SET brix_photo_url = NULL WHERE product_code = $1 RETURNING *', [current.product_code])).rows[0]
+    row = { ...row, ...(await pool.query('UPDATE products SET brix_photo_url = NULL WHERE product_code = $1 RETURNING *', [current.product_code])).rows[0] }
   }
   console.log(`[seller] ${req.seller.loginId} 상품 수정 ${current.product_code} (${current.status} → ${status})`)
-  res.json(row)
+  res.json({ ...row, saved_note: stoppedNote(saved.stopped) })
 })
 
 // 사진까지 올린 뒤 검토 요청: 믿을 만한 농가의 문제없는 상품은 바로 판매, 아니면 관리자 검토 대기 (이유를 돌려준다)

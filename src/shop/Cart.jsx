@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MAX_QTY, readCart, won, writeCart } from './shared.js'
+import { MAX_QTY, optionLabel, readCart, sameLine, won, writeCart } from './shared.js'
 import { useCartLines } from './useCartLines.js'
 
 // 농가가 여럿이면 농가마다 따로 보내서 배송비도 농가마다 보여 준다
@@ -30,9 +30,10 @@ export function Cart() {
     return () => window.removeEventListener('cart-change', update)
   }, [])
 
-  const change = (code, quantity) => writeCart(quantity > 0
-    ? lines.map((l) => (l.productCode === code ? { ...l, quantity: Math.min(MAX_QTY, quantity) } : l))
-    : lines.filter((l) => l.productCode !== code))
+  // 같은 상품이라도 옵션이 다르면 다른 줄이다
+  const change = (line, quantity) => writeCart(quantity > 0
+    ? lines.map((l) => (sameLine(l, line) ? { ...l, quantity: Math.min(MAX_QTY, quantity) } : l))
+    : lines.filter((l) => !sameLine(l, line)))
 
   if (cart.error) return <p className="error">{cart.error}</p>
   if (cart.loading) return <p className="muted">불러오는 중…</p>
@@ -45,19 +46,19 @@ export function Cart() {
         <>
           <ul className="cart">
             {cart.rows.map((r) => (
-              <li key={r.productCode} className={`box${r.problem ? ' dim' : ''}`}>
+              <li key={`${r.productCode}:${r.optionId ?? ''}`} className={`box${r.problem ? ' dim' : ''}`}>
                 <div>
-                  <strong>{r.product?.name ?? r.productCode}</strong>
-                  {r.product && <p className="muted">{won(r.product.price)} / {r.product.unit}</p>}
+                  <strong>{r.product ? optionLabel(r.product.name, r.option?.name) : r.productCode}</strong>
+                  {r.product && (r.option || !r.product.has_options) && <p className="muted">{won(r.price)} / {r.option?.name ?? r.product.unit}</p>}
                   {r.problem && <p className="error">{r.problem} — 주문에서 빠져요</p>}
                 </div>
                 <div className="qty">
-                  <button type="button" onClick={() => change(r.productCode, r.quantity - 1)} aria-label="하나 빼기">−</button>
+                  <button type="button" onClick={() => change(r, r.quantity - 1)} aria-label="하나 빼기">−</button>
                   <span>{r.quantity}</span>
-                  <button type="button" onClick={() => change(r.productCode, r.quantity + 1)} aria-label="하나 더" disabled={!r.product || r.quantity >= r.product.stock}>+</button>
+                  <button type="button" onClick={() => change(r, r.quantity + 1)} aria-label="하나 더" disabled={!r.product || r.quantity >= r.stock}>+</button>
                 </div>
                 <strong>{won(r.subtotal)}</strong>
-                <button type="button" className="link" onClick={() => change(r.productCode, 0)}>삭제</button>
+                <button type="button" className="link" onClick={() => change(r, 0)}>삭제</button>
               </li>
             ))}
           </ul>

@@ -20,7 +20,7 @@ function PickList({ items, onOpen }) {
           <button type="button" className="card" onClick={() => onOpen(x.product_code)}>
             {x.image_url && <img className="thumb" src={thumbUrl(x.image_url)} alt="" loading="lazy" width="160" height="160" />}
             <strong>{x.name}</strong>
-            <span>{won(x.price)}</span>
+            <span>{won(x.price)}{x.has_options && '부터'}</span>
             <span className="reasons">{x.reasons.map((r) => <span key={r} className="badge">{r}</span>)}</span>
           </button>
         </li>

@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { readNotice } from './notice.js'
 
 export const FORBIDDEN = ['면역력', '다이어트', '치료', '예방', '해독', '항암', '혈압', '혈당']
+export const MAX_OPTIONS = 20 // 상품 하나의 판매 옵션 수
 
 const isCode = (v) => /^[a-z0-9_]+$/.test(v)
 const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v))
@@ -39,6 +40,32 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
     // 자주 묻는 질문 [{q, a}] (AI 초안을 판매자가 고쳐서 저장)
     notice: readNotice(input.notice), // 상품정보 제공 고시
     faq: (Array.isArray(input.faq) ? input.faq : []).slice(0, 7).map((f) => ({ q: text(f?.q), a: text(f?.a) })).filter((f) => f.q || f.a),
+    // 판매 옵션 [{id, name, price, stock, status}] (예: 5kg·10kg). 보내지 않으면(null) 저장된 옵션을 그대로 둔다
+    options: Array.isArray(input.options)
+      ? input.options.slice(0, MAX_OPTIONS + 1).map((o) => ({
+        id: /^\d{1,9}$/.test(text(o?.id)) ? Number(o.id) : null,
+        name: text(o?.name),
+        price: text(o?.price),
+        stock: text(o?.stock),
+        status: o?.status === 'stopped' ? 'stopped' : 'active',
+      }))
+      : null,
+  }
+
+  // 옵션이 있으면 가격·재고는 옵션마다 적는다. 상품 가격·재고는 판매 중 옵션의 최저가·재고 합으로 맞춘다 (server/options.js)
+  if (p.options?.length) {
+    const before = errors.length
+    if (p.options.length > MAX_OPTIONS) errors.push(`옵션은 ${MAX_OPTIONS}개까지 만들 수 있어요.`)
+    if (p.options.some((o) => !o.name || o.name.length > 30)) errors.push('옵션 이름을 30자 안으로 적어 주세요. (예: 5kg 1박스)')
+    if (new Set(p.options.map((o) => o.name)).size !== p.options.length) errors.push('같은 이름의 옵션이 두 개 있어요.')
+    if (p.options.some((o) => !/^\d+$/.test(o.price) || Number(o.price) === 0)) errors.push('옵션 가격은 0보다 큰 숫자(원)만 적어 주세요.')
+    if (p.options.some((o) => !/^\d+$/.test(o.stock))) errors.push('옵션 재고는 숫자만 적어 주세요. 없으면 0')
+    const active = p.options.filter((o) => o.status === 'active')
+    if (errors.length === before) {
+      // 판매 중 옵션이 없으면(모두 판매 중지) 품절로 보이고, 가격 칸은 비워 둘 수 없어서 옵션 중 최저가를 둔다
+      p.price = String(Math.min(...(active.length ? active : p.options).map((o) => Number(o.price))))
+      p.stock = String(active.reduce((sum, o) => sum + Number(o.stock), 0))
+    }
   }
 
   if (isNew && !isCode(p.product_code)) errors.push('상품 코드는 영문 소문자·숫자·밑줄만 쓸 수 있어요.')
@@ -50,8 +77,10 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
   }
   if (!itemCodes.has(p.item_code)) errors.push('품목을 골라 주세요.')
   if (!sellerCodes.has(p.seller_code)) errors.push('판매 농가를 골라 주세요.')
-  if (!/^\d+$/.test(p.price) || Number(p.price) === 0) errors.push('가격은 0보다 큰 숫자(원)만 적어 주세요.')
-  if (!/^\d+$/.test(p.stock)) errors.push('재고는 숫자만 적어 주세요. 없으면 0')
+  if (!p.options?.length) {
+    if (!/^\d+$/.test(p.price) || Number(p.price) === 0) errors.push('가격은 0보다 큰 숫자(원)만 적어 주세요.')
+    if (!/^\d+$/.test(p.stock)) errors.push('재고는 숫자만 적어 주세요. 없으면 0')
+  }
   for (const [key, label] of [['weight_g', '1개 무게'], ['count_per_box', '박스당 개수']]) {
     if (p[key] && !/^\d+$/.test(p[key])) errors.push(`${label}는 숫자만 적어 주세요.`)
   }
@@ -80,7 +109,7 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
   if (unknown.length) errors.push(`없는 태그예요: ${unknown.join(', ')}`)
   if (p.faq.length > 6) errors.push('자주 묻는 질문은 6개까지 적어 주세요.')
   if (p.faq.some((f) => !f.q || !f.a || f.q.length > 100 || f.a.length > 300)) errors.push('자주 묻는 질문은 질문(100자)과 답(300자)을 모두 적어 주세요.')
-  const all = `${p.name} ${p.summary} ${p.description} ${p.faq.map((f) => `${f.q} ${f.a}`).join(' ')} ${Object.values(p.notice).filter((v) => typeof v === 'string').join(' ')}`
+  const all = `${p.name} ${(p.options ?? []).map((o) => o.name).join(' ')} ${p.summary} ${p.description} ${p.faq.map((f) => `${f.q} ${f.a}`).join(' ')} ${Object.values(p.notice).filter((v) => typeof v === 'string').join(' ')}`
   const bad = findBanned(all)
   if (bad.length) errors.push(`효능 표현은 쓰지 않아요: ${bad.join(', ')}`)
   if (p.review_note && p.review_note.length > 300) errors.push('반려 사유는 300자 안으로 적어 주세요.')
@@ -101,6 +130,7 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
       summary: orNull(p.summary),
       description: orNull(p.description),
       external_url: orNull(p.external_url),
+      options: p.options && p.options.map((o) => ({ ...o, price: Number(o.price), stock: Number(o.stock) })),
     },
   }
 }

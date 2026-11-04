@@ -21,9 +21,20 @@ import { SHIPPING, SHOP } from './policy.js'
 import { mostSimilar, similarity } from './similar.js'
 import { findBanned } from './banned.js'
 import { publicItem } from './items.js'
+import { ACTIVE_OPTIONS_SQL } from './options.js'
 
 const RULES_FILE = new URL('./chat_rules.md', import.meta.url)
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
+// 판매 옵션(5kg·10kg …)이 있는 상품은 옵션마다 가격이 다르다. 옵션이 없으면 상품 가격 / 판매 단위
+const priceText = (p) => (p.options?.length ? p.options.map((o) => `${o.name} ${won(o.price)}`).join(', ') : `${won(p.price)} / ${p.unit}`)
+// 질문에 옵션 이름이나 그 양(5kg, 10kg …)이 나오면 그 옵션만, 아니면 모든 옵션. '15kg' 안의 '5kg'는 잡지 않는다
+function pickOptions(p, message) {
+  const options = p.options ?? []
+  const amounts = (name) => [...name.matchAll(/(\d+(?:\.\d+)?)\s*(kg|g|ml|l|포|개|병|입|봉)(?![a-z])/gi)]
+  const said = ([, num, unit]) => new RegExp(`(?<![\\d.])${num.replace('.', '\\.')}\\s*${unit}(?![a-z])`, 'i').test(message)
+  const hit = options.filter((o) => message.includes(o.name) || amounts(o.name).some(said))
+  return hit.length ? hit : options
+}
 const QNA_HINT = '상품 페이지 아래 Q&A에 질문을 남겨 주시면 담당자가 직접 답해 드려요.'
 
 // ---------- 1. 정해진 답으로 넘기는 질문 ----------
@@ -98,7 +109,7 @@ const ROUTES = [
 function loadCatalog() {
   return cached('chat:catalog', 15_000, async () => {
     const [products, items] = await Promise.all([
-      pool.query(`SELECT p.*, (p.stock = 0) AS sold_out, s.name AS seller_name, s.region AS seller_region, s.story AS seller_story,
+      pool.query(`SELECT p.*, (p.stock = 0) AS sold_out, s.name AS seller_name, s.region AS seller_region, s.story AS seller_story, ${ACTIVE_OPTIONS_SQL},
                          (SELECT count(*) FILTER (WHERE r.info_match = 'no') >= 3 AND count(*) FILTER (WHERE r.info_match = 'no') * 2 >= count(r.info_match) FROM reviews r WHERE r.product_code = p.product_code AND NOT r.hidden) AS info_disputed
                   FROM products p JOIN sellers s ON s.seller_code = p.seller_code
                   WHERE p.status = 'active' ORDER BY p.product_code LIMIT 300`),
@@ -144,8 +155,10 @@ function describeProduct(p, item) {
   const lines = [
     `[상품 코드 ${p.product_code}] ${p.name}`,
     `- 품목: ${item.name} (품목 코드 ${item.item_code}) · 판매: ${p.seller_name} (${p.seller_region})`,
-    `- 가격: ${won(p.price)} / ${p.unit}`,
-    `- 재고: ${p.sold_out ? '품절 (지금 살 수 없음)' : `판매 중 (${p.stock}개 남음)`}`,
+    p.options?.length ? `- 가격: 옵션마다 다름 (옵션을 골라 주문) — ${p.options.map((o) => `${o.name} ${won(o.price)}`).join(' / ')}` : `- 가격: ${won(p.price)} / ${p.unit}`,
+    p.options?.length && !p.sold_out
+      ? `- 재고: ${p.options.map((o) => `${o.name} ${o.stock > 0 ? `판매 중 (${o.stock}개 남음)` : '품절'}`).join(' / ')}`
+      : `- 재고: ${p.sold_out ? '품절 (지금 살 수 없음)' : `판매 중 (${p.stock}개 남음)`}`,
     `- 1개 무게: ${p.weight_g ? `${p.weight_g}g` : '정보 없음'} · 박스당 개수: ${p.count_per_box ? `${p.count_per_box}개` : '정보 없음'}`,
   ]
   if (item.show_brix) {
@@ -197,7 +210,7 @@ async function buildMaterial(catalog, ctx) {
   }
   // 전체 상품 목록은 질문에서 품목을 못 찾았을 때만 넣는다 (입력 토큰 절약)
   if (!ctx.products.length) {
-    parts.push(`[전체 상품 목록]\n${catalog.products.map((p) => `- ${p.product_code}: ${p.name} · ${won(p.price)} · ${p.sold_out ? '품절' : '판매 중'}`).join('\n')}`)
+    parts.push(`[전체 상품 목록]\n${catalog.products.map((p) => `- ${p.product_code}: ${p.name} · ${p.options?.length ? priceText(p) : won(p.price)} · ${p.sold_out ? '품절' : '판매 중'}`).join('\n')}`)
   }
   return parts.join('\n\n')
 }
@@ -217,13 +230,19 @@ const FACTS = [
   {
     re: /얼마|가격|값/,
     explicit: /가격|값/,
-    say: (p) => `${p.label} 가격은 ${won(p.price)}이에요 (판매 단위: ${p.unit}).${p.sold_out ? ' 다만 지금은 품절이라 살 수 없어요.' : ''}`,
+    say: (p) => (p.picked.length === 1
+      ? `${p.label} ${p.picked[0].name} 가격은 ${won(p.picked[0].price)}이에요.${p.picked[0].stock > 0 ? '' : ' 다만 지금은 품절이라 살 수 없어요.'}`
+      : p.picked.length
+      ? `${p.label} 가격은 옵션마다 달라요: ${p.picked.map((o) => `${o.name} ${won(o.price)}${o.stock > 0 ? '' : '(품절)'}`).join(', ')}. 상품 페이지에서 옵션을 골라 주문해 주세요.`
+      : `${p.label} 가격은 ${won(p.price)}이에요 (판매 단위: ${p.unit}).${p.sold_out ? ' 다만 지금은 품절이라 살 수 없어요.' : ''}`),
   },
   {
     re: /살 수 있|구매.{0,4}(가능|돼|되나)|재고|품절|남았|있어요\?|있나요/,
     explicit: /살 수 있|재고|품절|남았/,
     say: (p) => (p.sold_out
       ? `${p.label} 상품은 지금 품절이라 살 수 없어요. 다시 들어오는 날짜는 아직 안내된 정보가 없어요.`
+      : p.picked.length
+      ? `${p.label} 상품은 옵션별로 ${p.picked.map((o) => `${o.name} ${o.stock > 0 ? '살 수 있어요' : '품절이에요'}`).join(', ')}.${p.picked.some((o) => o.stock > 0) ? ` 상품 페이지에서 옵션을 골라 ${BUY_HOW.replace('이 쇼핑몰 상품 페이지에서 ', '')}해 주세요.` : ''}`
       : `${p.label} 상품은 지금 살 수 있어요. ${BUY_HOW}해 주세요.`),
   },
   {
@@ -338,7 +357,7 @@ function answerFact(message, catalog, ctx) {
   const sentences = []
   for (const p of products) {
     const item = catalog.items.find((i) => i.item_code === p.item_code)
-    const labeled = { ...p, label: p.name.replace(/\[예시\]\s*/g, '') }
+    const labeled = { ...p, label: p.name.replace(/\[예시\]\s*/g, ''), picked: pickOptions(p, message) }
     for (const f of facts) {
       if (f.needsBrix && !item.show_brix) return null
       sentences.push(f.say(labeled))
@@ -481,7 +500,7 @@ const SAY_PRODUCTS = {
     return `${label(p)}: ${[p.summary, item?.show_brix && p.brix && `당도 ${p.brix}Brix(${p.brix_measured_at ?? ''} 측정)`].filter(Boolean).join(' · ') || '맛 정보가 아직 없어요'}`
   }).join(' / ') + ' 상품 페이지에서 구매 후기도 볼 수 있어요.',
   compare: (products) => (products.length < 2 ? null
-    : `${products.map((p) => `${label(p)}: ${[`${won(p.price)} / ${p.unit}`, p.count_per_box && `${p.count_per_box}개`, p.brix && `당도 ${p.brix}Brix`, p.sold_out && '품절'].filter(Boolean).join(' · ')}`).join(' / ')}. 상품 이름을 누르면 자세히 볼 수 있어요.`),
+    : `${products.map((p) => `${label(p)}: ${[priceText(p), p.count_per_box && `${p.count_per_box}개`, p.brix && `당도 ${p.brix}Brix`, p.sold_out && '품절'].filter(Boolean).join(' · ')}`).join(' / ')}. 상품 이름을 누르면 자세히 볼 수 있어요.`),
 }
 
 function answerTemplate(message, catalog, ctx) {
@@ -556,7 +575,7 @@ function choiceFacts(p, item) {
     : p.info_disputed ? '당도는 후기에서 표시와 다르다는 의견이 많아 안내하지 않음'
     : p.brix ? `당도 ${p.brix}Brix${p.brix_measured_at ? `(${p.brix_measured_at} 측정)` : ''}`
     : '측정한 당도 정보 없음'
-  return `${label(p)} ${won(p.price)}(${p.unit})${brix ? ` · ${brix}` : ''} · ${p.sold_out ? '품절' : '판매 중'}`
+  return `${label(p)} ${p.options?.length ? `옵션 ${priceText(p)}` : `${won(p.price)}(${p.unit})`}${brix ? ` · ${brix}` : ''} · ${p.sold_out ? '품절' : '판매 중'}`
 }
 
 const nameList = (rows) => rows.map((x) => label(x.p)).join(', ')
@@ -734,7 +753,8 @@ function findProblem(answer, catalog) {
   if (/안전(합니다|해요|하다)/.test(answer.replace(/(않는|말고|않으시는|버리는)\s*(것이|게)\s*안전/g, ''))) return '안전하다고 판단하면 안 돼요. 확인할 신호만 알려 주세요'
   if (/(환불|교환|반품)(을|해)?\s*(해\s*)?드릴|(환불|교환|반품)\s*가능/.test(answer)) return '환불·교환을 약속하면 안 돼요'
   if (/\d\s*만\s*\d*\s*천?\s*원|\d\s*천\s*원/.test(answer)) return '가격은 자료처럼 숫자로 써야 해요 (예: 32,000원)'
-  const prices = new Set(catalog.products.map((p) => Number(p.price)))
+  // 옵션 상품은 판매 중 옵션의 가격도 자료에 있는 가격이다
+  const prices = new Set(catalog.products.flatMap((p) => [Number(p.price), ...(p.options ?? []).map((o) => Number(o.price))]))
   for (const [, n] of answer.matchAll(/(\d[\d,]*)\s*원/g)) {
     if (!prices.has(toNumber(n))) return `${n}원은 자료에 없는 가격이에요`
   }

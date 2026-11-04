@@ -13,13 +13,14 @@ import { createLimiter } from './limit.js'
 import { cancelPayment, checkApproved, clientKey, confirmPayment, isTestPayment, lookupPayment, orderingOpen, paymentMode } from './payments.js'
 import { POLICIES, SHIPPING, SHOP, shippingFee } from './policy.js'
 import { adminEmail, publicUrl, queueMail, retryMails } from './mailer.js'
+import { lockProducts, syncOptionTotals } from './options.js'
 import { openOrder } from './pii.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
 
 const PENDING_MINUTES = 15
 // 결제 전 주문은 재고를 잡아 두므로, 결제하지 않는 주문으로 재고를 묶어 두지 못하게 한도를 둔다
 // (더 많이 필요하면 기업 구매 문의로)
-export const MAX_QTY = 20 // 한 상품을 한 주문에
+export const MAX_QTY = 20 // 한 상품(옵션 상품은 옵션마다)을 한 주문에
 const MAX_TOTAL_QTY = 60 // 한 주문 전체
 const MAX_PENDING_PER_PHONE = 3 // 결제 안 한 주문, 같은 휴대폰 번호로
 const text = (v) => (typeof v === 'string' ? v.trim() : '')
@@ -35,12 +36,23 @@ function newOrderNo() {
   return `FM${day}-${random}`
 }
 
+// 옵션을 고른 주문 줄은 그 옵션 재고를, 아니면 상품 재고를 돌려놓는다. 상품 줄을 먼저 잠그고(주문 만들 때와 같은 순서)
+// 옵션 재고를 돌려놓은 뒤 옵션 상품의 가격·재고 합을 다시 맞춘다 (server/options.js)
 async function restoreStock(client, orderId) {
+  const { rows } = await client.query('SELECT DISTINCT product_code FROM order_items WHERE order_id = $1', [orderId])
+  const codes = rows.map((r) => r.product_code)
+  await lockProducts(client, codes)
   await client.query(
     `UPDATE products p SET stock = p.stock + oi.quantity, updated_at = now()
-     FROM order_items oi WHERE oi.order_id = $1 AND p.product_code = oi.product_code`,
+     FROM order_items oi WHERE oi.order_id = $1 AND p.product_code = oi.product_code AND oi.option_id IS NULL`,
     [orderId],
   )
+  await client.query(
+    `UPDATE product_options o SET stock = o.stock + oi.quantity, updated_at = now()
+     FROM order_items oi WHERE oi.order_id = $1 AND o.id = oi.option_id`,
+    [orderId],
+  )
+  await syncOptionTotals(client, codes)
 }
 
 // ---------- 농가별 배송 ----------
@@ -190,7 +202,7 @@ async function loadOrder(orderNo, client = pool) {
   const { rows } = await client.query('SELECT * FROM orders WHERE order_no = $1', [orderNo])
   if (!rows.length) return null
   const items = await client.query(
-    `SELECT oi.product_code, oi.seller_code, oi.name, oi.unit, oi.price, oi.quantity, oi.subtotal,
+    `SELECT oi.product_code, oi.seller_code, oi.name, oi.option_name, oi.unit, oi.price, oi.quantity, oi.subtotal,
             EXISTS (SELECT 1 FROM reviews r WHERE r.order_id = oi.order_id AND r.product_code = oi.product_code) AS reviewed
      FROM order_items oi WHERE oi.order_id = $1 ORDER BY oi.id`,
     [rows[0].id],
@@ -229,20 +241,23 @@ publicOrderRouter.get('/policy', (req, res) => {
 
 function readOrderInput(body) {
   const errors = []
-  const merged = new Map()
+  const merged = new Map() // '상품코드:옵션번호' → { productCode, optionId, quantity }
   for (const item of Array.isArray(body.items) ? body.items.slice(0, 20) : []) {
     const code = text(item?.productCode)
     const quantity = Number(item?.quantity)
-    if (!/^[a-z0-9_]{1,64}$/.test(code) || !Number.isInteger(quantity) || quantity < 1) {
+    const optionId = item?.optionId == null || item.optionId === '' ? null : Number(item.optionId) // 옵션 상품이면 고른 옵션
+    if (!/^[a-z0-9_]{1,64}$/.test(code) || !Number.isInteger(quantity) || quantity < 1
+      || (optionId !== null && (!Number.isInteger(optionId) || optionId < 1 || optionId > 2_147_483_647))) {
       errors.push('주문 상품 정보가 올바르지 않아요.')
       break
     }
-    merged.set(code, (merged.get(code) ?? 0) + quantity)
+    const key = `${code}:${optionId ?? ''}`
+    merged.set(key, { productCode: code, optionId, quantity: (merged.get(key)?.quantity ?? 0) + quantity })
   }
   if (!merged.size && !errors.length) errors.push('주문할 상품이 없어요.')
-  const total = [...merged.values()].reduce((sum, n) => sum + n, 0)
-  if ([...merged.values()].some((n) => n > MAX_QTY) || total > MAX_TOTAL_QTY) {
-    errors.push(`한 번에 상품마다 ${MAX_QTY}개, 모두 합쳐 ${MAX_TOTAL_QTY}개까지 주문할 수 있어요. 더 많이 필요하면 상품 페이지의 [기업 구매 문의]를 이용해 주세요.`)
+  const total = [...merged.values()].reduce((sum, l) => sum + l.quantity, 0)
+  if ([...merged.values()].some((l) => l.quantity > MAX_QTY) || total > MAX_TOTAL_QTY) {
+    errors.push(`한 번에 상품(옵션)마다 ${MAX_QTY}개, 모두 합쳐 ${MAX_TOTAL_QTY}개까지 주문할 수 있어요. 더 많이 필요하면 상품 페이지의 [기업 구매 문의]를 이용해 주세요.`)
   }
   const input = {
     buyerName: text(body.buyerName),
@@ -267,7 +282,7 @@ function readOrderInput(body) {
   const sensitive = findSensitive(input.buyerName, input.receiverName, input.address1, input.address2, input.memo)
   if (sensitive) errors.push(SENSITIVE_MESSAGE(sensitive))
   if (body.agreeTerms !== true || body.agreePrivacy !== true) errors.push('구매 조건 확인과 개인정보 수집·이용에 동의해 주세요.')
-  return { input, items: [...merged].map(([productCode, quantity]) => ({ productCode, quantity })), errors }
+  return { input, items: [...merged.values()], errors }
 }
 
 publicOrderRouter.post('/orders', async (req, res) => {
@@ -291,21 +306,50 @@ publicOrderRouter.post('/orders', async (req, res) => {
   try {
     const order = await inTransaction(async (client) => {
       const lines = []
-      for (const { productCode, quantity } of items) {
-        // 판매 중이고 재고가 충분할 때만 재고를 줄인다. 가격은 이 순간의 DB 가격
-        const { rows } = await client.query(
-          `UPDATE products SET stock = stock - $2, updated_at = now()
-           WHERE product_code = $1 AND status = 'active' AND stock >= $2
-           RETURNING product_code, seller_code, name, unit, price`,
-          [productCode, quantity],
-        )
+      for (const { productCode, optionId, quantity } of items) {
+        let rows
+        if (optionId) {
+          // 옵션 상품: 상품 줄을 먼저 잠그고(옵션 저장·재고 복구와 같은 순서), 판매 중인 옵션의 재고가 충분할 때만 그 옵션 재고를 줄인다.
+          // 가격은 이 순간의 DB 옵션 가격
+          await lockProducts(client, [productCode])
+          ;({ rows } = await client.query(
+            `UPDATE product_options o SET stock = o.stock - $3, updated_at = now()
+             FROM products p
+             WHERE o.id = $2 AND o.product_code = $1 AND o.status = 'active' AND o.stock >= $3
+               AND p.product_code = o.product_code AND p.status = 'active'
+             RETURNING p.product_code, p.seller_code, p.name, p.unit, o.price, o.id AS option_id, o.name AS option_name`,
+            [productCode, optionId, quantity],
+          ))
+        } else {
+          // 판매 중이고 재고가 충분할 때만 재고를 줄인다. 가격은 이 순간의 DB 가격. 옵션이 있는 상품은 옵션을 골라야 한다
+          ;({ rows } = await client.query(
+            `UPDATE products SET stock = stock - $2, updated_at = now()
+             WHERE product_code = $1 AND status = 'active' AND stock >= $2
+               AND NOT EXISTS (SELECT 1 FROM product_options o WHERE o.product_code = products.product_code)
+             RETURNING product_code, seller_code, name, unit, price`,
+            [productCode, quantity],
+          ))
+        }
         if (!rows.length) {
-          const found = await client.query('SELECT name, stock FROM products WHERE product_code = $1 AND status = $2', [productCode, 'active'])
-          const reason = found.rowCount ? `${found.rows[0].name}: 재고가 ${found.rows[0].stock}개 남았어요.` : '판매하지 않는 상품이 들어 있어요.'
+          const found = await client.query(
+            `SELECT p.name, p.stock, o.name AS option_name, o.stock AS option_stock, o.status AS option_status,
+                    EXISTS (SELECT 1 FROM product_options x WHERE x.product_code = p.product_code) AS has_options
+             FROM products p LEFT JOIN product_options o ON o.id = $2 AND o.product_code = p.product_code
+             WHERE p.product_code = $1 AND p.status = 'active'`,
+            [productCode, optionId],
+          )
+          const f = found.rows[0]
+          const reason = !f ? '판매하지 않는 상품이 들어 있어요.'
+            : optionId && f.option_status !== 'active' ? `${f.name}: 판매하지 않는 옵션이에요. 옵션을 다시 골라 주세요.`
+              : optionId ? `${f.name} ${f.option_name}: 재고가 ${f.option_stock}개 남았어요.`
+                : f.has_options ? `${f.name}: 옵션을 골라 주세요.`
+                  : `${f.name}: 재고가 ${f.stock}개 남았어요.`
           throw Object.assign(new Error(reason), { status: 409 })
         }
-        lines.push({ ...rows[0], quantity, subtotal: rows[0].price * quantity })
+        lines.push({ option_id: null, option_name: null, ...rows[0], quantity, subtotal: rows[0].price * quantity })
       }
+      // 옵션 상품의 가격·재고 합을 옵션에 맞춘다 (목록의 품절 표시가 바로 맞게)
+      await syncOptionTotals(client, [...new Set(lines.filter((l) => l.option_id).map((l) => l.product_code))])
       const itemsAmount = lines.reduce((sum, l) => sum + l.subtotal, 0)
       const farms = farmShipping(lines)
       const fee = farms.reduce((sum, f) => sum + f.fee, 0)
@@ -320,16 +364,16 @@ publicOrderRouter.post('/orders', async (req, res) => {
       )
       for (const l of lines) {
         await client.query(
-          `INSERT INTO order_items (order_id, product_code, seller_code, name, unit, price, quantity, subtotal)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [rows[0].id, l.product_code, l.seller_code, l.name, l.unit, l.price, l.quantity, l.subtotal],
+          `INSERT INTO order_items (order_id, product_code, seller_code, name, unit, price, quantity, subtotal, option_id, option_name)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [rows[0].id, l.product_code, l.seller_code, l.name, l.unit, l.price, l.quantity, l.subtotal, l.option_id, l.option_name],
         )
       }
       for (const f of farms) {
         await client.query('INSERT INTO order_shipments (order_id, seller_code, items_amount, shipping_fee) VALUES ($1, $2, $3, $4)',
           [rows[0].id, f.sellerCode, f.itemsAmount, f.fee])
       }
-      const first = lines[0].name.replace(/\[예시\]\s*/g, '')
+      const first = `${lines[0].name.replace(/\[예시\]\s*/g, '')}${lines[0].option_name ? ` (${lines[0].option_name})` : ''}`
       return {
         orderNo,
         orderName: (lines.length > 1 ? `${first} 외 ${lines.length - 1}건` : first).slice(0, 100),
@@ -509,7 +553,7 @@ adminOrderRouter.use(requireAdmin)
 const LIST_SQL = `
   SELECT o.order_no, o.status, o.buyer_name, o.receiver_name, o.total_amount, o.payment_method, o.is_test,
          o.created_at, o.paid_at, o.tracking_no,
-         (SELECT string_agg(oi.name || ' ×' || oi.quantity, ', ' ORDER BY oi.id) FROM order_items oi WHERE oi.order_id = o.id) AS summary,
+         (SELECT string_agg(oi.name || COALESCE(' · ' || oi.option_name, '') || ' ×' || oi.quantity, ', ' ORDER BY oi.id) FROM order_items oi WHERE oi.order_id = o.id) AS summary,
          (SELECT count(*) FROM order_shipments sh WHERE sh.order_id = o.id)::int AS farms,
          (SELECT count(*) FROM order_shipments sh WHERE sh.order_id = o.id AND sh.status IN ('shipping', 'delivered'))::int AS farms_sent
   FROM orders o`
@@ -613,7 +657,7 @@ sellerOrderRouter.get('/', async (req, res) => {
     WHERE o.status IN ('paid', 'preparing', 'shipping', 'delivered', 'cancelled')
     ORDER BY o.created_at DESC LIMIT 200`, [seller])
   const items = rows.length
-    ? (await pool.query('SELECT order_id, name, unit, quantity, subtotal FROM order_items WHERE order_id = ANY($1) AND seller_code = $2 ORDER BY id',
+    ? (await pool.query('SELECT order_id, name, option_name, unit, quantity, subtotal FROM order_items WHERE order_id = ANY($1) AND seller_code = $2 ORDER BY id',
         [rows.map((r) => r.id), seller])).rows
     : []
   // 받는 분 정보는 내가 보내야 하는 동안(내 농가 배송이 아직 보내기 전)만 보여 준다
@@ -662,7 +706,7 @@ async function notifyOrder(orderNo, event, sellerCode = null) {
   try {
     const order = await loadOrder(orderNo)
     if (!order) return
-    const listOf = (items) => items.map((i) => `- ${i.name.replace(/\[예시\]\s*/g, '')} × ${i.quantity}  ${i.subtotal.toLocaleString('ko-KR')}원`).join('\n')
+    const listOf = (items) => items.map((i) => `- ${i.name.replace(/\[예시\]\s*/g, '')}${i.option_name ? ` (${i.option_name})` : ''} × ${i.quantity}  ${i.subtotal.toLocaleString('ko-KR')}원`).join('\n')
     const lines = listOf(order.items)
     const farms = order.shipments.length > 1 ? `\n농가 ${order.shipments.length}곳에서 따로 보내요 (배송비는 농가마다).` : ''
     const total = `합계 ${order.total_amount.toLocaleString('ko-KR')}원 (배송비 ${order.shipping_fee.toLocaleString('ko-KR')}원 포함)${farms}`
