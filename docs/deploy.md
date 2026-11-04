@@ -118,5 +118,6 @@ sudo systemctl restart farm-mall      # DB 구조 변경(schema.sql)은 켤 때 
 - [ ] 주문 알림 메일이 손님·관리자에게 감
 - [ ] `/robots.txt`, `/sitemap.xml` 이 실제 도메인으로 나옴, 상품 주소를 카톡에 붙이면 사진·가격 미리보기
 - [ ] 약관·개인정보 처리방침 기업 검토 끝, 개인정보 보호책임자 기재 (`server/policy.js`)
+- [ ] `DATA_KEY`를 DB 백업과 다른 곳에 따로 보관 (`deploy/backup.sh`는 일부러 `.env`를 백업하지 않음. 키를 잃으면 개인정보를 복구할 수 없음)
 - [ ] 토스 라이브 키로 바꾸고 소액 실결제 → 환불 확인
 - [ ] 백업 파일이 생기고, 다른 서버에서 복원해 봄 (`pg_restore -d farm_mall db-날짜.dump`)

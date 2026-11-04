@@ -1,4 +1,4 @@
-// 저장할 때 암호화해야 하는 값(2단계 인증 비밀값, 나중에 받게 될 고유식별정보 등)과 2단계 인증 코드 확인.
+// 저장할 때 암호화해야 하는 값(2단계 인증 비밀값, 개인정보)과 2단계 인증 코드 확인.
 // 외부 라이브러리 없이 node:crypto만 쓴다. 암호화 키는 .env 의 DATA_KEY (64자리 16진수 = 32바이트)에서만 읽는다.
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 
@@ -7,6 +7,9 @@ function dataKey() {
   if (!/^[0-9a-f]{64}$/i.test(hex)) throw new Error('.env 의 DATA_KEY 가 없거나 형식이 틀려요 (64자리 16진수)')
   return Buffer.from(hex, 'hex')
 }
+
+// 키가 없으면 주문·가입이 중간에 실패하니 서버를 켤 때 먼저 확인한다
+export const checkDataKey = () => dataKey()
 
 // AES-256-GCM: 내용이 바뀌면 복호화가 실패해서 위조도 알아챈다. 형식: v1.iv.tag.본문 (base64url)
 export function encrypt(text) {
@@ -22,6 +25,18 @@ export function decrypt(sealed) {
   const decipher = createDecipheriv('aes-256-gcm', dataKey(), Buffer.from(iv, 'base64url'))
   decipher.setAuthTag(Buffer.from(tag, 'base64url'))
   return Buffer.concat([decipher.update(Buffer.from(body, 'base64url')), decipher.final()]).toString('utf8')
+}
+
+const SEALED = /^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]*$/
+
+// 개인정보용: 비어 있는 값은 그대로 둔다. 암호화 전에 저장된 평문은 그대로 읽어서 서버를 켤 때 암호화할 수 있게 한다
+export const sealText = (value) => (value == null || value === '' ? value : encrypt(String(value)))
+export const openText = (value) => (typeof value === 'string' && SEALED.test(value) ? decrypt(value) : value)
+
+// 찾기용 값: 암호문으로는 찾을 수 없어서 같은 값이면 같게 나오는 HMAC 을 따로 저장한다. 키 없이는 전화번호를 하나씩 넣어 맞춰 볼 수 없다
+export function lookupHash(value) {
+  const key = createHmac('sha256', dataKey()).update('lookup-v1').digest()
+  return createHmac('sha256', key).update(String(value)).digest('hex')
 }
 
 // ---------- 2단계 인증 (TOTP, RFC 6238: 30초마다 바뀌는 6자리 · 구글 OTP 등 인증 앱과 호환) ----------

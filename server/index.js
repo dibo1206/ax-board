@@ -19,6 +19,8 @@ import { initDb, isTransientDbError, pool } from './db.js'
 import { adminInquiryRouter, maskName, publicInquiryRouter } from './inquiry.js'
 import { publicItem } from './items.js'
 import { GRADE_LABEL } from './brix.js'
+import { checkDataKey } from './crypto.js'
+import { encryptExisting } from './pii.js'
 import { buildNotice } from './notice.js'
 import { adminOrderRouter, memberOrderRouter, publicOrderRouter, sellerOrderRouter, startOrderSweeper } from './orders.js'
 import { recommendRouter } from './recommend.js'
@@ -30,6 +32,12 @@ import { seoRouter, serveDist } from './web.js'
 
 if (!process.env.PORT && process.env.BACKEND_PORT === undefined) {
   console.error('[server] PORT 환경변수가 없어요. 실습서버 내 계정 터미널에서 실행해 주세요. (echo $PORT 로 확인)')
+  process.exit(1)
+}
+try {
+  checkDataKey()
+} catch (error) {
+  console.error(`[server] ${error.message}. 개인정보를 암호화할 수 없어서 켜지 않아요.`)
   process.exit(1)
 }
 const SERVE = process.argv.includes('--serve') // 배포 모드: 화면까지 이 서버가 보낸다
@@ -290,6 +298,7 @@ app.use((error, req, res, _next) => {
 })
 
 await initDb()
+await encryptExisting()
 await loadBanned()
 startOrderSweeper()
 const server = app.listen(PORT, '127.0.0.1', () => {

@@ -8,10 +8,12 @@ import { currentCustomer, requireCustomer } from './account.js'
 import { requireAdmin, requireSeller } from './auth.js'
 import { COURIERS, trackingUrl } from './couriers.js'
 import { pool } from './db.js'
+import { lookupHash, sealText } from './crypto.js'
 import { createLimiter } from './limit.js'
 import { cancelPayment, checkApproved, clientKey, confirmPayment, isTestPayment, lookupPayment, paymentMode } from './payments.js'
 import { POLICIES, SHIPPING, SHOP, shippingFee } from './policy.js'
 import { adminEmail, publicUrl, queueMail, retryMails } from './mailer.js'
+import { openOrder } from './pii.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
 
 const PENDING_MINUTES = 30
@@ -109,7 +111,7 @@ async function settleWithToss(client, order, found, closeAs) {
       const paid = checkApproved(found, { orderId: order.order_no, amount: order.total_amount })
       await client.query(
         `UPDATE orders SET status = 'paid', payment_key = $2, payment_method = $3, paid_at = $4, updated_at = now() WHERE id = $1`,
-        [order.id, paid.paymentKey, paid.method, paid.approvedAt],
+        [order.id, sealText(paid.paymentKey), paid.method, paid.approvedAt],
       )
       console.log(`[order] 결제 확인됨 ${order.order_no} (승인 응답 없이 조회로 확인)`)
       return 'paid'
@@ -199,7 +201,7 @@ async function loadOrder(orderNo, client = pool) {
      FROM order_shipments sh JOIN sellers s ON s.seller_code = sh.seller_code WHERE sh.order_id = $1 ORDER BY sh.id`,
     [rows[0].id],
   )
-  return { ...rows[0], items: items.rows, shipments: shipments.rows }
+  return { ...openOrder(rows[0]), items: items.rows, shipments: shipments.rows }
 }
 
 // 손님에게 보여 줄 주문 (결제 키·내부 번호는 빼고). 농가 이름의 [예시] 표시는 뺀다
@@ -273,8 +275,8 @@ publicOrderRouter.post('/orders', async (req, res) => {
   if (tooManyOrders(req)) return res.status(429).json({ error: '주문 시도가 너무 많아요. 잠시 후 다시 시도해 주세요.' })
   await expirePending()
   const { rows: [{ n: pending }] } = await pool.query(
-    "SELECT count(*)::int AS n FROM orders WHERE buyer_phone = $1 AND status = 'pending' AND created_at > now() - make_interval(mins => $2)",
-    [input.buyerPhone, PENDING_MINUTES],
+    "SELECT count(*)::int AS n FROM orders WHERE buyer_phone_hash = $1 AND status = 'pending' AND created_at > now() - make_interval(mins => $2)",
+    [lookupHash(input.buyerPhone), PENDING_MINUTES],
   )
   if (pending >= MAX_PENDING_PER_PHONE) {
     return res.status(429).json({ error: `결제하지 않은 주문이 이미 ${pending}건 있어요. 먼저 결제하거나 ${PENDING_MINUTES}분 뒤에 다시 주문해 주세요.` })
@@ -305,11 +307,11 @@ publicOrderRouter.post('/orders', async (req, res) => {
       const orderNo = newOrderNo()
       const { rows } = await client.query(
         `INSERT INTO orders (order_no, buyer_name, buyer_phone, receiver_name, receiver_phone, zipcode, address1, address2, memo,
-                             items_amount, shipping_fee, total_amount, is_test, agreed_at, customer_id, buyer_email)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now(), $14, $15) RETURNING id`,
-        [orderNo, input.buyerName, input.buyerPhone, input.receiverName, input.receiverPhone, input.zipcode, input.address1,
-          input.address2 || null, input.memo || null, itemsAmount, fee, itemsAmount + fee, isTestPayment(),
-          customer?.id ?? null, customer?.email ?? (input.email || null)],
+                             items_amount, shipping_fee, total_amount, is_test, agreed_at, customer_id, buyer_email, buyer_phone_hash)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now(), $14, $15, $16) RETURNING id`,
+        [orderNo, sealText(input.buyerName), sealText(input.buyerPhone), sealText(input.receiverName), sealText(input.receiverPhone), sealText(input.zipcode), sealText(input.address1),
+          sealText(input.address2 || null), sealText(input.memo || null), itemsAmount, fee, itemsAmount + fee, isTestPayment(),
+          customer?.id ?? null, sealText(customer?.email ?? (input.email || null)), lookupHash(input.buyerPhone)],
       )
       for (const l of lines) {
         await client.query(
@@ -336,7 +338,7 @@ publicOrderRouter.post('/orders', async (req, res) => {
     if (customer && req.body.saveAddress === true) {
       // 회원이 '배송지 저장'을 골랐으면 받는 분 주소를 회원 정보에 저장
       await pool.query('UPDATE customers SET zipcode = $2, address1 = $3, address2 = $4 WHERE id = $1',
-        [customer.id, input.zipcode, input.address1, input.address2 || null])
+        [customer.id, sealText(input.zipcode), sealText(input.address1), sealText(input.address2 || null)])
     }
     res.status(201).json({ ...order, payment: { mode: paymentMode(), clientKey: clientKey(), test: isTestPayment() } })
   } catch (error) {
@@ -354,7 +356,7 @@ publicOrderRouter.post('/orders/:orderNo/confirm', async (req, res) => {
 
   const result = await inTransaction(async (client) => {
     const { rows } = await client.query('SELECT * FROM orders WHERE order_no = $1 FOR UPDATE', [req.params.orderNo])
-    const order = rows[0]
+    const order = openOrder(rows[0])
     if (!order) return { status: 404, error: '주문을 찾지 못했어요.' }
     if (order.status === 'paid' && order.payment_key === paymentKey) return { status: 200 } // 새로고침 등으로 다시 불림
     if (order.status !== 'pending') {
@@ -372,7 +374,7 @@ publicOrderRouter.post('/orders/:orderNo/confirm', async (req, res) => {
       const paid = await confirmPayment({ paymentKey, orderId: order.order_no, amount })
       await client.query(
         `UPDATE orders SET status = 'paid', payment_key = $2, payment_method = $3, paid_at = $4, updated_at = now() WHERE id = $1`,
-        [order.id, paymentKey, paid.method, paid.approvedAt],
+        [order.id, sealText(paymentKey), paid.method, paid.approvedAt],
       )
       console.log(`[order] 결제 완료 ${order.order_no} · ${amount}원 · ${paid.method}`)
       return { status: 200, newlyPaid: true }
@@ -472,7 +474,7 @@ async function cancelOrder(orderNo, reason, allowed) {
 function cancelOrderTx(orderNo, reason, allowed) {
   return inTransaction(async (client) => {
     const { rows } = await client.query('SELECT * FROM orders WHERE order_no = $1 FOR UPDATE', [orderNo])
-    const order = rows[0]
+    const order = openOrder(rows[0])
     if (!order) return { status: 404, error: '주문을 찾지 못했어요.' }
     if (!allowed.includes(order.status)) return { status: 409, error: '이 상태의 주문은 취소할 수 없어요. 배송이 시작됐다면 반품으로 처리해요.' }
     await ensureShipments(order.id, client)
@@ -517,7 +519,7 @@ adminOrderRouter.get('/', async (req, res) => {
     sql = `${LIST_SQL} WHERE o.status = $1`
   }
   const { rows } = await pool.query(`${sql} ORDER BY o.created_at DESC LIMIT 200`, params)
-  res.json(rows)
+  res.json(rows.map(openOrder))
 })
 
 adminOrderRouter.get('/:orderNo', async (req, res) => {
@@ -609,7 +611,7 @@ sellerOrderRouter.get('/', async (req, res) => {
         [rows.map((r) => r.id), seller])).rows
     : []
   // 받는 분 정보는 내가 보내야 하는 동안(내 농가 배송이 아직 보내기 전)만 보여 준다
-  res.json(rows.map(({ id, receiver_name, receiver_phone, zipcode, address1, address2, memo, ...o }) => ({
+  res.json(rows.map(openOrder).map(({ id, receiver_name, receiver_phone, zipcode, address1, address2, memo, ...o }) => ({
     ...o,
     tracking_url: trackingUrl(o.courier, o.tracking_no),
     items: items.filter((i) => i.order_id === id).map(({ order_id: _o, ...i }) => i),

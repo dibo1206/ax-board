@@ -5,9 +5,11 @@ import express from 'express'
 import { checkPassword } from './account.js'
 import { hashPassword, requireAdmin } from './auth.js'
 import { findBanned } from './banned.js'
+import { lookupHash, sealText } from './crypto.js'
 import { pool } from './db.js'
 import { createLimiter } from './limit.js'
 import { adminEmail, publicUrl, queueMail } from './mailer.js'
+import { openSeller } from './pii.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
 
 const text = (v) => (typeof v === 'string' ? v.trim() : '')
@@ -51,15 +53,15 @@ sellerSignupRouter.post('/', async (req, res) => {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    const same = await client.query('SELECT 1 FROM sellers WHERE business_no = $1', [businessNo])
+    const same = await client.query('SELECT 1 FROM sellers WHERE business_no_hash = $1', [lookupHash(businessNo)])
     if (same.rowCount) {
       await client.query('ROLLBACK')
       return res.status(409).json({ error: '이미 가입한 사업자등록번호예요. 회사로 문의해 주세요.' })
     }
     await client.query(
-      `INSERT INTO sellers (seller_code, name, region, is_company, source, status, owner_name, phone, business_no, email, applied_at)
-       VALUES ($1, $2, $3, false, '판매자 가입', 'pending', $4, $5, $6, $7, now())`,
-      [sellerCode, farmName, region, ownerName, phone, businessNo, email],
+      `INSERT INTO sellers (seller_code, name, region, is_company, source, status, owner_name, phone, business_no, business_no_hash, email, applied_at)
+       VALUES ($1, $2, $3, false, '판매자 가입', 'pending', $4, $5, $6, $7, $8, now())`,
+      [sellerCode, farmName, region, sealText(ownerName), sealText(phone), sealText(businessNo), lookupHash(businessNo), sealText(email)],
     )
     const account = await client.query(
       "INSERT INTO admins (login_id, password_hash, role, seller_code) VALUES ($1, $2, 'seller', $3) ON CONFLICT (login_id) DO NOTHING RETURNING id",
@@ -91,16 +93,17 @@ adminSellerRouter.get('/', async (req, res) => {
            (SELECT string_agg(a.login_id, ', ') FROM admins a WHERE a.seller_code = s.seller_code) AS login_ids,
            (SELECT count(*) FROM products p WHERE p.seller_code = s.seller_code)::int AS products
     FROM sellers s ORDER BY (s.status = 'pending') DESC, s.applied_at DESC NULLS LAST, s.name`)
-  res.json(rows)
+  res.json(rows.map(openSeller))
 })
 
 async function decide(req, res, status, note) {
-  const { rows } = await pool.query(
+  const { rows: updated } = await pool.query(
     `UPDATE sellers SET status = $2, reject_note = $3, approved_at = CASE WHEN $2 = 'active' THEN now() ELSE approved_at END
      WHERE seller_code = $1 AND NOT is_company RETURNING seller_code, name, status, email, reject_note`,
     [req.params.code, status, note],
   )
-  if (!rows.length) return res.status(404).json({ error: '판매자를 찾지 못했어요.' })
+  if (!updated.length) return res.status(404).json({ error: '판매자를 찾지 못했어요.' })
+  const rows = updated.map(openSeller)
   // 활동을 멈추면 그 농가 상품도 손님 화면에서 내린다 (다시 승인돼도 상품은 다시 요청해야 판매)
   if (status === 'rejected') {
     await pool.query(

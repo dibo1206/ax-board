@@ -3,7 +3,9 @@
 import express from 'express'
 import { currentCustomer } from './account.js'
 import { requireAdmin } from './auth.js'
+import { sealText } from './crypto.js'
 import { pool } from './db.js'
+import { openOrder, openReview } from './pii.js'
 import { maskName } from './inquiry.js'
 import { createLimiter } from './limit.js'
 import { ensureShipments } from './orders.js'
@@ -27,7 +29,7 @@ reviewRouter.get('/products/:code/reviews', async (req, res) => {
                 WHERE product_code = $1 AND NOT hidden ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
     [req.params.code, PAGE, (page - 1) * PAGE]),
   ])
-  res.json({ ...summary.rows[0], page, items: rows.rows.map((r) => ({ ...r, author: maskName(r.author) })) })
+  res.json({ ...summary.rows[0], page, items: rows.rows.map((r) => ({ ...r, author: maskName(openReview(r).author) })) })
 })
 
 reviewRouter.post('/reviews', async (req, res) => {
@@ -51,7 +53,7 @@ reviewRouter.post('/reviews', async (req, res) => {
   if (tooMany(req)) return res.status(429).json({ error: '후기를 너무 많이 남겼어요. 잠시 후 다시 시도해 주세요.' })
 
   const { rows } = await pool.query('SELECT * FROM orders WHERE order_no = $1', [orderNo])
-  const order = rows[0]
+  const order = openOrder(rows[0])
   const customer = await currentCustomer(req)
   const mine = order && ((customer && order.customer_id === customer.id) || (phone && order.buyer_phone === phone))
   if (!mine) return res.status(404).json({ error: '주문을 찾지 못했어요. 주문번호와 휴대폰 번호를 확인해 주세요.' })
@@ -64,7 +66,7 @@ reviewRouter.post('/reviews', async (req, res) => {
   const inserted = await pool.query(
     `INSERT INTO reviews (order_id, product_code, customer_id, author, rating, content, info_match) VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (order_id, product_code) DO NOTHING RETURNING id`,
-    [order.id, productCode, customer?.id ?? null, order.buyer_name, rating, content, infoMatch],
+    [order.id, productCode, customer?.id ?? null, sealText(order.buyer_name), rating, content, infoMatch],
   )
   if (!inserted.rowCount) return res.status(409).json({ error: '이 상품에는 이미 후기를 남겼어요.' })
   console.log(`[review] 후기 #${inserted.rows[0].id} ${productCode} ★${rating}`)
@@ -80,7 +82,7 @@ adminReviewRouter.get('/', async (req, res) => {
     SELECT r.*, p.name AS product_name, o.order_no FROM reviews r
     JOIN products p ON p.product_code = r.product_code JOIN orders o ON o.id = r.order_id
     ORDER BY (r.reply IS NULL AND NOT r.hidden) DESC, r.created_at DESC LIMIT 200`)
-  res.json(rows)
+  res.json(rows.map(openReview))
 })
 
 adminReviewRouter.patch('/:id', async (req, res) => {
@@ -101,5 +103,5 @@ adminReviewRouter.patch('/:id', async (req, res) => {
   )
   if (!rows.length) return res.status(404).json({ error: '후기를 찾지 못했어요.' })
   console.log(`[review] ${req.admin.loginId} 후기 #${rows[0].id} ${hasReply ? '답글' : hidden ? '숨김' : '다시 보임'}`)
-  res.json(rows[0])
+  res.json(openReview(rows[0]))
 })

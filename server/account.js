@@ -3,9 +3,11 @@
 import { createHash, randomBytes } from 'node:crypto'
 import express from 'express'
 import { clearFails, hashPassword, isLocked, noteFail, passwordMatches, readCookie, setCookie, signToken, verifyPassword, verifyToken } from './auth.js'
+import { lookupHash, openText, sealText } from './crypto.js'
 import { pool } from './db.js'
 import { createLimiter } from './limit.js'
 import { publicUrl, queueMail } from './mailer.js'
+import { openCustomer } from './pii.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
 
 const COOKIE = 'customer_session'
@@ -38,7 +40,7 @@ export async function currentCustomer(req) {
   }
   if (payload?.kind !== 'customer') return null
   const { rows } = await pool.query('SELECT * FROM customers WHERE id = $1 AND deleted_at IS NULL', [payload.id])
-  return rows[0] && rows[0].session_version === payload.sv ? rows[0] : null
+  return rows[0] && rows[0].session_version === payload.sv ? openCustomer(rows[0]) : null
 }
 
 async function requireCustomer(req, res, next) {
@@ -70,15 +72,15 @@ accountRouter.post('/signup', async (req, res) => {
   if (errors.length) return res.status(400).json({ error: errors.join(' '), errors })
   if (tooManySignups(req)) return res.status(429).json({ error: '가입 시도가 너무 많아요. 잠시 후 다시 시도해 주세요.' })
   const { rows } = await pool.query(
-    `INSERT INTO customers (email, password_hash, name, phone, agreed_at, last_login_at) VALUES ($1, $2, $3, $4, now(), now())
-     ON CONFLICT (email) DO NOTHING RETURNING *`,
-    [email, await hashPassword(req.body.password), name, phone],
+    `INSERT INTO customers (email, email_hash, password_hash, name, phone, agreed_at, last_login_at) VALUES ($1, $2, $3, $4, $5, now(), now())
+     ON CONFLICT (email_hash) DO NOTHING RETURNING *`,
+    [sealText(email), lookupHash(email), await hashPassword(req.body.password), sealText(name), sealText(phone)],
   )
   if (!rows.length) return res.status(409).json({ error: '이미 가입한 이메일이에요. 로그인하거나 비밀번호 찾기를 해 주세요.' })
   startSession(res, rows[0])
   console.log(`[account] 회원 가입 #${rows[0].id}`)
   queueMail({ kind: 'welcome', to: email, subject: '가입을 환영해요', body: `${name}님, 가입해 주셔서 고마워요.\n\n마이페이지에서 주문 내역과 배송지를 관리할 수 있어요.\n${publicUrl()}/account\n` })
-  res.status(201).json(me(rows[0]))
+  res.status(201).json(me(openCustomer(rows[0])))
 })
 
 accountRouter.post('/login', async (req, res) => {
@@ -86,7 +88,7 @@ accountRouter.post('/login', async (req, res) => {
   const password = typeof req.body.password === 'string' ? req.body.password.slice(0, 200) : ''
   const key = `c:${email}`
   if (isLocked(key, req.ip)) return res.status(429).json({ error: '로그인을 여러 번 틀렸어요. 10분 뒤에 다시 시도해 주세요.' })
-  const { rows } = await pool.query('SELECT * FROM customers WHERE email = $1 AND deleted_at IS NULL', [email])
+  const { rows } = await pool.query('SELECT * FROM customers WHERE email_hash = $1 AND deleted_at IS NULL', [lookupHash(email)])
   if (!(await passwordMatches(password, rows[0]?.password_hash))) {
     noteFail(key, req.ip)
     return res.status(401).json({ error: '이메일 또는 비밀번호가 맞지 않아요.' })
@@ -94,7 +96,7 @@ accountRouter.post('/login', async (req, res) => {
   clearFails(key)
   await pool.query('UPDATE customers SET last_login_at = now() WHERE id = $1', [rows[0].id])
   startSession(res, rows[0])
-  res.json(me(rows[0]))
+  res.json(me(openCustomer(rows[0])))
 })
 
 accountRouter.post('/logout', (req, res) => {
@@ -120,9 +122,9 @@ accountRouter.patch('/me', requireCustomer, async (req, res) => {
   if (errors.length) return res.status(400).json({ error: errors.join(' '), errors })
   const { rows } = await pool.query(
     'UPDATE customers SET name = $2, phone = $3, zipcode = $4, address1 = $5, address2 = $6 WHERE id = $1 RETURNING *',
-    [req.customer.id, name, phone, zipcode || null, address1 || null, address2 || null],
+    [req.customer.id, sealText(name), sealText(phone), sealText(zipcode || null), sealText(address1 || null), sealText(address2 || null)],
   )
-  res.json(me(rows[0]))
+  res.json(me(openCustomer(rows[0])))
 })
 
 // 비밀번호 변경: 지금 비밀번호 확인 → 바꾸면 다른 기기의 로그인은 모두 끊긴다
@@ -140,7 +142,7 @@ accountRouter.post('/password', requireCustomer, async (req, res) => {
     [req.customer.id, await hashPassword(req.body.next)],
   )
   startSession(res, rows[0])
-  queueMail({ kind: 'password_changed', to: rows[0].email, subject: '비밀번호가 바뀌었어요', body: '방금 계정 비밀번호가 바뀌었어요. 직접 바꾼 게 아니라면 바로 비밀번호 찾기로 다시 정하고 고객센터에 알려 주세요.\n' })
+  queueMail({ kind: 'password_changed', to: req.customer.email, subject: '비밀번호가 바뀌었어요', body: '방금 계정 비밀번호가 바뀌었어요. 직접 바꾼 게 아니라면 바로 비밀번호 찾기로 다시 정하고 고객센터에 알려 주세요.\n' })
   res.status(204).end()
 })
 
@@ -152,9 +154,9 @@ accountRouter.delete('/me', requireCustomer, async (req, res) => {
     return res.status(401).json({ error: '비밀번호가 맞지 않아요.' })
   }
   await pool.query(
-    `UPDATE customers SET email = $2, name = '탈퇴 회원', phone = '', zipcode = NULL, address1 = NULL, address2 = NULL,
+    `UPDATE customers SET email = $2, email_hash = NULL, name = '탈퇴 회원', phone = '', zipcode = NULL, address1 = NULL, address2 = NULL,
        password_hash = $3, session_version = session_version + 1, deleted_at = now() WHERE id = $1`,
-    [req.customer.id, `deleted-${req.customer.id}-${randomBytes(4).toString('hex')}@invalid`, `deleted:${randomBytes(16).toString('hex')}`],
+    [req.customer.id, sealText(`deleted-${req.customer.id}-${randomBytes(4).toString('hex')}@invalid`), `deleted:${randomBytes(16).toString('hex')}`],
   )
   await pool.query('DELETE FROM password_resets WHERE customer_id = $1', [req.customer.id])
   setCookie(res, COOKIE, '', 0)
@@ -167,14 +169,14 @@ accountRouter.post('/password-reset/request', async (req, res) => {
   const email = text(req.body.email).toLowerCase()
   if (!isEmail(email)) return res.status(400).json({ error: '이메일을 확인해 주세요.' })
   if (tooManyResets(req)) return res.status(429).json({ error: '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.' })
-  const { rows } = await pool.query('SELECT id, name FROM customers WHERE email = $1 AND deleted_at IS NULL', [email])
+  const { rows } = await pool.query('SELECT id, name FROM customers WHERE email_hash = $1 AND deleted_at IS NULL', [lookupHash(email)])
   if (rows.length) {
     const token = randomBytes(32).toString('base64url')
     await pool.query('DELETE FROM password_resets WHERE customer_id = $1', [rows[0].id])
     await pool.query("INSERT INTO password_resets (token_hash, customer_id, expires_at) VALUES ($1, $2, now() + interval '30 minutes')", [sha256(token), rows[0].id])
     queueMail({
       kind: 'password_reset', to: email, subject: '비밀번호 다시 정하기',
-      body: `${rows[0].name}님, 아래 링크에서 30분 안에 새 비밀번호를 정해 주세요.\n${publicUrl()}/account/reset?token=${token}\n\n직접 요청하지 않았다면 이 메일은 무시해도 돼요.\n`,
+      body: `${openText(rows[0].name)}님, 아래 링크에서 30분 안에 새 비밀번호를 정해 주세요.\n${publicUrl()}/account/reset?token=${token}\n\n직접 요청하지 않았다면 이 메일은 무시해도 돼요.\n`,
     })
   }
   res.json({ message: '가입한 이메일이라면 비밀번호를 다시 정하는 링크를 보냈어요. 메일함을 확인해 주세요.' })
@@ -187,7 +189,7 @@ accountRouter.post('/password-reset/confirm', async (req, res) => {
     [sha256(token)],
   )
   if (!rows.length) return res.status(400).json({ error: '링크가 만료됐거나 이미 썼어요. 비밀번호 찾기를 다시 해 주세요.' })
-  const customer = (await pool.query('SELECT * FROM customers WHERE id = $1 AND deleted_at IS NULL', [rows[0].customer_id])).rows[0]
+  const customer = openCustomer((await pool.query('SELECT * FROM customers WHERE id = $1 AND deleted_at IS NULL', [rows[0].customer_id])).rows[0])
   if (!customer) return res.status(400).json({ error: '계정을 찾지 못했어요.' })
   const weak = checkPassword(req.body.password, customer.email)
   if (weak) {
@@ -200,7 +202,7 @@ accountRouter.post('/password-reset/confirm', async (req, res) => {
   )
   clearFails(`c:${customer.email}`)
   startSession(res, updated[0])
-  res.json(me(updated[0]))
+  res.json(me(openCustomer(updated[0])))
 })
 
 // ---------- 내 주문 ----------
