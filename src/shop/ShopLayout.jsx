@@ -50,7 +50,7 @@ export function ShopLayout({ children }) {
     <div className="shop">
       <a className="skip" href="#main">본문으로 건너뛰기</a>
       {policy?.payment.test && (
-        <p className="dev-bar">개발 중 · 모든 상품은 [예시]이고 테스트 결제라 실제로 돈이 나가지 않아요. <a href="/admin">관리자</a> · <a href="/seller">판매자</a></p>
+        <p className="dev-bar">개발 중 · 모든 상품은 [예시]이고 테스트 결제라 실제로 돈이 나가지 않아요. <a href="/guide">1분 사용 안내</a> · <a href="/admin">관리자</a> · <a href="/seller">판매자</a></p>
       )}
       <header className="site-head">
         <div className="wrap site-head-inner">
@@ -79,6 +79,7 @@ export function ShopLayout({ children }) {
             <span>{BRAND.company} · {BRAND.region}</span>
             {BRAND.siteUrl && <a href={BRAND.siteUrl} target="_blank" rel="noopener noreferrer" className="underline">기업 소개 사이트</a>}
             <a href="/order/lookup" className="underline">주문 조회</a>
+            <a href="/guide" className="underline">1분 사용 안내</a>
           </div>
           <nav className="foot-links" aria-label="약관">
             <a href="/policy/terms">이용약관</a>

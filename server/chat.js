@@ -35,7 +35,7 @@ function pickOptions(p, message) {
   const hit = options.filter((o) => message.includes(o.name) || amounts(o.name).some(said))
   return hit.length ? hit : options
 }
-const QNA_HINT = '상품 페이지 아래 Q&A에 질문을 남겨 주시면 담당자가 직접 답해 드려요.'
+const QNA_HINT = `상품 페이지 아래 Q&A에 질문을 남겨 주시면 담당자가 직접 답해 드려요. 급하면 고객센터 ${SHOP.phone}로 연락해 주세요.`
 
 // ---------- 1. 정해진 답으로 넘기는 질문 ----------
 const ROUTES = [
