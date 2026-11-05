@@ -898,7 +898,9 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
   const ctx = pickContext(catalog, { message, history, productCode })
   const fallbackProduct = ctx.current?.product_code ?? (ctx.products.length === 1 ? ctx.products[0].product_code : null)
 
-  const route = ROUTES.find((r) => r.re.test(message))
+  // 가린 자리표(전화번호 가림 등)는 손님이 쓴 말이 아니라서 규칙이 읽지 않게 한다
+  const said = message.replace(/\((주민등록번호|이메일|전화번호|주문번호) 가림\)/g, ' ')
+  const route = ROUTES.find((r) => r.re.test(said))
   if (route) {
     const b2bProduct = ctx.products.find((p) => p.b2b_available)
     return {
