@@ -79,7 +79,7 @@ function startBackend() {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['server/index.js'], {
       env: {
-        ...process.env, BACKEND_PORT: '0', NODE_ENV: 'development', TOSS_API_BASE: FAKE, TOSS_TIMEOUT_MS: '1500', DB_POOL_MAX: '3',
+        ...process.env, BACKEND_PORT: '0', RAG_ENABLED: '0', NODE_ENV: 'development', TOSS_API_BASE: FAKE, TOSS_TIMEOUT_MS: '1500', DB_POOL_MAX: '3',
         TOSS_CLIENT_KEY: 'test_gck_refund', TOSS_SECRET_KEY: 'test_gsk_refund', REQUIRE_2FA: '0', ADMIN_ALLOWED_IPS: '',
       },
       stdio: ['ignore', 'pipe', 'pipe'],

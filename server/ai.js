@@ -19,6 +19,12 @@ function getClient() {
   return client
 }
 
+// 글을 벡터로 바꾼다 (벡터 검색용). 값이 아주 싸서(100만 토큰당 약 0.01달러) AI 호출 상한에 넣지 않는다
+export async function embed(model, texts, timeoutMs = 20_000) {
+  const { data } = await getClient().embeddings.create({ model, input: texts, encoding_format: 'float' }, { timeout: timeoutMs })
+  return [...data].sort((a, b) => a.index - b.index).map((row) => row.embedding)
+}
+
 export function keyLoaded() {
   return Boolean(process.env.OPENROUTER_API_KEY)
 }

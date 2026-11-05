@@ -1,0 +1,78 @@
+split,question,expect,note
+tune,복숭아 바로 안 먹을 건데 어디다 둬요,item:peach:storage,
+tune,사과를 오래 두고 먹으려면,item:apple:storage,
+tune,딱딱한 과일 어떻게 익혀요,item:peach:storage|qna:3,품목 이름 없음
+tune,냉장고에 넣으면 안 되는 채소 있어요,item:sweet_potato:storage|qna:83,품목 이름 없음
+tune,초록색으로 변한 감자,item:potato:storage|item:potato:safety|item:potato:state,
+tune,탄산수랑 섞어 마시는 법,item:plum_syrup:recipe|item:pear_juice:recipe|item:plum_syrup:cafe|item:pear_juice:cafe,품목 이름 없음
+tune,빵에 발라 먹는 거,item:grape_jam:recipe,품목 이름 없음
+tune,부침개 만들 때 쓰는 채소,item:potato:recipe,품목 이름 없음
+tune,고기 양념에 넣는 과일,item:pear:recipe,품목 이름 없음
+tune,에어프라이어에 구워 먹을 수 있는 거,item:sweet_potato:recipe,품목 이름 없음
+tune,몇 시까지 전화 받아요,policy:contact,
+tune,회사 사무실이 어디에 있어요,policy:contact,
+tune,돌려보낼 때 택배비는 누가 내요,policy:refund:2,
+tune,돈은 언제 돌려받아요,policy:refund:4,
+tune,로그인 안 하고 살 수 있어요,policy:order,
+tune,오만원 넘게 사면 배송비는요,policy:shipping,
+tune,주말에도 보내 주나요,policy:shipping,
+tune,제주에서 키운 채소 있어요,seller:farm_green|product:carrot_3kg:about:0,
+tune,안동에서 농사짓는 곳,seller:farm_sunny,
+tune,개봉한 배즙 얼마나 둬요,item:pear_juice:opened|qna:210,
+tune,물에 탄 매실청은 며칠 가요,item:plum_syrup:opened,
+tune,당근 흙 씻어서 넣어요?,qna:84|item:carrot:storage,
+tune,잼에 곰팡이가 피었어요,item:grape_jam:safety,
+tune,카페에서 쓰는 비율 알려 주세요,item:plum_syrup:cafe|item:pear_juice:cafe,품목 이름 없음
+tune,선물용 쇼핑백 주나요,none,숨긴 Q&A라 나오면 안 됨
+tune,오늘 날씨 어때요,none,
+tune,비트코인 시세 알려줘,none,
+tune,파이썬 코드 짜줘,none,
+tune,강아지 사료 추천,none,
+tune,근처 맛집 알려 주세요,none,
+tune,컴퓨터가 고장 났어요,none,
+tune,수박 고르는 법,none,파는 품목이 아님
+tune,사과 맛잇는거로 보내줘,none,팀 밖 질문에서 엉뚱한 글이 나간 경우
+tune,사과가 너무 퍽퍽해요 원래 이런거에요?,none,팀 밖 질문에서 엉뚱한 글이 나간 경우
+tune,배즙에 설탕 들어갔어요?,none,팀 밖 질문에서 엉뚱한 글이 나간 경우
+tune,사과즙이랑 배즙 섞어서 한박스 주문 가능해여?,none,팀 밖 질문에서 엉뚱한 글이 나간 경우
+tune,사과 ㄹㅇ 꿀사과임?ㅋㅋ,none,팀 밖 질문에서 엉뚱한 글이 나간 경우
+tune,배즙 파우치 전자레인지 돌려도 돼요?,none,팀 밖 질문에서 엉뚱한 글이 나간 경우
+tune,사과 왁스칠 했어요? 반짝반짝하던데,none,팀 밖 질문에서 엉뚱한 글이 나간 경우
+tune,도시락 싸갈건데 사과 갈변 안되게 하는법 알려주세요,none,팀 밖 질문에서 엉뚱한 글이 나간 경우
+tune,사과에 멍이 들어 있어요,none,팀 밖 질문에서 엉뚱한 글이 나간 경우
+test,복숭아 냉장고에 계속 둬도 되나,item:peach:storage,
+test,배를 신문지에 싸야 하나요,item:pear:storage,
+test,사과랑 다른 과일 같이 보관해요?,item:apple:storage,
+test,감자랑 양파 같이 둬요?,item:potato:storage,
+test,고구마 씻어서 보관해도 되나,item:sweet_potato:storage,
+test,물러진 과일로 뭐 만들어요,item:peach:recipe|item:peach:state|item:apple:state|item:pear:state,품목 이름 없음
+test,스무디 재료로 좋은 거,product:peach_4kg:about:0|item:peach:recipe|item:peach:state,품목 이름 없음
+test,채 썰어서 볶아 먹는 채소,item:carrot:recipe,품목 이름 없음
+test,홍차에 타 먹는 거,item:plum_syrup:recipe|item:pear_juice:recipe,품목 이름 없음
+test,요거트에 올려 먹을 만한 것,item:grape_jam:recipe,품목 이름 없음
+test,따뜻하게 끓여 먹는 배 요리,item:pear:recipe,
+test,점심시간에도 전화돼요,policy:contact,
+test,토요일에 상담 돼요,policy:contact,
+test,메일 주소 뭐예요,policy:contact,
+test,취소는 어디서 해요,policy:refund:3,
+test,카드로 샀으면 돈 언제 들어와요,policy:refund:4,
+test,마음이 바뀌었으면 며칠 안에 말해야 해요,policy:refund:0,
+test,신선식품은 그냥 안 산다고 못 해요?,policy:refund:1,
+test,가입 없이 주문한 건 어떻게 찾아요,policy:order,
+test,농가 두 곳에서 사면 배송비 두 번 내요,policy:shipping,
+test,결제하고 언제 출발해요,policy:shipping,
+test,나주에서 온 과일,seller:farm_pear|product:pear_5kg:about:0,
+test,황토에서 키운 거 있어요,seller:farm_sweet_potato,
+test,철원 농장 정보,seller:farm_potato,
+test,매실청 곰팡이 보이면,item:plum_syrup:safety,
+test,감자에 싹이 났어요,item:potato:storage|item:potato:safety|item:potato:state,
+test,복숭아 딱딱한데 언제 먹어요,qna:3|item:peach:storage,
+test,납품 상담은 어디로 해요,policy:bulk,
+test,오늘 환율 얼마예요,none,
+test,내일 비 와요,none,
+test,영어 번역해 주세요,none,
+test,치킨 주문하고 싶어요,none,
+test,비행기표 예약,none,
+test,고양이 키우는 법,none,
+test,파인애플 자르는 법,none,파는 품목이 아님
+test,노트북 추천해 줘,none,

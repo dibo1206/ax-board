@@ -5,6 +5,7 @@
 //    두 품목 비교·선택("사과랑 배 중에 뭐가 나아요?")은 판단하지 않고 가격·당도·품절 여부만 품목별로 나란히 보여 준다
 // 4) 예전에 AI가 답한 비슷한 질문, 담당자가 답한 Q&A를 글자 비교로 찾아 다시 쓴다 (토큰 0)
 // 5) 그래도 못 찾으면 고를 수 있는 질문 버튼 + [AI에게 물어보기]. 손님이 그 버튼을 눌렀을 때만 AI를 부른다
+//    그 전에 벡터 검색(rag.js)으로 근거를 찾는다. 점수가 높고 믿을 수 있는 자료면 그 글을 그대로 보여 주고, 아니면 AI 자료로만 쓴다
 //    AI 답에서 자료에 없는 가격·당도, 효능 표현, "먹어도 돼요", 환불 약속을 찾으면 한 번 다시 시키고, 그래도 틀리면 담당자에게 넘긴다
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -18,7 +19,8 @@ import { createLimiter } from './limit.js'
 import { maskPersonal } from './privacy.js'
 import { describeRecommendation, loadActive, readWish, recommend } from './recommend.js'
 import { RETURNS, SHIPPING, SHOP } from './policy.js'
-import { mostSimilar, similarity } from './similar.js'
+import { RAG_ANSWER_GAP, RAG_ANSWER_MIN, RAG_ASK_MIN, RAG_MATERIAL_MIN, RAG_OVERLAP_MIN, searchChunks } from './rag.js'
+import { coverage, mostSimilar, similarity } from './similar.js'
 import { findBanned } from './banned.js'
 import { publicItem } from './items.js'
 import { ACTIVE_OPTIONS_SQL } from './options.js'
@@ -248,7 +250,7 @@ function describeItem(item) {
   return lines.join('\n')
 }
 
-async function buildMaterial(catalog, ctx) {
+async function buildMaterial(catalog, ctx, evidence = []) {
   const parts = []
   for (const item of ctx.items) {
     parts.push(describeItem(item))
@@ -266,6 +268,10 @@ async function buildMaterial(catalog, ctx) {
   if (!ctx.products.length) {
     parts.push(`[전체 상품 목록]\n${catalog.products.map((p) => `- ${p.product_code}: ${p.name} · ${p.options?.length ? priceText(p) : won(p.price)} · ${p.sold_out ? '품절' : '판매 중'}`).join('\n')}`)
   }
+  // 벡터 검색으로 찾은 조각. 이미 넣은 품목의 품목 정보는 겹치니 뺀다
+  const shown = new Set(ctx.items.map((i) => i.item_code))
+  const found = evidence.filter((c) => c.score >= RAG_MATERIAL_MIN && !(c.key.startsWith('item:') && shown.has(c.item_code)))
+  if (found.length) parts.push(`[검색으로 찾은 자료]\n${found.map((c) => `- ${c.text}`).join('\n')}`)
   return parts.join('\n\n')
 }
 
@@ -752,8 +758,61 @@ function answerNotSold(message, catalog, ctx) {
   }
 }
 
+// ---------- 2-4-2. 벡터 검색: 말을 바꾼 질문의 근거를 찾는다 (AI·토큰 없음) ----------
+// 품목을 말했으면 그 품목 자료와 공통 자료만, 상품 페이지면 다른 상품의 글은 쓰지 않는다
+export async function findEvidence(message, catalog, ctx) {
+  const live = new Set(catalog.products.map((p) => p.product_code))
+  const liveItems = new Set(catalog.items.filter((i) => !i.pending).map((i) => i.item_code))
+  const mine = new Set(ctx.items.map((i) => i.item_code))
+  return searchChunks(message.replace(/\((주민등록번호|이메일|전화번호|주문번호) 가림\)/g, ' '), {
+    limit: 5,
+    allow: (c) => (!c.product_code || live.has(c.product_code))
+      && (!c.item_code || liveItems.has(c.item_code))
+      && (!mine.size || !c.item_code || mine.has(c.item_code))
+      && (!ctx.current || !c.product_code || c.product_code === ctx.current.product_code),
+  })
+}
+
+// 좋다·괜찮다처럼 판단을 묻는 말에는 찾은 글을 답처럼 내놓지 않는다 ("관절에 좋은 과일"에 사과 보관법이 나가면 안 된다)
+const ASKS_JUDGMENT = /좋(은|아|을|나|겠|습)|괜찮|나아|낫|어때|어떤가|먹어도|드셔도|마셔도|먹을\s?수|안전|위험|해로|추천|뭐가|어느\s?게/
+// 먹으면 안 되는 신호는 상한 것을 물었을 때만 보여 준다 ("사과 맛있는 걸로 보내줘"에 나가면 안 된다)
+const ASKS_SPOILED = /곰팡|냄새|썩|상했|상한|상해|변색|거품|부풀|싹|초록|탁해|물러|무르/
+// 품목 이름을 말하면 벡터 점수가 함께 올라가서 점수만 믿을 수 없다. 이름을 뺀 나머지 낱말이 글에 있어야 한다
+export function quotable(top, message, itemNames = []) {
+  if (!top?.trusted || ASKS_JUDGMENT.test(message)) return false
+  if (top.key.endsWith(':safety') && !ASKS_SPOILED.test(message)) return false
+  const rest = itemNames.reduce((text, name) => text.replaceAll(name, ' '), message)
+  if (coverage(rest, top.text) < RAG_OVERLAP_MIN) return false
+  return !hasContact(top.text) && !findBanned(top.text).length
+}
+
+// 점수가 높고, 다른 주제의 자료와 충분히 벌어졌을 때만 찾은 글을 답으로 낸다. 비슷하면 어느 쪽이 맞는지 모르는 것이다
+export function chooseQuote(evidence, message, { itemNames = [], min = RAG_ANSWER_MIN, gap = RAG_ANSWER_GAP } = {}) {
+  const top = evidence[0]
+  if (!top || top.score < min || !quotable(top, message, itemNames)) return null
+  const rival = evidence[1] // 같은 품목이어도 보관과 레시피는 다른 주제다
+  return rival && top.score - rival.score < gap ? null : top
+}
+
+function answerFromEvidence(evidence, message, catalog, ctx, fallbackProduct) {
+  const top = chooseQuote(evidence, message, { itemNames: ctx.items.map((i) => i.name) })
+  if (!top) return null
+  const product = catalog.products.find((p) => p.product_code === top.product_code) ?? catalog.products.find((p) => p.item_code === top.item_code)
+  const lead = top.key.startsWith('qna:') ? '담당자가 비슷한 질문에 답한 내용이에요.' : '등록된 자료에서 찾은 내용이에요.'
+  return {
+    answer: `${lead} ${top.text}`,
+    sources: product ? [{ code: product.product_code, name: product.name }] : [],
+    askAi: keyLoaded() && dailyLimit() > 0,
+    handoff: false,
+    action: null,
+    productCode: product?.product_code ?? fallbackProduct,
+    model: 'similar:rag',
+    blocked: false,
+  }
+}
+
 // ---------- 2-5. 여기까지 못 찾으면: 고를 수 있는 질문 + [AI에게 물어보기] (손님이 누를 때만 AI) ----------
-function askFirst(ctx, fallbackProduct) {
+function askFirst(ctx, fallbackProduct, evidence = []) {
   const item = ctx.items[0]
   // 상품과 상관없는 질문(날씨 등)은 AI에게 물어도 답할 자료가 없어서 AI 버튼을 보여 주지 않는다
   const canAskAi = Boolean(item) && keyLoaded() && dailyLimit() > 0
@@ -762,7 +821,8 @@ function askFirst(ctx, fallbackProduct) {
     return {
       answer: `저는 이 쇼핑몰의 상품·배송·주문 질문에 답해 드려요. 아래에서 고르시거나 상품 이름을 넣어 다시 물어봐 주세요. ${QNA_HINT}`,
       suggestions: ['배송비 얼마예요?', '선물용 추천해 주세요', '교환·환불은 어떻게 해요?'],
-      askAi: false, sources: [], handoff: false, action: null, productCode: null, model: 'rule:ask', blocked: false,
+      // 품목을 말하지 않았어도 관련 자료를 찾았으면 AI에게 물을 수 있다
+      askAi: Boolean(evidence[0] && evidence[0].score >= RAG_ASK_MIN) && keyLoaded() && dailyLimit() > 0, sources: [], handoff: false, action: null, productCode: null, model: 'rule:ask', blocked: false,
     }
   }
   return {
@@ -817,7 +877,7 @@ function nameCodes(answer, catalog) {
 const CONTACT = /(?<!\d)0\d{1,2}[-\s.]?\d{3,4}[-\s.]?\d{4}(?!\d)|https?:\/\/|www\.|계좌|입금|카카오\s?톡|카톡|오픈\s?채팅|텔레그램/i
 const hasContact = (text) => CONTACT.test(String(text ?? '').replaceAll(SHOP.phone, ''))
 
-function findProblem(answer, catalog) {
+function findProblem(answer, catalog, materialPrices = new Set()) {
   if (hasContact(answer)) return '전화번호·주소·계좌 같은 외부 연락처를 쓰면 안 돼요. 문의는 상품 Q&A나 고객센터로 안내해 주세요'
   // 무료 모델이 한국어 사이에 영어 조각을 섞는 경우가 있다 (배lds, 포도 jam). 단위·Q&A는 빼고 본다
   const latin = answer.replace(/Brix|Q&A|AI|\d+(\.\d+)?\s*(kg|g|ml|mL|L)\b/g, '').match(/[A-Za-z]{2,}/)
@@ -832,7 +892,7 @@ function findProblem(answer, catalog) {
   if (/(환불|교환|반품)(을|해)?\s*(해\s*)?드릴|(환불|교환|반품)\s*가능/.test(answer)) return '환불·교환을 약속하면 안 돼요'
   if (/\d\s*만\s*\d*\s*천?\s*원|\d\s*천\s*원/.test(answer)) return '가격은 자료처럼 숫자로 써야 해요 (예: 32,000원)'
   // 옵션 상품은 판매 중 옵션의 가격도 자료에 있는 가격이다
-  const prices = new Set(catalog.products.flatMap((p) => [Number(p.price), ...(p.options ?? []).map((o) => Number(o.price))]))
+  const prices = new Set([...materialPrices, ...catalog.products.flatMap((p) => [Number(p.price), ...(p.options ?? []).map((o) => Number(o.price))])])
   for (const [, n] of answer.matchAll(/(\d[\d,]*)\s*원/g)) {
     if (!prices.has(toNumber(n))) return `${n}원은 자료에 없는 가격이에요`
   }
@@ -885,6 +945,8 @@ async function writeCache(key, reply, model) {
 
 // useCache: 테스트 스크립트는 false (모델 성능을 매번 새로 재야 해서)
 // allowAi: 손님 화면은 [AI에게 물어보기]를 눌렀을 때만 true. false면 AI 대신 고를 수 있는 질문을 돌려준다
+export { loadCatalog, pickContext }
+
 export async function answerChat({ message: raw, history = [], productCode = null }, { useCache = true, allowAi = true } = {}) {
   // 연락처 같은 개인정보는 AI·기록 모두에 들어가기 전에 가린다
   const { text: message, masked } = maskPersonal(raw)
@@ -931,7 +993,9 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
     if (notSold) return notSold
   }
 
-  const material = await buildMaterial(catalog, ctx)
+  const evidence = await findEvidence(message, catalog, ctx)
+  const material = await buildMaterial(catalog, ctx, evidence)
+  const materialPrices = new Set([...material.matchAll(/(\d[\d,]*)\s*원/g)].map((m) => toNumber(m[1])))
   const key = cacheKey('answer', message, material)
   if (useCache) {
     const saved = await readCache(key)
@@ -940,7 +1004,7 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
     if (similar) return similar
   }
 
-  if (!allowAi) return askFirst(ctx, fallbackProduct)
+  if (!allowAi) return answerFromEvidence(evidence, message, catalog, ctx, fallbackProduct) ?? askFirst(ctx, fallbackProduct, evidence)
   if (!keyLoaded()) {
     const error = new Error('OPENROUTER_API_KEY 없음')
     error.code = 'NO_KEY'
@@ -966,7 +1030,7 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
     model = result.model
     const reply = parseReply(result.text)
     if (reply) reply.answer = nameCodes(reply.answer, catalog)
-    problem = reply ? findProblem(reply.answer, catalog) : '형식이 맞지 않아요. 설명 없이 JSON 하나만 출력해 주세요'
+    problem = reply ? findProblem(reply.answer, catalog, materialPrices) : '형식이 맞지 않아요. 설명 없이 JSON 하나만 출력해 주세요'
     if (!problem) {
       const sources = toSourceChips(reply.sources, catalog, ctx)
       const answer = { ...reply, sources, productCode: sources[0]?.code ?? fallbackProduct }

@@ -25,7 +25,7 @@ for (const [group, list] of [['테스트 질문', tests], ['말투 바꾼 질문
   console.log(`\n=== ${group} ${list.length}개`)
   for (const message of list) {
     const r = await answerChat({ message }, { useCache: false, allowAi: false })
-    const kind = r.askAi === true ? 'ask' : r.model === 'rule:ask' ? 'guided' : 'answered'
+    const kind = r.model === 'similar:rag' ? 'answered' : r.askAi === true ? 'ask' : r.model === 'rule:ask' ? 'guided' : 'answered'
     count[kind] += 1
     if (kind === 'ask') asked.push(message)
     console.log(`  ${{ answered: '답함   ', guided: '안내   ', ask: 'AI 버튼' }[kind]} ${r.model.padEnd(15)} ${message} → ${r.answer.slice(0, 90)}`)

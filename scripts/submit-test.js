@@ -13,7 +13,7 @@ const db = new pg.Pool({ connectionString: process.env.DATABASE_URL, options: '-
 
 function startBackend() {
   return new Promise((resolve, reject) => {
-    const env = { ...process.env, BACKEND_PORT: '0', NODE_ENV: 'development', DB_POOL_MAX: '2', REQUIRE_2FA: '0', ADMIN_ALLOWED_IPS: '', TOSS_CLIENT_KEY: '', TOSS_SECRET_KEY: '', OPENROUTER_API_KEY: '' }
+    const env = { ...process.env, BACKEND_PORT: '0', RAG_ENABLED: '0', NODE_ENV: 'development', DB_POOL_MAX: '2', REQUIRE_2FA: '0', ADMIN_ALLOWED_IPS: '', TOSS_CLIENT_KEY: '', TOSS_SECRET_KEY: '', OPENROUTER_API_KEY: '' }
     const child = spawn(process.execPath, ['server/index.js'], { env, stdio: ['ignore', 'pipe', 'pipe'] })
     let logs = ''
     const onData = (chunk) => {
