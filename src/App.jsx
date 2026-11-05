@@ -5,6 +5,7 @@ import { B2bForm, QuestionForm } from './Inquiry.jsx'
 import { Related } from './Recommend.jsx'
 import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
 import { addToCart, getPolicy, thumbUrl, unitPrice } from './shop/shared.js'
+import { Guide } from './shop/Guide.jsx'
 import { CategoryRows, Faq, Hero, ProductSection, QuizDialog, SeasonCalendar, Story } from './shop/home/Home.jsx'
 import { ShopLayout } from './shop/ShopLayout.jsx'
 import { netFetch } from './net.js'
@@ -179,6 +180,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {(option || !product.has_options) && unitPrice(price, unit) && <>{unitPrice(price, unit)} · </>}
         {product.price_updated_at && <>가격 기준 {product.price_updated_at.slice(0, 10)}</>}
       </p>
+      <ShareButton name={product.name.replace(/\[예시\]\s*/g, '')} />
       <RatingBadge rating={product.rating} count={product.review_count} />
       {(product.sold_out || option?.stock === 0) && <p className="badge soldout">품절</p>}
 
@@ -323,6 +325,7 @@ function shopPage(path) {
 }
 
 function innerPage(path) {
+  if (path === '/guide') return <Guide />
   if (path === '/cart') return <Cart />
   if (path === '/checkout') return <Checkout />
   if (path === '/order/success') return <OrderSuccess />
@@ -339,6 +342,30 @@ function innerPage(path) {
 
 // 상품 목록 상태는 주소(?q=&cat=&sort=)에, 상품 상세는 /p/상품코드 에 둔다 → 새로고침·공유·뒤로 가기가 그대로 된다
 // cat 은 손님 화면 카테고리 키(fresh·base·processed…, server/shopGroups.js)
+// 상품 주소 공유: 휴대폰은 공유 창, 그 밖에는 주소 복사. 둘 다 안 되면 주소를 보여 준다
+function ShareButton({ name }) {
+  const [message, setMessage] = useState('')
+  async function share() {
+    const url = window.location.href
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: name, url })
+      } else {
+        await navigator.clipboard.writeText(url)
+        setMessage('주소를 복사했어요')
+      }
+    } catch (error) {
+      if (error.name !== 'AbortError') setMessage(`이 주소를 복사해 주세요: ${url}`)
+    }
+  }
+  return (
+    <p className="share">
+      <button type="button" className="link" onClick={share}>상품 주소 공유</button>
+      {message && <span className="muted" role="status"> {message}</span>}
+    </p>
+  )
+}
+
 const SORT_OPTIONS = [['recommended', '추천순'], ['popular', '인기순'], ['brix', '당도 등급 높은 순'], ['new', '신상품순'], ['rating', '별점순'], ['price_asc', '낮은 가격순'], ['price_desc', '높은 가격순']]
 
 function readLocation() {
