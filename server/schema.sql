@@ -157,6 +157,19 @@ CREATE TABLE IF NOT EXISTS chat_cache (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 벡터 검색 자료 (server/rag.js 가 상품·품목·Q&A·정책에서 만든다. 지워도 다시 만들어진다)
+CREATE TABLE IF NOT EXISTS rag_chunks (
+  key TEXT PRIMARY KEY,
+  hash TEXT NOT NULL,
+  model TEXT NOT NULL,
+  text TEXT NOT NULL,
+  item_code TEXT,
+  product_code TEXT,
+  trusted BOOLEAN NOT NULL DEFAULT false,
+  embedding REAL[] NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- 7단계: 자체 주문·결제 (토스페이먼츠). 금액은 서버가 DB 가격으로 계산하고, 결제 승인 때 다시 확인한다
 -- 상태: pending(결제 전, 재고 잡아 둠) → paid → preparing → shipping → delivered
 --       pending → failed / expired(15분 지나면 재고 돌려놓음), paid·preparing → cancelled(결제 취소·재고 복구)

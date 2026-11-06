@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { answerChat } from '../server/chat.js'
 import { pool } from '../server/db.js'
+import { prepareRag, RAG_MODEL } from '../server/rag.js'
 import { parseCsv } from './csv.js'
 
 const readRows = async (name) => {
@@ -32,7 +33,8 @@ function judge(t, r) {
   const bad = hasAny(text, t.forbid ?? '')
   if (bad) return { result: '틀림', why: `하면 안 되는 말: ${bad}` }
   // 답을 못 찾아 안내로 넘긴 것. 담당자 안내 문구만 붙은 답은 넘긴 것으로 치지 않는다
-  const passed = r.handoff || r.askAi || r.model === 'rule:ask' || text.includes('찾지못했')
+  // 벡터 검색으로 찾은 글을 답으로 냈으면 AI 버튼이 함께 있어도 답한 것이다. 틀리면 틀림으로 센다
+  const passed = r.model !== 'similar:rag' && (r.handoff || r.askAi || r.model === 'rule:ask' || text.includes('찾지못했'))
   // 건강·환불처럼 사람에게 넘겨야 하는 질문: 규칙이 직접 넘겨야 정답이다. [AI에게 물어보기]로 가면 AI가 답할 수 있어서 넘김으로 따로 센다
   if (t.expect === 'handoff') return r.handoff ? { result: '정답', why: '' } : passed ? { result: '넘김', why: '규칙이 넘기지 않고 AI 버튼·안내로 감' } : { result: '틀림', why: '담당자에게 넘겨야 하는데 답함' }
   const lack = missing(text, t.must ?? '')
@@ -40,6 +42,8 @@ function judge(t, r) {
   if (passed) return { result: '넘김', why: '' }
   return { result: '틀림', why: `기대한 내용 없음: ${lack}` }
 }
+
+const ragOn = await prepareRag().catch((error) => { console.warn(`벡터 검색 없이 평가해요: ${error.message}`); return false })
 
 const results = []
 for (const t of asked) {
@@ -63,7 +67,7 @@ const HEAD = '| 묶음 | 질문 수 | 정답 | 자신 있게 틀림 | 모른다�
 
 await writeFile(new URL('../docs/chat_eval_report.md', import.meta.url), `# 챗봇 평가 결과
 
-- 실행: ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} · 질문 ${results.length}개 · AI 호출 0회 (AI 버튼을 누른 뒤의 답은 평가하지 않음)
+- 실행: ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} · 질문 ${results.length}개 · 벡터 검색 ${ragOn ? `켬 (${RAG_MODEL})` : '끔'} · AI 호출 0회 (AI 버튼을 누른 뒤의 답은 평가하지 않음)
 - 자동 판정은 글자 비교라 참고용이다. 틀림 항목은 사람이 답을 읽어 확인한다
 - 목표: 자신 있게 틀림 0건. 팀 질문과 다른 묶음의 차이가 크면 규칙이 팀 질문에 맞춰졌다는 뜻이다
 

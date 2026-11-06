@@ -40,6 +40,16 @@ export function similarity(a, b) {
   return (2 * same) / (A.size + B.size)
 }
 
+// 질문의 내용 낱말이 글에 얼마나 나오는지 0~1 (글이 길어도 점수가 깎이지 않는다)
+export function coverage(question, text) {
+  const A = grams(question)
+  if (!A.size) return 0
+  const body = String(text).toLowerCase().replace(/\s+/g, '')
+  let same = 0
+  for (const g of A) if (body.includes(g)) same += 1
+  return same / A.size
+}
+
 // 후보 중 가장 비슷한 것 (기준 미만이면 null)
 export function mostSimilar(question, candidates, min = 0.6) {
   let best = null

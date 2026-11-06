@@ -20,7 +20,10 @@
     "test-submit": "node scripts/submit-test.js",
     "eval-chat": "node scripts/eval-chat.js",
     "count-ai": "node scripts/count-ai.js",
-    "chat-eval": "node scripts/chat-eval.js"
+    "chat-eval": "node scripts/chat-eval.js",
+    "rag-eval": "node scripts/rag-eval.js",
+    "rag-bakeoff": "node scripts/rag-bakeoff.js",
+    "test-rag": "node scripts/rag-test.js"
   },
   "dependencies": {
     "compression": "^1.8.2",

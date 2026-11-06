@@ -12,6 +12,7 @@ import { dashboardRouter } from './dashboard.js'
 import { adminRouter, UPLOAD_DIR } from './admin.js'
 import { bannedRouter, loadBanned } from './banned.js'
 import { cached, clearCache } from './cache.js'
+import { scheduleRagSync, startRag } from './rag.js'
 import { currentStaff, login, logout, requireAdmin } from './auth.js'
 import { listMails } from './mailer.js'
 import { adminChatRouter, chatRouter } from './chat.js'
@@ -111,7 +112,12 @@ app.use('/api', (req, res, next) => {
 // 무언가 바뀌면(관리자·판매자 수정, 주문, 후기·문의 남기기) 기억해 둔 상품 목록·상세를 지운다. AI 상담은 상품을 바꾸지 않아서 뺀다
 app.use((req, res, next) => {
   if (req.method !== 'GET' && req.method !== 'HEAD' && !req.path.startsWith('/api/chat')) {
-    res.on('finish', () => { if (res.statusCode < 400) clearCache() })
+    res.on('finish', () => {
+      if (res.statusCode >= 400) return
+      clearCache()
+      // 상품·품목·Q&A를 바꾸는 곳은 관리자와 판매자 화면이다. 벡터 검색 자료도 맞춘다
+      if (/^\/api\/(admin|seller)/.test(req.originalUrl)) scheduleRagSync()
+    })
   }
   next()
 })
@@ -317,6 +323,7 @@ await loadBanned()
 startOrderSweeper()
 const server = app.listen(PORT, '127.0.0.1', () => {
   console.log(`[server] http://127.0.0.1:${server.address().port}${SERVE ? ' (배포 모드: 화면 + API)' : ''}`)
+  startRag()
 })
 
 // 안전하게 끄기: 새 연결은 받지 않고, 처리 중인 요청(결제 승인 포함)을 끝낸 뒤 DB 연결을 닫는다. 20초가 넘으면 강제 종료
