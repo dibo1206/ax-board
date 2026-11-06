@@ -190,12 +190,14 @@ async function load(sheets) {
         [r.seller_code, r.name, nullable(r.region), nullable(r.intro), nullable(r.story), yes(r.is_company), nullable(r.source), sealText(nullable(r.owner_name ?? '')), sealText(nullable(r.phone ?? ''))],
       )
     }
+    // 검수 전(reviewed_by 비어 있음) 품목은 처음 넣을 때 pending: 손님 화면·상담에 이름만 나가고, 관리자 [품목 검수]에서 확인한 뒤 나간다.
+    // 이미 DB에 있는 품목의 상태는 바꾸지 않는다 (관리자 화면에서 검수한 것을 되돌리지 않게)
     for (const r of sheets['items.csv']) {
       await client.query(
         `INSERT INTO items (item_code, name, category, show_brix, storage_method, fresh_days_stage1, fresh_days_stage2,
            stage1_uses, stage2_uses, stage3_uses, opened_note, allergens, danger_signs, recipes, source, reviewed_by,
-           stage1_state, stage2_state, keep_period, danger_note, allergen_note, cafe_note, brix_standards, brix_standard_source)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,COALESCE($23::jsonb, '[]'::jsonb),$24)
+           stage1_state, stage2_state, keep_period, danger_note, allergen_note, cafe_note, brix_standards, brix_standard_source, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,COALESCE($23::jsonb, '[]'::jsonb),$24,$25)
          ON CONFLICT (item_code) DO UPDATE SET name=$2, category=$3, show_brix=$4, storage_method=$5,
            fresh_days_stage1=$6, fresh_days_stage2=$7, stage1_uses=$8, stage2_uses=$9, stage3_uses=$10,
            opened_note=$11, allergens=$12, danger_signs=$13, recipes=$14, source=$15, reviewed_by=$16,
@@ -205,7 +207,8 @@ async function load(sheets) {
           nullable(r.fresh_days_stage2), list(r.stage1_uses), list(r.stage2_uses), list(r.stage3_uses),
           nullable(r.opened_note), list(r.allergens), list(r.danger_signs), recipesJson(r.recipes),
           nullable(r.source), nullable(r.reviewed_by),
-          nullable(r.stage1_state), nullable(r.stage2_state), nullable(r.keep_period), nullable(r.danger_note), nullable(r.allergen_note), nullable(r.cafe_note), nullable(r.brix_standards ?? ''), nullable(r.brix_standard_source ?? '')],
+          nullable(r.stage1_state), nullable(r.stage2_state), nullable(r.keep_period), nullable(r.danger_note), nullable(r.allergen_note), nullable(r.cafe_note), nullable(r.brix_standards ?? ''), nullable(r.brix_standard_source ?? ''),
+          r.reviewed_by ? 'active' : 'pending'],
       )
     }
     for (const r of sheets['tags.csv']) {

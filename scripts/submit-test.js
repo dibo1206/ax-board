@@ -106,8 +106,9 @@ try {
   record(2, '추천', 'GET /recommend?want=gift', '선물용 상품을 고르고 품절은 뺀다',
     `${picked.length}개 추천, 품절 ${picked.filter((p) => p.sold_out).length}개`, recommend.status === 200 && picked.length > 0 && !picked.some((p) => p.sold_out))
 
-  const priceReply = await ask(`${firstWord} 얼마예요?`)
-  record(3, '챗봇: 가격을 DB 값으로 답함', `"${firstWord} 얼마예요?"`, `${plain.price}원이 답에 있고 AI를 부르지 않는다`,
+  // 같은 품목 상품이 여럿이라 상품 이름으로 묻는다 (품목 이름만 물으면 가격 범위로 답한다)
+  const priceReply = await ask(`${plainName} 얼마예요?`)
+  record(3, '챗봇: 가격을 DB 값으로 답함', `"${plainName} 얼마예요?"`, `${plain.price}원이 답에 있고 AI를 부르지 않는다`,
     String(priceReply.answer).slice(0, 40), String(priceReply.answer).replaceAll(',', '').includes(String(plain.price)))
 
   const healthReply = await ask(`당뇨가 있는데 ${firstWord} 먹어도 되나요?`)
