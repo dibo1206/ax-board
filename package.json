@@ -13,6 +13,7 @@
     "simulate-farms": "node scripts/simulate-farms.js",
     "onboard-farms": "node scripts/onboard-farms.js",
     "sim-admin": "node scripts/admin-sim.js",
+    "live-sim": "node scripts/live-sim.js",
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",

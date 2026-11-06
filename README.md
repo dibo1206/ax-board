@@ -48,6 +48,16 @@ B2B·B2C를 함께 하는 브랜드 자사몰. 상품을 등록하면 AI 상담�
 - **확인:** `npm run sim-admin`이 관리자·농가 일을 시험 계정으로 해 보고 화면 숫자와 DB가 어긋나는지 본다 → [docs/admin_simulation.md](docs/admin_simulation.md)
 - 근거와 상품별 계산: [docs/farm_simulation.md](docs/farm_simulation.md)
 
+## 실시간 운영 시뮬레이션 (2026-11-07)
+
+`npm run live-sim`이 30분 동안 손님·농가·관리자를 실제 API로 움직여 본다 → [docs/live_simulation.md](docs/live_simulation.md). 짧게: `npm run live-sim -- --minutes 5`
+
+- 손님 50명이 둘러보고(목록·상세·검색·추천받기), 그중 10명이 시험 결제(mock)로 사고 15명이 챗봇에 묻는다. 챗봇은 [AI에게 물어보기]를 누르지 않는다 (토큰 0)
+- 기존 농가가 상품 10개를 올리고, 새 농가 1곳이 가입 신청 → 관리자 승인 → 상품 3개 등록을 한다. 농가는 들어온 주문을 배송 준비 → 송장 입력까지 한다 (예약 상품은 기다린다)
+- 끝나면 대시보드 매출 = DB 결제 합, 재고가 0보다 작은 상품, 옵션 가격·재고, 손님 목록 상품 수, 관리자 할 일, 서버 오류(5xx)를 맞춰 본다
+- 만든 주문·상품·문의·상담 기록은 관리자 화면에서 볼 수 있게 남긴다. 승인에 쓴 임시 관리자 계정은 지운다
+- 2026-11-07 결과: 결제 10건 887,300원, 상품 13개 등록, 검사 6개 모두 맞음, 서버 오류 0. 다만 챗봇 답 33개 중 5개가 틀리고 12개가 약해서 고쳤다 (편의점 택배·해외 배송·착불·선물 포장·냉장 배송, "그럼 언제 받아요?", "ㅅㅏ과", 품종 비교, 더 싼 상품, "10kg도 있어요?", 상품 이름을 통째로 말한 질문)
+
 ## 예약 판매 (2026-11-06)
 
 절임배추·햇유자청·올해 곶감처럼 수확·제조 전에 미리 파는 상품.
@@ -117,6 +127,7 @@ npm run load-data          # data/*.csv 검사 후 DB에 넣기 (검사만: npm 
 npm run simulate-farms     # 예시 농가 10곳·상품 100개의 가입 계획 만들기 → data/sample_farms.json
 npm run onboard-farms      # 계획대로 농가 가입·승인·상품 등록 (처음부터 다시: -- --reset)
 npm run sim-admin          # 관리자·농가 시뮬레이션 → docs/admin_simulation.md
+npm run live-sim           # 30분 실시간 운영 시뮬레이션 → docs/live_simulation.md
 npm run create-admin -- farm_admin   # 관리자 계정 만들기 (비밀번호는 실행하면 물어봄, 10자 이상)
 npm run create-admin -- sunny_farm --seller farm_sunny   # 판매자(농가) 계정 — /seller 에서 로그인
 npm run admin-2fa -- farm_admin  # 2단계 인증(인증 앱) 등록 — 해제: -- 아이디 --off
