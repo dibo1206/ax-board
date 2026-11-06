@@ -26,10 +26,11 @@ export function loadActive() {
 
 const brixReason = (p) => (p.show_brix && p.brix ? `당도 ${p.brix}Brix${p.brix_measured_at ? `(${p.brix_measured_at.slice(5).replace('-', '/')} 측정)` : ''}` : null)
 
-// want: 원하는 태그 코드, budget: 최대 가격. 원하는 태그가 하나도 안 맞는 상품은 뺀다
-export function recommend({ products, tagLabel }, { want = [], budget = null, exclude = null, limit = 3 }) {
+// want: 원하는 태그 코드, budget: 최대 가격, categories: 과일·채소·가공품 중 고른 것.
+// 원하는 태그가 하나도 안 맞는 상품은 뺀다. matched·missed는 추천받기 화면에서 맞은 조건과 안 맞은 조건을 보여 줄 때 쓴다
+export function recommend({ products, tagLabel }, { want = [], budget = null, categories = [], exclude = null, limit = 3 }) {
   return products
-    .filter((p) => !p.sold_out && p.product_code !== exclude && (!budget || p.price <= budget))
+    .filter((p) => !p.sold_out && p.product_code !== exclude && (!budget || p.price <= budget) && (!categories.length || categories.includes(p.category)))
     .map((p) => {
       const hit = want.filter((t) => p.tags.includes(t))
       // 맞는 태그 수가 먼저, 같으면 제철·당도 측정 상품, 그다음 싼 순
@@ -41,6 +42,8 @@ export function recommend({ products, tagLabel }, { want = [], budget = null, ex
     .slice(0, limit)
     .map(({ p, hit }) => ({
       ...card(p),
+      matched: hit.map((t) => tagLabel[t] ?? t),
+      missed: want.filter((t) => !hit.includes(t)).map((t) => tagLabel[t] ?? t),
       reasons: [...hit.map((t) => tagLabel[t] ?? t), p.tags.includes('season') && !hit.includes('season') ? tagLabel.season : null, brixReason(p)]
         .filter(Boolean),
     }))
@@ -49,7 +52,7 @@ export function recommend({ products, tagLabel }, { want = [], budget = null, ex
 function card(p) {
   return {
     product_code: p.product_code, name: p.name, price: p.price, unit: p.unit, category: p.category, has_options: p.has_options,
-    seller_name: p.seller_name, image_url: p.image_url, brix: p.show_brix ? p.brix : null,
+    seller_name: p.seller_name, seller_region: p.seller_region, image_url: p.image_url, brix: p.show_brix ? p.brix : null,
   }
 }
 
@@ -93,7 +96,17 @@ recommendRouter.get('/recommend', async (req, res) => {
   const data = await loadActive()
   const want = String(req.query.tags ?? '').split(',').filter((t) => t in data.tagLabel)
   const budget = /^\d+$/.test(req.query.budget ?? '') ? Number(req.query.budget) : null
-  res.json({ items: recommend(data, { want, budget }) })
+  const categories = String(req.query.category ?? '').split(',').filter(Boolean)
+  // 추천받기 화면은 맞는 상품을 모두 보여 준다 (limit=all). 상담 챗봇은 지금처럼 3개
+  const limit = req.query.limit === 'all' ? Infinity : 3
+  res.json({ items: recommend(data, { want, budget, categories, limit }) })
+})
+
+// 추천받기 화면의 선택지: 태그와 종류마다 지금 살 수 있는 상품이 몇 개인지 세려고 상품의 태그, 종류, 가격만 준다
+recommendRouter.get('/recommend/options', async (req, res) => {
+  const { products } = await loadActive()
+  const live = products.filter((p) => !p.sold_out)
+  res.json({ products: live.map((p) => ({ tags: p.tags, category: p.category, price: p.price })), soldOut: products.length - live.length })
 })
 
 // 이번 주 추천: 제철 → 당도 측정 상품 순 (조건 없이 점수만)
