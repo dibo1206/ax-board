@@ -52,7 +52,7 @@ export async function itemRanges() {
 }
 
 // 판매 중인 상품의 가격·당도·수확일이 바뀌면 누가 언제 무엇을 바꿨는지 남긴다 (거짓 표시를 나중에 따져 볼 수 있게)
-const WATCHED = [['price', '가격'], ['brix', '당도'], ['variety', '품종'], ['brix_measured_at', '당도 잰 날'], ['harvest_date', '수확일'], ['notice.origin', '원산지'], ['notice.expiry', '소비기한']]
+const WATCHED = [['price', '가격'], ['brix', '당도'], ['variety', '품종'], ['brix_measured_at', '당도 잰 날'], ['harvest_date', '수확일'], ['ship_from', '출고 시작일'], ['notice.origin', '원산지'], ['notice.expiry', '소비기한']]
 const watched = (product, key) => (key.startsWith('notice.') ? product.notice?.[key.slice(7)] : product[key])
 // optionChanges: 옵션이 있는 상품은 판매 중 옵션의 가격 변경을 옵션마다 남긴다 ([{ label, old, new }], options.js).
 // 이때 상품 가격은 옵션 최저가를 따라 바뀌는 값이라 따로 남기지 않는다
@@ -118,7 +118,7 @@ adminRouter.get('/products', async (req, res) => {
 })
 
 const PRODUCT_FIELDS = ['seller_code', 'item_code', 'name', 'price', 'unit', 'stock', 'weight_g', 'count_per_box',
-  'brix', 'brix_measured_at', 'harvest_date', 'summary', 'description', 'external_url', 'b2b_available', 'tags', 'status', 'review_note', 'faq', 'notice', 'variety']
+  'brix', 'brix_measured_at', 'harvest_date', 'ship_from', 'summary', 'description', 'external_url', 'b2b_available', 'tags', 'status', 'review_note', 'faq', 'notice', 'variety']
 const value = (product, column) => (column === 'faq' ? JSON.stringify(product.faq ?? []) : column === 'notice' ? JSON.stringify(product.notice ?? {}) : product[column])
 
 // 검사를 통과한 상품을 넣는다. 같은 코드가 있으면 null

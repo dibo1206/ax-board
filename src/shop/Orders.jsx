@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ReviewForm } from './Reviews.jsx'
-import { getPolicy, ORDER_STATUS, post, readCart, REFUND_KIND, RETURN_STATUS, takePending, todayKst, when, won, writeCart } from './shared.js'
+import { getPolicy, isPreorder, ORDER_STATUS, post, readCart, REFUND_KIND, RETURN_STATUS, shipDay, takePending, todayKst, when, won, writeCart } from './shared.js'
 
 // 주문 결과(성공·실패) · 비회원 주문 조회 · 약관 페이지
 // phone: 비회원 후기 쓰기에 쓰는 주문자 휴대폰 (회원은 로그인으로 확인)
@@ -140,12 +140,15 @@ export function OrderDetail({ order, phone = '', onConfirm = null, onReturn = nu
               {order.shipments.map((s) => (
                 <li key={s.seller_code}>
                   <b>{s.seller_name}</b> · {ORDER_STATUS[s.status] ?? s.status} · 배송비 {s.shipping_fee ? won(s.shipping_fee) : '무료'}
+                  {['paid', 'preparing'].includes(s.status) && isPreorder(s.ship_from) && <> · <span className="badge pending">예약</span> {shipDay(s.ship_from)}부터 출고</>}
                   {s.tracking_no && <> · {s.courier} {s.tracking_no} {s.tracking_url && <a href={s.tracking_url} target="_blank" rel="noreferrer">배송 조회</a>}</>}
                 </li>
               ))}
             </ul>
           </dd></>
         ) : order.tracking_no && <><dt>송장</dt><dd>{order.courier} {order.tracking_no} {order.tracking_url && <a href={order.tracking_url} target="_blank" rel="noreferrer">배송 조회</a>}</dd></>}
+        {/* 출고 안내: 예약 상품이 있으면 농가별 출고 시작일, 아니면 결제 후 1~3일 (서버가 만든 문장) */}
+        {order.shipping_note && ['paid', 'preparing'].includes(order.status) && <><dt>출고</dt><dd className="pre-line">{order.shipping_note}</dd></>}
         {order.cancel_reason && <><dt>취소</dt><dd>{when(order.cancelled_at)} · {order.cancel_reason}</dd></>}
         {(order.refunds?.length > 0 || order.refund_pending) && (
           <><dt>돌려받은 금액</dt><dd>

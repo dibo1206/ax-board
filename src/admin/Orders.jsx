@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { CourierList } from '../shop/CourierList.jsx'
-import { ORDER_STATUS, REFUND_KIND, RETURN_STATUS, when, won } from '../shop/shared.js'
+import { isPreorder, ORDER_STATUS, REFUND_KIND, RETURN_STATUS, shipDay, when, won } from '../shop/shared.js'
 import { adminApi } from './api.js'
 
 // 관리자 주문 관리: 결제 완료 → 배송 준비 → 배송 중(송장) → 배송 완료, 취소(결제 취소·재고 복구)
 // 여러 농가 주문은 아직 보내지 않은 농가 몫만 취소할 수 있다 (그 농가 상품 금액 + 배송비를 토스 부분 취소로)
-const FILTERS = [['', '전체'], ['paid', '결제 완료'], ['preparing', '배송 준비'], ['shipping', '배송 중'], ['delivered', '배송 완료'], ['cancelled', '취소']]
+// 결제 완료·배송 준비는 농가 배송 기준: 여러 농가 주문에서 아직 준비 안 한(또는 송장 안 넣은) 농가가 있으면 나온다
+const FILTERS = [['', '전체'], ['paid', '결제 완료 (준비 안 한 농가)'], ['preparing', '배송 준비 (송장 전)'], ['shipping', '배송 중'], ['delivered', '배송 완료'], ['cancelled', '취소']]
 const NEXT = { paid: ['preparing', '배송 준비 시작'], preparing: ['shipping', '송장 넣고 배송 시작'], shipping: ['delivered', '배송 완료로'] }
 
 const REFUND_STATUS = { requested: '결과 확인 중', done: '완료', failed: '실패(돈 안 나감)' }
@@ -18,7 +19,8 @@ function ShipmentRow({ shipment, many, onRun, onCancel }) {
   return (
     <li className="box">
       <p><b>{shipment.seller_name}</b> · {ORDER_STATUS[shipment.status] ?? shipment.status} · 상품 {won(shipment.items_amount)} · 배송비 {shipment.shipping_fee ? won(shipment.shipping_fee) : '무료'}
-        {shipment.tracking_no && <> · {shipment.courier} {shipment.tracking_no}</>}</p>
+        {shipment.tracking_no && <> · {shipment.courier} {shipment.tracking_no}</>}
+        {['paid', 'preparing'].includes(shipment.status) && isPreorder(shipment.ship_from) && <> · <span className="badge pending">예약 · {shipDay(shipment.ship_from)}부터 출고</span></>}</p>
       {next && (
         <div className="row form">
           {next[0] === 'shipping' && (
@@ -163,7 +165,8 @@ export function Orders({ onCount }) {
                 <td>{o.summary}</td>
                 <td>{won(o.total_amount)}{o.refunded > 0 && <><br /><span className="muted">−{won(o.refunded)} 돌려줌</span></>}{o.is_test && <><br /><span className="muted">테스트</span></>}</td>
                 <td>{o.status === 'paid' ? <span className="badge pending">{ORDER_STATUS[o.status]}</span> : ORDER_STATUS[o.status]}
-                  {o.farms > 1 && <><br /><span className="muted">농가 {o.farms}곳 · {o.farms_sent}곳 보냄</span></>}</td>
+                  {o.farms > 1 && <><br /><span className="muted">농가 {o.farms}곳 · {o.farms_sent}곳 보냄{o.farms_waiting > 0 && o.status !== 'paid' && ` · ${o.farms_waiting}곳 준비 전`}</span></>}
+                  {o.ship_from && <><br /><span className="badge pending">예약 · {shipDay(o.ship_from)}부터</span></>}</td>
               </tr>
             ))}
           </tbody>

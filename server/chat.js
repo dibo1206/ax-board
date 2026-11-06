@@ -19,6 +19,7 @@ import { createLimiter } from './limit.js'
 import { maskPersonal } from './privacy.js'
 import { describeRecommendation, loadActive, readWish, recommend } from './recommend.js'
 import { RETURNS, SHIPPING, SHOP } from './policy.js'
+import { isPreorder, shipDateText } from './preorder.js'
 import { RAG_ANSWER_GAP, RAG_ANSWER_MIN, RAG_ASK_MIN, RAG_MATERIAL_MIN, RAG_OVERLAP_MIN, searchChunks } from './rag.js'
 import { coverage, mostSimilar, similarity } from './similar.js'
 import { findBanned } from './banned.js'
@@ -1007,6 +1008,45 @@ async function writeCache(key, reply, model) {
   )
 }
 
+// ---------- 출고 날짜·예약 판매 ----------
+// "절임배추 언제 받아요?", "곶감 언제 보내요?", "예약 판매하는 거 있어요?": 상품의 출고 시작일(DB)로 답한다.
+// 품목을 말하지 않은 "언제 와요?"는 아래 배송 규칙(결제 후 1~3일 안내)으로 간다
+const ASKS_WHEN = /예약|언제\s?(와|오|도착|받|출고|발송|보내|나와|배송)|받을\s?수\s?있|출고\s?(일|날|언제|시작)|발송\s?(일|날|언제)|며칠.{0,4}(걸|와|만에)|도착\s?(일|날|언제)/
+const ASKS_PREORDER_LIST = /예약\s?(판매|상품|구매|주문)?.{0,6}(있|뭐|어떤|무슨|되|돼|가능)/
+function answerShipDate(message, catalog, ctx) {
+  // "주문했는데 언제 와요?"는 내 주문 이야기라 주문 조회 규칙이 답한다
+  if (!ASKS_WHEN.test(message) || /주문했|시켰|샀는데|결제했|주문한/.test(message)) return null
+  const label = (p) => p.name.replace(/\[예시\]\s*/g, '')
+  const base = { handoff: false, action: null, model: 'rule:ship_date', blocked: false }
+  const mentioned = findItems(message, catalog.items).map((i) => i.item_code)
+  let products = mentioned.length ? catalog.products.filter((p) => mentioned.includes(p.item_code)) : (ctx.current ? [ctx.current] : [])
+  if (!products.length) {
+    // 품목 없이 예약 판매를 물으면 지금 예약 판매 중인 상품 목록
+    if (!ASKS_PREORDER_LIST.test(message)) return null
+    const pre = catalog.products.filter((p) => isPreorder(p.ship_from) && !p.sold_out).sort((a, b) => String(a.ship_from).localeCompare(String(b.ship_from)))
+    if (!pre.length) return { ...base, answer: `지금 예약 판매하는 상품은 없어요. 모든 상품은 ${SHIPPING.leadTime}.`, sources: [], productCode: null }
+    return {
+      ...base,
+      answer: `지금 예약 판매하는 상품은 ${pre.length}개예요: ${pre.slice(0, 5).map((p) => `${label(p)} (${shipDateText(p.ship_from)}부터 출고)`).join(', ')}${pre.length > 5 ? ` 외 ${pre.length - 5}개` : ''}. 결제는 주문할 때 하고, 보내기 전에는 [주문 조회]에서 취소할 수 있어요.`,
+      sources: pre.slice(0, 5).map((p) => ({ code: p.product_code, name: p.name })),
+      productCode: pre[0].product_code,
+    }
+  }
+  products = narrow(products, message, catalog).filter((p) => !p.sold_out)
+  if (!products.length) return null // 모두 품절이면 파는지·재고 규칙이 답한다
+  const pre = products.filter((p) => isPreorder(p.ship_from)).sort((a, b) => String(a.ship_from).localeCompare(String(b.ship_from)))
+  const now = products.filter((p) => !isPreorder(p.ship_from))
+  const sentences = [
+    ...pre.slice(0, 3).map((p) => `${label(p)}은(는) 예약 상품이라 ${shipDateText(p.ship_from)}부터 주문 순서대로 보내요.`),
+    pre.length > 3 ? `예약 상품이 ${pre.length - 3}개 더 있어요.` : '',
+    now.length ? `${pre.length ? '나머지 ' : ''}${now.length === 1 ? `${label(now[0])}은(는)` : `${catalog.items.find((i) => i.item_code === now[0].item_code)?.name ?? ''} 상품 ${now.length}개는${pre.length ? '' : ' 모두'}`} 결제 후 1~3일 안에 출고해요 (주말·공휴일 제외).` : '',
+    pre.length ? '같은 농가의 다른 상품을 함께 사면 예약 상품 날짜에 함께 보내요.' : '',
+    '도착 날짜는 택배사 사정에 따라 달라서 약속드리기 어려워요.',
+  ].filter(Boolean)
+  const shown = [...pre.slice(0, 3), ...now.slice(0, 2)]
+  return { ...base, answer: sentences.join(' '), sources: shown.map((p) => ({ code: p.product_code, name: p.name })), productCode: shown[0]?.product_code ?? null }
+}
+
 // useCache: 테스트 스크립트는 false (모델 성능을 매번 새로 재야 해서)
 // allowAi: 손님 화면은 [AI에게 물어보기]를 눌렀을 때만 true. false면 AI 대신 고를 수 있는 질문을 돌려준다
 export { loadCatalog, pickContext }
@@ -1026,6 +1066,9 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
 
   // 가린 자리표(전화번호 가림 등)는 손님이 쓴 말이 아니라서 규칙이 읽지 않게 한다
   const said = message.replace(/\((주민등록번호|이메일|전화번호|주문번호) 가림\)/g, ' ')
+  // 상품의 출고 날짜를 묻는 말은 배송 규칙보다 먼저 (예약 상품은 결제 후 1~3일이 아니라서)
+  const shipDate = answerShipDate(said, catalog, ctx)
+  if (shipDate && !ROUTES.some((r) => r.handoff && r.re.test(said))) return shipDate
   const route = ROUTES.find((r) => r.re.test(said))
   if (route) {
     const b2bProduct = ctx.products.find((p) => p.b2b_available)

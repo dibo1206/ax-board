@@ -130,7 +130,7 @@ function validate(sheets, issues) {
       if (itemByCode[r.item_code]?.show_brix === '아니오') issues.warn('products.csv', line, '이 품목은 당도를 보여 주지 않는데 당도가 적혀 있어요')
       if (!r.brix_measured_at) issues.warn('products.csv', line, '당도를 잰 날짜가 비어 있어요')
     }
-    for (const k of ['brix_measured_at', 'harvest_date']) if (r[k] && !isDate(r[k])) issues.error('products.csv', line, `${k} "${r[k]}"는 2026-10-17 형식으로`)
+    for (const k of ['brix_measured_at', 'harvest_date', 'ship_from']) if (r[k] && !isDate(r[k])) issues.error('products.csv', line, `${k} "${r[k]}"는 2026-10-17 형식으로`)
     if (!isYesNo(r.b2b_available)) issues.error('products.csv', line, 'b2b_available는 예/아니오')
     // image_url 은 선택 칸: 없거나 비워 두면 사진 없이 넣는다. 적으려면 /product-photos/상품코드.webp 처럼 이 저장소 안의 주소만
     if (r.image_url) {
@@ -221,15 +221,17 @@ async function load(sheets) {
     for (const r of sheets['products.csv']) {
       await client.query(
         `INSERT INTO products (product_code, seller_code, item_code, name, price, unit, stock, weight_g, count_per_box,
-           brix, brix_measured_at, harvest_date, summary, external_url, b2b_available, tags, source, image_url, notice, variety, brix_photo_url, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,COALESCE($19::jsonb, '{}'::jsonb),$20,$21, now())
+           brix, brix_measured_at, harvest_date, summary, external_url, b2b_available, tags, source, image_url, notice, variety, brix_photo_url, ship_from, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,COALESCE($19::jsonb, '{}'::jsonb),$20,$21,$22, now())
          ON CONFLICT (product_code) DO UPDATE SET seller_code=$2, item_code=$3, name=$4, price=$5, unit=$6, stock=$7,
            weight_g=$8, count_per_box=$9, brix=$10, brix_measured_at=$11, harvest_date=$12, summary=$13,
-           external_url=$14, b2b_available=$15, tags=$16, source=$17, image_url=COALESCE($18, products.image_url), notice=COALESCE($19::jsonb, products.notice), variety=COALESCE($20, products.variety), brix_photo_url=COALESCE($21, products.brix_photo_url), updated_at=now()`,
+           external_url=$14, b2b_available=$15, tags=$16, source=$17, image_url=COALESCE($18, products.image_url), notice=COALESCE($19::jsonb, products.notice), variety=COALESCE($20, products.variety), brix_photo_url=COALESCE($21, products.brix_photo_url),
+           ship_from=COALESCE($22, products.ship_from), updated_at=now()`,
         [r.product_code, r.seller_code, r.item_code, r.name, Number(r.price), r.unit, Number(r.stock),
           nullable(r.weight_g), nullable(r.count_per_box), nullable(r.brix), nullable(r.brix_measured_at),
           nullable(r.harvest_date), nullable(r.summary), nullable(r.external_url), yes(r.b2b_available),
-          list(r.tags), nullable(r.source), nullable(r.image_url ?? ''), nullable(r.notice ?? ''), nullable(r.variety ?? ''), nullable(r.brix_photo_url ?? '')],
+          list(r.tags), nullable(r.source), nullable(r.image_url ?? ''), nullable(r.notice ?? ''), nullable(r.variety ?? ''), nullable(r.brix_photo_url ?? ''),
+          nullable(r.ship_from ?? '')],
       )
     }
     // 판매 옵션: 표의 순서대로. 표에 있는 상품의 옵션 중 표에서 빠진 것은 주문 기록이 없으면 지우고, 있으면 판매 중지

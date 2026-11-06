@@ -41,8 +41,16 @@ dashboardRouter.get('/', async (req, res) => {
       GROUP BY oi.product_code ORDER BY quantity DESC, revenue DESC LIMIT 5`, [days]),
     pool.query(`SELECT product_code, name, stock FROM products WHERE status = 'active' AND stock <= $1 ORDER BY stock, name`, [LOW_STOCK]),
     pool.query(`SELECT
-        (SELECT count(*) FROM orders WHERE status = 'paid')::int AS to_prepare,
-        (SELECT count(*) FROM orders WHERE status = 'preparing')::int AS to_ship,
+        -- 할 일은 농가 배송 기준: 여러 농가 주문은 한 농가만 보내도 주문 상태가 '배송 중'이라 주문 상태로 세면 빠진다.
+        -- 예약 상품 배송은 출고 시작일 전까지 '예약 대기'로 따로 센다
+        (SELECT count(DISTINCT sh.order_id) FROM order_shipments sh JOIN orders o ON o.id = sh.order_id
+          WHERE sh.status = 'paid' AND o.status IN ('paid', 'preparing', 'shipping') AND (sh.ship_from IS NULL OR sh.ship_from <= ${TODAY}))::int AS to_prepare,
+        (SELECT count(DISTINCT sh.order_id) FROM order_shipments sh JOIN orders o ON o.id = sh.order_id
+          WHERE sh.status = 'preparing' AND o.status IN ('paid', 'preparing', 'shipping'))::int AS to_ship,
+        (SELECT count(DISTINCT sh.order_id) FROM order_shipments sh JOIN orders o ON o.id = sh.order_id
+          WHERE sh.status = 'paid' AND o.status IN ('paid', 'preparing', 'shipping') AND sh.ship_from > ${TODAY})::int AS preorders_waiting,
+        (SELECT min(sh.ship_from) FROM order_shipments sh JOIN orders o ON o.id = sh.order_id
+          WHERE sh.status = 'paid' AND o.status IN ('paid', 'preparing', 'shipping') AND sh.ship_from > ${TODAY}) AS next_ship_from,
         (SELECT count(*) FROM questions WHERE answer IS NULL AND NOT hidden)::int AS unanswered,
         (SELECT count(*) FROM b2b_inquiries WHERE status = '접수')::int AS new_b2b,
         (SELECT count(*) FROM products WHERE status = 'pending')::int AS pending_products,

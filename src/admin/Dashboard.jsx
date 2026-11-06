@@ -87,7 +87,9 @@ export function Dashboard({ onGo }) {
   const { summary, series, top, lowStock, todo } = data
   const periodSales = series.reduce((sum, d) => sum + d.sales, 0)
   const tasks = [
-    ['orders', '배송 준비할 주문', todo.to_prepare], ['orders', '송장 넣을 주문', todo.to_ship], ['inbox', '답변 기다리는 문의', todo.unanswered],
+    ['orders', '배송 준비할 주문', todo.to_prepare], ['orders', '송장 넣을 주문', todo.to_ship],
+    ['orders', `예약 대기 주문${todo.next_ship_from ? ` (가장 빠른 출고 ${todo.next_ship_from.slice(5).replace('-', '/')})` : ''}`, todo.preorders_waiting],
+    ['inbox', '답변 기다리는 문의', todo.unanswered],
     ['inbox', '새 기업 문의', todo.new_b2b], ['products', '검토 대기 상품', todo.pending_products], ['reviews', '답글 안 단 후기', todo.reviews_to_reply],
     ['returns', '확인할 반품 신청', todo.returns_requested], ['returns', '환불 기다리는 반품', todo.returns_to_refund],
   ].filter(([, , n]) => n > 0)

@@ -484,3 +484,9 @@ CREATE INDEX IF NOT EXISTS order_refunds_order_idx ON order_refunds (order_id);
 CREATE UNIQUE INDEX IF NOT EXISTS order_refunds_cancel_key ON order_refunds (order_id, seller_code) WHERE kind = 'cancel' AND status IN ('requested', 'done');
 CREATE UNIQUE INDEX IF NOT EXISTS order_refunds_return_key ON order_refunds (return_id) WHERE kind = 'return' AND status IN ('requested', 'done');
 CREATE UNIQUE INDEX IF NOT EXISTS order_refunds_full_key ON order_refunds (order_id) WHERE kind = 'full' AND status IN ('requested', 'done');
+
+-- 예약 판매 (2026-11-06): 상품의 출고 시작일. 오늘보다 뒤면 예약 상품이다.
+-- 주문할 때 그 날짜를 주문 상품과 농가 배송에 함께 남긴다 (농가가 나중에 날짜를 바꿔도 손님에게 약속한 날짜가 남게)
+ALTER TABLE products ADD COLUMN IF NOT EXISTS ship_from DATE;
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS ship_from DATE;
+ALTER TABLE order_shipments ADD COLUMN IF NOT EXISTS ship_from DATE;

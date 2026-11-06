@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { thumbUrl, unitPrice } from '../shop/shared.js'
+import { thumbUrl, todayKst, unitPrice } from '../shop/shared.js'
 import { AiDraft } from './AiDraft.jsx'
 import { adminApi } from './api.js'
 
 const EMPTY = {
   product_code: '', seller_code: '', item_code: '', name: '', price: '', unit: '', stock: '',
-  weight_g: '', count_per_box: '', brix: '', variety: '', brix_measured_at: '', harvest_date: '', summary: '', description: '',
+  weight_g: '', count_per_box: '', brix: '', variety: '', brix_measured_at: '', harvest_date: '', ship_from: '', summary: '', description: '',
   external_url: '', b2b_available: false, tags: [], faq: [], notice: { imported: false }, options: [],
 }
 
@@ -317,6 +317,12 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
       {item?.brix_min != null && item?.brix_max != null && <p className="muted">{item.name} 보통 당도: {item.brix_min}~{item.brix_max}Brix</p>}
       {item && item.category !== '가공품' && (
         <label>수확일<input type="date" value={form.harvest_date} onChange={set('harvest_date')} /></label>
+      )}
+      {item && (
+        <label>출고 시작일 <span className="muted">(예약 판매일 때만) 아직 수확·제조 전이라 나중에 보낼 상품이면, 보내기 시작하는 날을 적어요. 그날까지 손님 화면에 [예약]으로 보이고 주문 안내도 이 날짜로 나가요</span>
+          <input type="date" value={form.ship_from} min={todayKst()} onChange={set('ship_from')} />
+          {form.ship_from && <button type="button" className="link" onClick={() => setForm((prev) => ({ ...prev, ship_from: '' }))}>예약 판매 끄기</button>}
+        </label>
       )}
       {item && <NoticeFields item={item} notice={form.notice} hasHarvest={Boolean(form.harvest_date)} onChange={(notice) => setForm((prev) => ({ ...prev, notice }))} />}
       <AiDraft form={form} api={api} onDraft={applyDraft} />

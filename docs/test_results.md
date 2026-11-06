@@ -1,6 +1,6 @@
 # 테스트 결과표
 
-- 실행: 2026. 11. 6. PM 10:03:32 · 10/10 통과 · `npm run test-submit`
+- 실행: 2026. 11. 6. PM 10:43:21 · 10/10 통과 · `npm run test-submit`
 - 시험 결제(mock)와 예시 데이터로 돌린 결과다. 실제 토스 결제와 운영 서버에서 확인한 것은 아니다
 - 챗봇 정확도는 `docs/chat_eval_report.md`, 환불은 `npm run test-refund`, 결제 장애 복구는 `npm run test-resilience`로 따로 본다
 

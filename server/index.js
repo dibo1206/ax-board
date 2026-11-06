@@ -28,6 +28,7 @@ import { ACTIVE_OPTIONS_SQL } from './options.js'
 import { adminOrderRouter, memberOrderRouter, publicOrderRouter, sellerOrderRouter, startOrderSweeper } from './orders.js'
 import { recommendRouter } from './recommend.js'
 import { adminReturnRouter, memberReturnRouter, publicReturnRouter, sellerReturnRouter } from './returns.js'
+import { isPreorder } from './preorder.js'
 import { adminReviewRouter, reviewRouter } from './reviews.js'
 import { sellerRouter } from './seller.js'
 import { adminSellerRouter, sellerSignupRouter } from './sellers.js'
@@ -168,6 +169,7 @@ const publicProduct = ({ review_note: _n, review_reason: _r, rejected_at: _x, ad
   ...p,
   brix_grade: GRADE_LABEL[p.brix_rank] ?? null,
   harvest_days: p.category === '가공품' ? null : harvestDays(p.harvest_date),
+  preorder: isPreorder(p.ship_from), // 예약 상품 (출고 시작일이 오늘보다 뒤)
 })
 
 app.get('/api/products', async (req, res) => {
