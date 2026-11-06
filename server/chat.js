@@ -179,12 +179,20 @@ function loadCatalog() {
 }
 
 // 질문(과 앞선 질문)에 나온 품목을 찾는다. 긴 이름부터 찾고 지워서 '배즙' 안의 '배'가 다시 잡히지 않게 한다
+// 한 글자 품목 이름(무)은 다른 낱말 속 글자("무슨", "스무디", "무농약", "무료", "무게")와 헷갈려서 앞뒤를 본다.
+// 앞은 낱말 시작이거나 가을무·총각무 같은 말, 뒤는 낱말 끝이거나 조사·무로 만드는 음식
+const ONE_CHAR = {
+  무: /(^|[^가-힣]|가을|총각|알타리|월동|햇)무($|[^가-힣]|은|는|이|가|를|도|랑|하고|로|요|만|값|가격|국|생채|조림|청)/,
+}
+const PROCESSED = /^(즙|주스|가루|칩|와인|분말)/ // 잼·청은 레시피(사과잼, 귤청)로도 묻는 말이라 넣지 않는다
 function findItems(text, items) {
   let rest = text.replace(/배송|배달|배합|배치|배려/g, ' ').replace(/메실/g, '매실').replace(/황도/g, '복숭아')
   if (!/랑|하고|비교|차이/.test(text)) rest = rest.replace(/부사|후지/g, '사과')
   const found = []
   for (const item of [...items].sort((a, b) => b.name.length - a.name.length)) {
-    if (rest.includes(item.name)) {
+    const at = rest.indexOf(item.name)
+    const processed = at >= 0 && PROCESSED.test(rest.slice(at + item.name.length))
+    if (!processed && (ONE_CHAR[item.name] ? ONE_CHAR[item.name].test(rest) : rest.includes(item.name))) {
       found.push(item)
       rest = rest.replaceAll(item.name, ' ')
     }
@@ -201,7 +209,7 @@ function pickContext(catalog, { message, history, productCode }) {
     items.push(catalog.items.find((i) => i.item_code === current.item_code))
   }
   const itemCodes = new Set(items.map((i) => i.item_code))
-  const products = catalog.products.filter((p) => itemCodes.has(p.item_code)).slice(0, 8)
+  const products = catalog.products.filter((p) => itemCodes.has(p.item_code)).sort((a, b) => Number(a.sold_out) - Number(b.sold_out)).slice(0, 8)
   return { items, products, current }
 }
 
@@ -281,6 +289,7 @@ const BUY_HOW = '이 쇼핑몰 상품 페이지에서 [장바구니 담기]나 [
 const FACTS = [
   {
     // "어디서 사요?": 다른 판매처를 지어내지 않고 이 쇼핑몰 주문 방법만. 재고 답과 겹치면 이것만 답한다
+    id: 'where',
     re: /어디서\s?(사|살|구매|주문)|구매처|판매처|어디.{0,3}(팔아|파나|판매)/,
     only: true,
     say: (p) => (p.sold_out
@@ -288,6 +297,7 @@ const FACTS = [
       : `${p.label} 상품은 ${BUY_HOW}할 수 있어요. 회원이 아니어도 주문할 수 있어요.`),
   },
   {
+    id: 'price',
     re: /얼마|가격|값/,
     explicit: /가격|값/,
     say: (p) => (p.picked.length === 1
@@ -298,6 +308,7 @@ const FACTS = [
   },
   {
     re: /팔아|파나|파니|파냐|파시|파세요|파는지|판매\s?(해|하|중)|살\s?수\s?있|주문\s?(돼|되|가능|할\s?수)|구매.{0,4}(가능|돼|되나)|구입|재고|품절|남았|재입고|다시\s?(들어|나와)|^\S+(\s[\d.]+\S*)?\s?(있어|있나|있냐|있음|있니)/,
+    id: 'stock',
     explicit: /살\s?수\s?있|재고|품절|남았|팔아|파나/,
     say: (p) => (p.sold_out
       ? `${p.label} 상품은 지금 품절이라 살 수 없어요. 다시 들어오는 날짜는 아직 안내된 정보가 없어요.`
@@ -321,6 +332,7 @@ const FACTS = [
       : `${p.label} 상품의 박스당 개수 정보는 아직 없어요.`),
   },
   {
+    id: 'brix',
     re: /달아|달달|단가요|당도|브릭스|brix/i,
     needsBrix: true,
     specific: true,
@@ -393,11 +405,60 @@ async function answerRecommend(message, allowAi) {
   }
 }
 
-// 같은 품목 상품이 여럿이면 질문에 나온 이름 조각(선물세트, 가정용, 3kg …)으로 좁힌다
+// 같은 품목 상품이 여럿이면 질문에 나온 이름 조각(선물세트, 가정용, 3kg, 해남 …)과 옵션 이름(10kg 1박스)으로 좁힌다.
+// 손님 말과 상품 이름이 달라도 뜻이 같은 말(흠집 → 흠과·못난이)은 같은 상품으로 본다
+const SAME_MEANING = [
+  [/흠집|흠과|흠있|흠 있|파지|못난이|b급|상처/i, ['흠과', '못난이', '파지']],
+  [/선물/, ['선물']],
+  [/가정용|집에서/, ['가정용']],
+  [/업소|대용량|카페|식당|가게/, ['업소용']],
+  [/소포장|맛보기|혼자|자취|조금만|작은\s?(거|것|상자|박스)/, ['소포장', '맛보기']],
+]
 function narrow(products, message, catalog) {
-  const words = (p) => p.name.replace(/\[예시\]/g, '').split(/\s+/).filter((w) => w.length >= 2 && !catalog.items.some((i) => i.name === w))
-  const narrowed = products.filter((p) => words(p).some((w) => message.includes(w)))
+  const KOREAN_NUMBER = { 일: 1, 이: 2, 삼: 3, 사: 4, 오: 5, 육: 6, 칠: 7, 팔: 8, 구: 9, 십: 10, 십오: 15, 이십: 20 }
+  const said = message.replace(/(이십|십오|십|일|이|삼|사|오|육|칠|팔|구)\s?(키로|킬로)/g, (_, n) => `${KOREAN_NUMBER[n]}kg`).replace(/\s?(키로|킬로)/g, 'kg')
+  const words = (p) => [...p.name.replace(/\[예시\]/g, '').split(/[\s·()]+/), ...(p.options ?? []).flatMap((o) => String(o.name).split(/\s+/)),
+    ...String(p.seller_name ?? '').replace(/\[예시\]/g, '').split(/\s+/)]
+    .filter((w) => w.length >= 2 && !catalog.items.some((i) => i.name === w))
+  const sameMeaning = (p) => SAME_MEANING.some(([re, names]) => re.test(said) && names.some((n) => p.name.includes(n)))
+  const narrowed = products.filter((p) => words(p).some((w) => said.includes(w)) || sameMeaning(p))
   return narrowed.length ? narrowed : products
+}
+
+// 같은 품목 상품이 많으면(여러 농가) 하나씩 다 말하지 않고, 판매 중 상품 수·가격 범위·싼 순 3개를 말하고 좁혀 물어보게 한다.
+// 당도를 물으면 당도를 잰 상품을 높은 순으로. 무게·개수는 상품마다 달라서 답하지 않는다 (null)
+// 당도를 보여 주지 않는 품목: 검수 전 품목은 '아직 확인 중', 원래 당도를 쓰지 않는 품목은 '표시하지 않음'
+const noBrix = (item) => (item?.pending ? `${josa(item.name, '은', '는')} 담당자가 품목 정보를 확인하고 있어서 당도를 아직 안내하지 않아요.` : `${item?.name ?? '이'} 상품은 당도를 표시하지 않는 품목이에요.`)
+const MANY = 4
+function manyProducts(products, facts, catalog) {
+  const item = catalog.items.find((i) => i.item_code === products[0].item_code)
+  const name = item?.name ?? '이 품목'
+  const live = products.filter((p) => !p.sold_out)
+  const label = (p) => p.name.replace(/\[예시\]\s*/g, '')
+  const priceOf = (p) => (p.options?.length ? priceText(p) : won(p.price))
+  const ids = facts.map((f) => f.id)
+  let answer = null
+  let shown = []
+  if (!live.length) {
+    answer = `${name} 상품은 지금 모두 품절이에요. 다시 들어오는 날짜는 아직 안내된 정보가 없어요.`
+  } else if (ids.includes('brix')) {
+    if (!item?.show_brix) answer = noBrix(item)
+    else {
+      shown = live.filter((p) => p.brix && !p.info_disputed).sort((a, b) => Number(b.brix) - Number(a.brix)).slice(0, 3)
+      answer = shown.length
+        ? `당도를 잰 ${name} 상품은 높은 순으로 ${shown.map((p) => `${label(p)} ${p.brix}Brix${p.brix_measured_at ? `(${p.brix_measured_at} 측정)` : ''}`).join(', ')}이에요.`
+        : `판매 중인 ${name} 상품에는 아직 측정한 당도 정보가 없어요.`
+    }
+  } else if (ids.some((id) => ['price', 'stock', 'where'].includes(id))) {
+    shown = [...live].sort((a, b) => a.price - b.price).slice(0, 3)
+    const prices = live.map((p) => p.price)
+    const soldOut = products.length - live.length
+    answer = `${name} 상품은 지금 ${live.length}개를 살 수 있어요${soldOut ? ` (품절 ${soldOut}개 빼고)` : ''}. 가격은 ${won(Math.min(...prices))}~${won(Math.max(...prices))}이고, 싼 순으로 ${shown.map((p) => `${label(p)} ${priceOf(p)}`).join(', ')}이에요.`
+      + `${ids.includes('where') ? ` 모두 ${BUY_HOW}할 수 있어요.` : ''} 무게나 용도(선물용·가정용 등)를 함께 말씀해 주시면 좁혀 드릴게요.`
+  }
+  if (!answer) return null
+  const sources = (shown.length ? shown : live.slice(0, 3)).map((p) => ({ code: p.product_code, name: p.name }))
+  return { answer, sources, productCode: sources[0]?.code ?? products[0].product_code }
 }
 
 // 자료에 없을 수 있는 속성을 묻는 말: 파는지·재고 답으로 넘겨짚지 않는다
@@ -415,14 +476,15 @@ function answerFact(message, catalog, ctx) {
     ? catalog.products.filter((p) => mentioned.includes(p.item_code))
     : (ctx.current ? [ctx.current] : [])
   if (!products.length) return null
-  products = narrow(products, message, catalog)
-  if (products.length > 3) return null
+  products = narrow(products, message, catalog).sort((x, y) => Number(x.sold_out) - Number(y.sold_out)) // 살 수 있는 상품부터
+  if (products.length > MANY) return manyProducts(products, facts, catalog)
   const sentences = []
   for (const p of products) {
     const item = catalog.items.find((i) => i.item_code === p.item_code)
     const labeled = { ...p, label: p.name.replace(/\[예시\]\s*/g, ''), picked: pickOptions(p, message) }
     for (const f of facts) {
-      sentences.push(f.needsBrix && !item.show_brix ? `${labeled.label} 상품은 당도를 표시하지 않는 품목이에요.` : f.say(labeled))
+      const sentence = f.needsBrix && !item.show_brix ? (products.length > 1 ? noBrix(item) : `${labeled.label} 상품은 ${item.pending ? '담당자가 품목 정보를 확인하고 있어서 당도를 아직 안내하지 않아요.' : '당도를 표시하지 않는 품목이에요.'}`) : f.say(labeled)
+      if (!sentences.includes(sentence)) sentences.push(sentence)
     }
   }
   return {
@@ -813,11 +875,12 @@ function answerFromEvidence(evidence, message, catalog, ctx, fallbackProduct) {
 }
 
 // ---------- 2-5. 여기까지 못 찾으면: 고를 수 있는 질문 + [AI에게 물어보기] (손님이 누를 때만 AI) ----------
-function askFirst(ctx, fallbackProduct, evidence = []) {
+function askFirst(ctx, fallbackProduct, evidence = [], message = '', catalog = null) {
   const item = ctx.items[0]
   // 상품과 상관없는 질문(날씨 등)은 AI에게 물어도 답할 자료가 없어서 AI 버튼을 보여 주지 않는다
   const canAskAi = Boolean(item) && keyLoaded() && dailyLimit() > 0
-  const facts = item ? ctx.products.filter((p) => p.item_code === item.item_code).slice(0, 2).map((p) => choiceFacts(p, item)).join(' / ') : ''
+  const ofItem = item ? (catalog?.products ?? ctx.products).filter((p) => p.item_code === item.item_code).sort((a, b) => Number(a.sold_out) - Number(b.sold_out)) : []
+  const facts = item ? (catalog ? narrow(ofItem, message, catalog) : ofItem).slice(0, 2).map((p) => choiceFacts(p, item)).join(' / ') : ''
   if (!item) {
     return {
       answer: `저는 이 쇼핑몰의 상품·배송·주문 질문에 답해 드려요. 아래에서 고르시거나 상품 이름을 넣어 다시 물어봐 주세요. ${QNA_HINT}`,
@@ -1005,7 +1068,7 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
     if (similar) return similar
   }
 
-  if (!allowAi) return answerFromEvidence(evidence, message, catalog, ctx, fallbackProduct) ?? askFirst(ctx, fallbackProduct, evidence)
+  if (!allowAi) return answerFromEvidence(evidence, message, catalog, ctx, fallbackProduct) ?? askFirst(ctx, fallbackProduct, evidence, message, catalog)
   if (!keyLoaded()) {
     const error = new Error('OPENROUTER_API_KEY 없음')
     error.code = 'NO_KEY'

@@ -10,6 +10,8 @@
     "server": "node server/index.js",
     "start": "node server/index.js --serve",
     "load-data": "node scripts/load-data.js",
+    "simulate-farms": "node scripts/simulate-farms.js",
+    "sim-admin": "node scripts/admin-sim.js",
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",

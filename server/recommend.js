@@ -79,11 +79,12 @@ export function readWish(text) {
   const man = text.match(/(\d+)\s*만\s*원?/)
   const plain = text.match(/(\d{4,})\s*원/)
   const budget = man ? Number(man[1]) * 10_000 : plain ? Number(plain[1]) : null
-  return { want, budget }
+  const categories = [/과일/.test(text) && '과일', /채소|야채/.test(text) && '채소'].filter(Boolean)
+  return { want, budget, categories }
 }
 
-export function describeRecommendation(items, { want, budget }, tagLabel) {
-  const condition = [...want.map((t) => tagLabel[t] ?? t), budget ? `${won(budget)} 이하` : null].filter(Boolean).join(' · ')
+export function describeRecommendation(items, { want, budget, categories = [] }, tagLabel) {
+  const condition = [...want.map((t) => tagLabel[t] ?? t), ...categories, budget ? `${won(budget)} 이하` : null].filter(Boolean).join(' · ')
   if (!items.length) return `${condition ? `${condition} 조건에 ` : ''}맞는 상품이 지금은 없어요. 조건을 바꿔 보시거나 상품 목록 위의 [추천 받기]를 써 보세요.`
   const list = items.map((x) => `${x.name.replace(/\[예시\]\s*/g, '')} (${[`${won(x.price)}${x.has_options ? '부터' : ''}`, ...x.reasons].join(' · ')})`).join(', ')
   return `${condition ? `${condition} 조건으로 ` : ''}이런 상품을 추천해요: ${list}. 상품 이름을 누르면 자세히 볼 수 있어요.`

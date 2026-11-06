@@ -1,0 +1,30 @@
+ref_code,name,unit,per_unit,basis
+apple_fuji,사과 후지,kg,6150,KAMIS 소매 서울 2026-11-05 후지 상품 10개 18463원 (개당 약 300g으로 kg 환산)
+apple_shinano,사과 시나노골드,kg,6480,KAMIS 소매 서울 2026-11-05 시나노골드 상품 10개 19433원 (개당 약 300g)
+apple_hongro,사과 홍로,kg,9590,KAMIS 소매 서울 2026-11-05 홍로 상품 10개 28775원 (개당 약 300g)
+persimmon,단감 부유,kg,6690,KAMIS 소매 서울 2026-11-05 부유 상품 5개 6687원 (개당 약 200g)
+kiwi_gold,골드키위,kg,14410,KAMIS 소매 서울 2026-11-05 골드 상품 10개 14413원 (개당 약 100g)
+kiwi_green,그린키위,kg,9000,가정값 (KAMIS 그날 값 없음 · 골드키위의 약 0.6배)
+napa_cabbage,가을배추,kg,1300,KAMIS 소매 서울 2026-11-05 가을배추 1포기 3508원 (포기당 약 2.7kg)
+radish,가을무,kg,1370,KAMIS 소매 서울 2026-11-05 가을무 1개 2060원 (개당 약 1.5kg)
+green_onion,대파,kg,2644,KAMIS 소매 서울 2026-11-05 대파 1kg 2644원
+onion,양파,kg,2004,KAMIS 소매 서울 2026-11-05 양파 1kg 2004원
+garlic_peeled,깐마늘,kg,10793,KAMIS 소매 서울 2026-11-05 깐마늘(국산) 1kg 10793원
+garlic_bulb,통마늘,kg,8100,가정값 (KAMIS 그날 값 없음 · 깐마늘의 약 0.75배)
+chili_powder,고춧가루,kg,31067,KAMIS 소매 서울 2026-11-05 고춧가루(국산) 1kg 31067원
+broccoli,브로콜리,kg,5480,KAMIS 소매 서울 2026-11-05 브로콜리(국산) 1개 2190원 (개당 약 400g)
+carrot,당근,kg,4703,KAMIS 소매 서울 2026-11-05 당근 무세척(국산) 1kg 4703원
+sweet_potato,고구마,kg,3991,KAMIS 소매 서울 2026-11-05 고구마(밤) 1kg 3991원
+mandarin,노지감귤,kg,3500,가정값 (KAMIS 그날 값 없음)
+strawberry,딸기 (11월 첫물),kg,26000,가정값 (KAMIS 그날 값 없음 · 첫물이라 비쌈)
+strawberry_frozen,냉동 딸기,kg,9000,가정값
+shine,샤인머스캣 (저장),kg,12000,가정값 (KAMIS 그날 값 없음)
+shiitake_fresh,생표고,kg,16000,가정값 (KAMIS 그날 값 없음)
+shiitake_dried,건표고,kg,90000,가정값
+salted_cabbage,절임배추,kg,2200,가정값 (김장철 20kg 3만 원대 중후반)
+citron_tea,유자청,kg,13000,가정값
+apple_juice,사과즙,포,560,가정값 (110mL 파우치 1포)
+persimmon_chips,감말랭이,kg,24000,가정값
+semi_dried,반건시,kg,30000,가정값
+gotgam,곶감,kg,34000,가정값
+grape_jam,포도잼,kg,18000,가정값
