@@ -1,0 +1,19 @@
+{
+  "name": "restock-mail",
+  "version": "1.0.0",
+  "description": "재입고 이메일 알림 (Express + Nodemailer)",
+  "main": "src/server.js",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "start": "node src/server.js"
+  },
+  "type": "module",
+  "dependencies": {
+    "dotenv": "^18.0.9",
+    "express": "^5.3.0",
+    "nodemailer": "^10.3.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

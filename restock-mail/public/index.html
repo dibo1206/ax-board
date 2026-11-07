@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>재입고 알림 데모</title>
+<style>
+  :root { --bg:#f7f7f5; --card:#fff; --text:#1f2328; --muted:#6b7280; --line:#e5e7eb; --accent:#16a34a; --danger:#dc2626; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:20px 16px; border-bottom:1px solid var(--line); background:var(--card); }
+  header h1 { margin:0; font-size:20px; }
+  header p { margin:4px 0 0; color:var(--muted); font-size:13px; }
+  main { max-width:1000px; margin:0 auto; padding:16px; display:grid; gap:24px; }
+  h2 { font-size:16px; margin:0 0 12px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:8px; }
+  .card:target { outline:2px solid var(--accent); }
+  .emoji { font-size:44px; text-align:center; }
+  .name { font-weight:600; }
+  .price { color:var(--muted); font-size:14px; }
+  .badge { display:inline-block; font-size:12px; padding:2px 8px; border-radius:999px; }
+  .soldout { background:#fee2e2; color:var(--danger); }
+  .instock { background:#dcfce7; color:var(--accent); }
+  input, button { font:inherit; padding:8px 10px; border-radius:8px; border:1px solid var(--line); }
+  input { width:100%; }
+  button { background:var(--text); color:#fff; border:none; cursor:pointer; }
+  button.buy { background:var(--accent); }
+  button:disabled { opacity:.5; cursor:default; }
+  .msg { font-size:13px; min-height:1em; }
+  .msg.err { color:var(--danger); } .msg.ok { color:var(--accent); }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  td input { width:80px; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .muted { color:var(--muted); font-size:13px; }
+  a { color:#2563eb; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🔔 재입고 알림 데모</h1>
+  <p>품절 상품에 이메일을 남기면, 관리자가 재고를 채우는 순간 메일이 발송됩니다. <span id="mode"></span></p>
+</header>
+<main>
+  <section>
+    <h2>상품 목록</h2>
+    <div class="grid" id="products"></div>
+  </section>
+
+  <section class="panel">
+    <div class="row" style="justify-content:space-between">
+      <h2>관리자 · 재고 관리</h2>
+      <button id="reset" style="background:#6b7280">데이터 초기화</button>
+    </div>
+    <table>
+      <thead><tr><th>상품</th><th>현재 재고</th><th>알림 대기</th><th>재고 변경</th></tr></thead>
+      <tbody id="admin"></tbody>
+    </table>
+    <p class="msg" id="adminMsg"></p>
+  </section>
+
+  <section class="panel">
+    <h2>발송된 메일</h2>
+    <table>
+      <thead><tr><th>시각</th><th>종류</th><th>받는 사람</th><th>상품</th><th>결과</th></tr></thead>
+      <tbody id="log"></tbody>
+    </table>
+  </section>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+async function api(url, opts = {}) {
+  const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...opts });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || '요청 실패');
+  return body;
+}
+
+async function load() {
+  const { products, mailMode } = await api('/api/products');
+  $('#mode').textContent = mailMode === 'ethereal'
+    ? '(테스트 모드: 실제 메일 대신 Ethereal 미리보기 링크로 확인)'
+    : '(실제 SMTP 발송 모드)';
+
+  $('#products').innerHTML = products.map((p) => `
+    <div class="card" id="${p.id}">
+      <div class="emoji">${p.emoji}</div>
+      <div class="name">${esc(p.name)}</div>
+      <div class="price">${p.price.toLocaleString('ko-KR')}원</div>
+      ${p.stock > 0
+        ? `<span class="badge instock">재고 ${p.stock}개</span><button class="buy" disabled>구매하기</button>`
+        : `<span class="badge soldout">품절</span>
+           <form data-id="${p.id}" class="sub">
+             <div class="row"><input type="email" required placeholder="이메일 주소"><button>알림 신청</button></div>
+           </form>`}
+      <div class="msg"></div>
+    </div>`).join('');
+
+  $('#admin').innerHTML = products.map((p) => `
+    <tr>
+      <td>${p.emoji} ${esc(p.name)}</td>
+      <td>${p.stock > 0 ? p.stock : '<span class="badge soldout">품절</span>'}</td>
+      <td>${p.waiting}명</td>
+      <td><form class="row stock" data-id="${p.id}">
+        <input type="number" min="0" value="${p.stock > 0 ? p.stock : 10}"><button>적용</button>
+      </form></td>
+    </tr>`).join('');
+
+  const { mailLog } = await api('/api/admin/mail-log');
+  $('#log').innerHTML = mailLog.length ? mailLog.map((m) => `
+    <tr>
+      <td>${new Date(m.at).toLocaleTimeString('ko-KR')}</td>
+      <td>${m.kind === 'restock' ? '재입고 알림' : '신청 확인'}</td>
+      <td>${esc(m.to)}</td>
+      <td>${esc(m.productName)}</td>
+      <td>${m.ok
+        ? (m.previewUrl ? `<a href="${esc(m.previewUrl)}" target="_blank" rel="noopener">메일 보기 ↗</a>` : '발송 완료')
+        : `<span class="msg err">실패: ${esc(m.error)}</span>`}</td>
+    </tr>`).join('') : '<tr><td colspan="5" class="muted">아직 발송된 메일이 없습니다.</td></tr>';
+}
+
+document.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const btn = form.querySelector('button');
+  btn.disabled = true;
+  try {
+    if (form.classList.contains('sub')) {
+      const msg = form.parentElement.querySelector('.msg');
+      try {
+        const r = await api(`/api/products/${form.dataset.id}/subscribe`, {
+          method: 'POST', body: JSON.stringify({ email: form.querySelector('input').value }),
+        });
+        await load();
+        const m = document.getElementById(form.dataset.id).querySelector('.msg');
+        m.className = 'msg ok';
+        m.textContent = `${r.email} 로 재입고 알림이 신청되었습니다.`;
+      } catch (err) {
+        msg.className = 'msg err'; msg.textContent = err.message;
+      }
+    } else if (form.classList.contains('stock')) {
+      try {
+        const r = await api(`/api/admin/products/${form.dataset.id}/stock`, {
+          method: 'PATCH', body: JSON.stringify({ stock: Number(form.querySelector('input').value) }),
+        });
+        await load();
+        const sent = r.notified.filter((n) => n.ok).length;
+        const failed = r.notified.length - sent;
+        $('#adminMsg').className = 'msg ok';
+        $('#adminMsg').textContent = r.notified.length
+          ? `${r.product.name} 재고 ${r.product.stock}개로 변경 → 재입고 메일 ${sent}건 발송${failed ? `, ${failed}건 실패` : ''}`
+          : `${r.product.name} 재고 ${r.product.stock}개로 변경 (발송 대상 없음)`;
+      } catch (err) {
+        $('#adminMsg').className = 'msg err'; $('#adminMsg').textContent = err.message;
+      }
+    }
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('#reset').addEventListener('click', async () => {
+  if (!confirm('상품 재고와 신청 내역, 메일 기록을 모두 초기화할까요?')) return;
+  await api('/api/admin/reset', { method: 'POST' });
+  $('#adminMsg').textContent = '';
+  load();
+});
+
+load();
+</script>
+</body>
+</html>
