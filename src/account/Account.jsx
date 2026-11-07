@@ -527,7 +527,16 @@ function MyQuestions({ onSeen }) {
 
   if (error) return <p className="error">{error}</p>
   if (!list) return <p className="muted">불러오는 중…</p>
-  if (!list.length) return <p className="muted">아직 남긴 문의가 없어요. 상품 화면 아래 Q&A에서 물어볼 수 있어요.</p>
+  if (!list.length) {
+    return (
+      <div className="my-empty">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v10H9l-4 4z" /><path d="M9 9.5h6M9 12h4" /></svg>
+        <p>아직 남긴 문의가 없어요.</p>
+        <p className="my-empty-sub">궁금한 점은 상품 화면 아래 Q&A에 남겨 주세요. 답변이 달리면 화면 위 마이페이지 옆에 숫자로 알려 드려요.</p>
+        <a href="/#products" className="my-go">상품 보러 가기</a>
+      </div>
+    )
+  }
   return (
     <ul className="my-questions">
       {list.map((q) => (
@@ -538,8 +547,8 @@ function MyQuestions({ onSeen }) {
           </p>
           <p><strong>Q.</strong> {q.question}</p>
           {q.answer
-            ? <p><strong>A.</strong> {q.answer} <span className="muted">({when(q.answered_at)})</span></p>
-            : <p className="muted">답변을 기다리는 중이에요. 답변이 달리면 화면 위 마이페이지 옆에 숫자로 알려 드려요.</p>}
+            ? <p className="my-callout answered"><strong>A.</strong> {q.answer} <span className="muted">({when(q.answered_at)})</span></p>
+            : <p className="my-callout">답변을 기다리는 중이에요. 답변이 달리면 화면 위 마이페이지 옆에 숫자로 알려 드려요.</p>}
         </li>
       ))}
     </ul>

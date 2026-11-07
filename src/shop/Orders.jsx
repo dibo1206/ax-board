@@ -286,6 +286,23 @@ export function OrderFail() {
   )
 }
 
+// 결과 위 배송 단계: 결제 완료 → 배송 준비 → 배송 중 → 배송 완료. 취소·실패 같은 상태는 단계 대신 한 줄로
+const STEPS = ['paid', 'preparing', 'shipping', 'delivered']
+function OrderSteps({ status }) {
+  const at = STEPS.indexOf(status)
+  if (at < 0) return <p className={`lookup-state st-${status}`}>{ORDER_STATUS[status] ?? status}</p>
+  return (
+    <ol className="lookup-steps" aria-label={`배송 단계: ${ORDER_STATUS[status]}`}>
+      {STEPS.map((s, i) => (
+        <li key={s} className={i < at ? 'done' : i === at ? 'now' : ''} aria-current={i === at ? 'step' : undefined}>
+          <span className="dot" aria-hidden="true">{i < at ? '✓' : i + 1}</span>
+          <span>{ORDER_STATUS[s]}</span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
 export function OrderLookup() {
   const [orderNo, setOrderNo] = useState('')
   const [phone, setPhone] = useState('')
@@ -329,20 +346,37 @@ export function OrderLookup() {
     }
   }
 
+  // 화면 모양 (2026-11-07 피드백): 안내 카드 · 조회 칸 · 도움말 · 결과 위 배송 단계
   return (
-    <section>
-      <h2>주문 조회</h2>
-      <p className="muted">회원은 <a href="/account">마이페이지</a>에서 주문 내역을 볼 수 있어요. 비회원은 주문번호와 휴대폰 번호로 조회해요.</p>
-      <form className="box form" onSubmit={lookup}>
-        <div className="row">
-          <label>주문번호<input value={orderNo} onChange={(e) => setOrderNo(e.target.value)} placeholder="FM261024-XXXXXXXXXX" /></label>
-          <label>주문자 휴대폰<input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="010-1234-5678" inputMode="tel" /></label>
+    <section className="lookup">
+      <header className="lookup-hero">
+        <span className="lookup-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 6h11v10H3zM14 9h4l3 3.5V16h-7zM7 19a1.8 1.8 0 1 0 0 .01M17 19a1.8 1.8 0 1 0 0 .01" /></svg>
+        </span>
+        <div>
+          <h2>주문 조회</h2>
+          <p>주문번호와 주문할 때 적은 휴대폰 번호로 배송 상태를 확인해요.</p>
         </div>
-        <button type="submit" className="button" disabled={busy}>조회하기</button>
+        <a className="lookup-member" href="/account">회원이면 마이페이지에서 →</a>
+      </header>
+      <form className="lookup-form form" onSubmit={lookup}>
+        <div className="row">
+          <label>주문번호<input value={orderNo} onChange={(e) => setOrderNo(e.target.value)} placeholder="FM261024-XXXXXXXXXX" autoComplete="off" /></label>
+          <label>주문자 휴대폰<input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="010-1234-5678" inputMode="tel" autoComplete="tel" /></label>
+        </div>
+        <button type="submit" className="lookup-submit" disabled={busy}>{busy ? '찾는 중…' : '조회하기'}</button>
+        {error && <p className="error" role="alert">{error}</p>}
       </form>
-      {error && <p className="error">{error}</p>}
+      {!order && (
+        <ul className="lookup-tips">
+          <li><b>주문번호는 어디 있나요?</b> 결제를 마친 화면과, 이메일을 적었다면 주문 알림 메일에 있어요. FM으로 시작해요.</li>
+          <li><b>배송 준비 전이면</b> 조회한 화면에서 바로 주문을 취소할 수 있어요.</li>
+          <li><b>찾지 못하면</b> 화면 아래 대표전화나 오른쪽 아래 [상담하기]로 알려 주세요.</li>
+        </ul>
+      )}
       {order && (
-        <div className="box">
+        <div className="lookup-result">
+          <OrderSteps status={order.status} />
           <OrderDetail order={order} phone={phone} onConfirm={confirmPurchase}
             onReturn={async (body) => setOrder(await post('/orders/lookup/returns', { orderNo: order.order_no, phone, ...body }))} />
           {order.status === 'paid' && (

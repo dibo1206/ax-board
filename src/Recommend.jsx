@@ -200,7 +200,10 @@ export function Quiz({ onOpen, startOpen = false, onClose }) {
   return (
     <section className="quiz2" aria-label="추천받기">
       <header className="quiz2-head">
-        <p className="quiz2-kicker">추천받기{!result && options && <span> · {step + 1} / {total}</span>}</p>
+        <p className="quiz2-kicker">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.5L12 15l-1.8-4.5L5.5 9l4.7-1.4zM18 15l.8 2 2 .8-2 .7-.8 2-.8-2-2-.7 2-.8z" /></svg>
+          추천받기{!result && options && <span> {step + 1} / {total}</span>}
+        </p>
         <button type="button" className="quiz2-x" onClick={close} aria-label="닫기">×</button>
       </header>
       {!result && <div className="quiz2-bar" aria-hidden="true"><span style={{ width: `${((step + 1) / total) * 100}%` }} /></div>}
