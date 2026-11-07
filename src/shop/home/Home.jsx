@@ -245,26 +245,50 @@ const spanFrom = (list, start) => {
   return n
 }
 
+// 이야기: 3장짜리 슬라이드 배너 (왼쪽 글, 오른쪽 사진). 저절로 넘어가고, 마우스·포커스가 있거나 정지를 누르면 멈춘다.
+// '움직임 줄이기'를 켠 손님에게는 처음부터 멈춰 있다. 화살표 키로도 넘긴다
 export function Story() {
+  const slides = STORY.slides
+  const [index, setIndex] = useState(0)
+  const [stopped, setStopped] = useState(() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false)
+  const [hold, setHold] = useState(false)
+  const go = (i) => setIndex((i + slides.length) % slides.length)
+  useEffect(() => {
+    if (stopped || hold) return undefined
+    const timer = setInterval(() => setIndex((i) => (i + 1) % slides.length), STORY.interval)
+    return () => clearInterval(timer)
+  }, [stopped, hold, slides.length])
+  const now = slides[index]
   return (
-    <section id="story" className="section story-section" aria-labelledby="story-title">
+    <section id="story" className="section story-section" aria-roledescription="carousel" aria-label={STORY.label}
+      onMouseEnter={() => setHold(true)} onMouseLeave={() => setHold(false)} onFocus={() => setHold(true)} onBlur={() => setHold(false)}
+      onKeyDown={(e) => { if (e.key === 'ArrowLeft') go(index - 1); if (e.key === 'ArrowRight') go(index + 1) }}>
       <div className="wrap story">
-        <div>
-          <h2 id="story-title" className="display-sm">{STORY.title.map((line) => <span key={line}>{line}</span>)}</h2>
-          <Photo photo={STORY.photos[0]} className="story-photo" />
+      <div className="story-banner">
+        <div className="story-photos" aria-hidden="true">
+          {slides.map((sl, i) => <img key={sl.photo.src} className={i === index ? 'on' : ''} src={sl.photo.src} alt="" loading="lazy" style={{ objectPosition: sl.photo.position }} />)}
         </div>
-        <div>
-          <ol className="story-points">
-            {STORY.points.map((p, i) => (
-              <li key={p.title}>
-                <span className="story-no">{String(i + 1).padStart(2, '0')}</span>
-                <h3>{p.title}</h3>
-                <p>{p.text}</p>
-              </li>
+        <div className="story-text" aria-live={stopped ? 'polite' : 'off'}>
+          <p className="story-label">{STORY.label} <span>{index + 1} / {slides.length}</span></p>
+          <h2 key={index} className="display-sm story-title">{now.title.map((line) => <span key={line}>{line}</span>)}</h2>
+          <p className="story-lead">{now.text}</p>
+          <span className="sr-only">사진: {now.photo.alt}</span>
+          <div className="story-links">
+            {now.links.map((l, i) => (
+              <a key={l.label} className={i === 0 ? 'story-btn' : 'story-btn ghost'} href={l.href}
+                {...(l.href.startsWith('http') ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>{l.label}</a>
             ))}
-          </ol>
-          <Photo photo={STORY.photos[1]} className="story-photo tall" />
+          </div>
+          <div className="story-ctrl" role="group" aria-label="이야기 넘기기">
+            <button type="button" aria-label="이전 이야기" onClick={() => go(index - 1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6" /></svg></button>
+            <button type="button" aria-label={stopped ? '자동 넘김 시작' : '자동 넘김 정지'} aria-pressed={stopped} onClick={() => setStopped((v) => !v)}>
+              {stopped ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" className="fill" /></svg> : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12" /></svg>}
+            </button>
+            <button type="button" aria-label="다음 이야기" onClick={() => go(index + 1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6" /></svg></button>
+            <span className="story-bars" aria-hidden="true">{slides.map((sl, i) => <button key={sl.photo.src} type="button" tabIndex={-1} className={i === index ? 'on' : ''} onClick={() => go(i)} />)}</span>
+          </div>
         </div>
+      </div>
       </div>
     </section>
   )
