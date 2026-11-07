@@ -26,6 +26,7 @@ const LoginPage = page(() => import('./account/Account.jsx'), 'LoginPage')
 const SignupPage = page(() => import('./account/Account.jsx'), 'SignupPage')
 const FindPasswordPage = page(() => import('./account/Account.jsx'), 'FindPasswordPage')
 const ResetPasswordPage = page(() => import('./account/Account.jsx'), 'ResetPasswordPage')
+const RestockCancelPage = page(() => import('./shop/RestockCancel.jsx'), 'RestockCancelPage')
 const MyPage = page(() => import('./account/Account.jsx'), 'MyPage')
 const SocialSignupPage = page(() => import('./account/Account.jsx'), 'SocialSignupPage')
 const loading = <p className="muted">불러오는 중…</p>
@@ -374,6 +375,7 @@ function innerPage(path) {
   if (path === '/account/signup') return <SignupPage />
   if (path === '/account/find') return <FindPasswordPage />
   if (path === '/account/reset') return <ResetPasswordPage />
+  if (path === '/restock/cancel') return <RestockCancelPage />
   if (path === '/account') return <MyPage />
   if (path === '/account/social') return <SocialSignupPage />
   return null

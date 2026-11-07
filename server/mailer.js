@@ -48,16 +48,19 @@ async function deliver(saved) {
 }
 
 // 메일 넣기. 실패해도 주문·가입 같은 본래 일을 막지 않는다
+// 메일함(email_outbox)에 넣으면 true. 넣지 못하면 false (부르는 쪽이 다시 시도할 수 있게). 실제 발송 실패는 메일함이 다시 보낸다
 export async function queueMail({ kind, to, subject, body }) {
-  if (!to) return
+  if (!to) return false
   try {
     const { rows } = await pool.query(
       'INSERT INTO email_outbox (kind, to_email, subject, body) VALUES ($1, $2, $3, $4) RETURNING *',
       [kind, sealText(to), subject.slice(0, 200), sealText(body)],
     )
     deliver(rows[0]).catch((e) => console.error(`[mail] ${e.message}`))
+    return true
   } catch (error) {
     console.error(`[mail] 메일을 넣지 못했어요 · ${error.message}`)
+    return false
   }
 }
 
@@ -79,6 +82,6 @@ export async function listMails() {
     'SELECT id, kind, to_email, subject, body, status, attempts, last_error, created_at, sent_at FROM email_outbox ORDER BY id DESC LIMIT 200',
   )
   // 비밀번호 찾기 메일은 보내기 전까지 링크가 살아 있어서 관리자 화면에도 본문을 보여 주지 않는다
-  const safe = (m) => (m.kind === 'password_reset' ? { ...m, body: '(비밀번호 찾기 링크라 내용을 숨겼어요)' } : m)
+  const safe = (m) => (m.kind === 'password_reset' || m.kind === 'restock_confirm' ? { ...m, body: '(취소·비밀번호 찾기 링크가 있어 내용을 숨겼어요)' } : m)
   return { configured: mailConfigured(), mails: rows.map(openMail).map(safe) }
 }

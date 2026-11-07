@@ -10,7 +10,7 @@ import { cached } from './cache.js'
 import { pool } from './db.js'
 
 const SHOP_NAME = 'YOONJU MARKET'
-const PRIVATE_PAGES = /^\/(admin|seller|account|cart|checkout|order)(\/|$)/
+const PRIVATE_PAGES = /^\/(admin|seller|account|cart|checkout|order|restock)(\/|$)/ // restock: 재입고 알림 취소 화면
 const PUBLIC_PAGES = ['/', '/policy/terms', '/policy/privacy', '/policy/refund']
 const CODE = /^[A-Za-z0-9_-]{1,64}$/
 // 화면에서 불러도 되는 곳: 우리 서버, 토스페이먼츠(결제창), 다음 우편번호(주소 검색 창), 구글·jsDelivr 글꼴. 나머지 스크립트·틀(iframe)은 막는다
