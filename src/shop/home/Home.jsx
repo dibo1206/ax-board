@@ -108,11 +108,11 @@ function QuickCart({ p, onOpen }) {
   return (
     <button type="button" className={`quick-cart${done ? ' done' : ''}`}
       aria-label={pickOption ? `${name} 옵션 고르기` : done ? `${name} 장바구니에 담았어요` : `${name} 장바구니 담기`}
-      onClick={() => { if (pickOption) onOpen(p.product_code); else { addToCart(p.product_code, 1); setDone(true) } }}>
+      onClick={() => { if (pickOption) onOpen(p.product_code); else { addToCart(p.product_code, 1, null, name); setDone(true) } }}>
+      {/* 담긴 것은 화면 아래 알림(CartToast)이 글로 알려 준다. 여기서는 아이콘만 잠깐 체크로 */}
       {done
         ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
         : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2.5l2.2 10.5h10.1L20 7H6.3" /><circle cx="9" cy="19" r="1.3" /><circle cx="17" cy="19" r="1.3" /></svg>}
-      <span className="sr-only" role="status">{done ? '담았어요' : ''}</span>
     </button>
   )
 }
