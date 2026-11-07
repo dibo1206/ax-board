@@ -696,3 +696,11 @@
 .shop .ptag.ptag-harvest { display: inline-grid; align-content: center; justify-items: center; gap: 0; width: 52.5px; height: 52.5px; padding: 0; border-radius: 50%; background: #3b8f8c; color: #fff; line-height: 1.1; text-align: center; box-shadow: 0 1px 4px rgb(0 0 0 / 0.2); }
 .shop .ptag-harvest small { font-size: 12px; font-weight: 500; opacity: 0.95; }
 .shop .ptag-harvest b { font-size: 14.5px; font-weight: 700; letter-spacing: -0.3px; }
+
+/* 첫 화면에서 히어로 아래 카테고리 카드 글씨(흰 글씨)까지 보이게 히어로를 약간 낮춘다 (위아래 여백과 최소 높이를 조금 줄임) */
+.shop .home-hero { min-height: round(clamp(200px, calc(100vh - 530px), 440px), 2px); }
+.shop:has(.dev-bar) .home-hero { min-height: round(clamp(200px, calc(100vh - 566px), 440px), 2px); }
+@media (min-width: 861px) {
+  .shop { --hero-gap: 28px; }
+  .shop .hero-text .eyebrow { margin-bottom: 12px; }
+}
