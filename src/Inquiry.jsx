@@ -50,10 +50,10 @@ export function QuestionForm({ productCode, onSent }) {
 
   return (
     <form className="form" onSubmit={submit}>
-      <label>이름(별명){account ? '' : '*'} <span className="muted">화면에는 첫 글자만 보여요{account ? ' · 비우면 회원 이름으로' : ''}</span>
+      <label>이름(별명){!account && <em className="req" title="필수">*</em>} <span className="muted">화면에는 첫 글자만 보여요{account ? ' · 비우면 회원 이름으로' : ''}</span>
         <input value={form.author} onChange={set('author')} maxLength={20} />
       </label>
-      <label>질문*<textarea value={form.question} onChange={set('question')} maxLength={500} rows={3} placeholder="보관 방법, 배송, 선물 포장 등 궁금한 점을 적어 주세요" /></label>
+      <label>질문<em className="req" title="필수">*</em><textarea value={form.question} onChange={set('question')} maxLength={500} rows={3} placeholder="보관 방법, 배송, 선물 포장 등 궁금한 점을 적어 주세요" /></label>
       {account ? (
         <label className="check"><input type="checkbox" checked={form.isPrivate} onChange={set('isPrivate')} />비밀글로 남기기 <span className="muted">나와 판매 농가·관리자만 볼 수 있어요</span></label>
       ) : (
@@ -105,15 +105,15 @@ export function B2bForm({ product, onClose }) {
       <h3>기업 구매 문의 · {product.name}</h3>
       <p className="muted">카페·식당·매장 대량 구매나 정기 납품 견적을 받아 보세요. 담당자가 확인 후 연락드립니다.</p>
       <div className="row">
-        <label>회사·매장 이름*<input value={form.company} onChange={set('company')} maxLength={50} /></label>
-        <label>담당자 이름*<input value={form.contactName} onChange={set('contactName')} maxLength={20} /></label>
+        <label>회사·매장 이름<em className="req" title="필수">*</em><input value={form.company} onChange={set('company')} maxLength={50} /></label>
+        <label>담당자 이름<em className="req" title="필수">*</em><input value={form.contactName} onChange={set('contactName')} maxLength={20} /></label>
       </div>
       <div className="row">
-        <label>연락처*<input value={form.contact} onChange={set('contact')} placeholder="010-1234-5678 또는 이메일" /></label>
+        <label>연락처<em className="req" title="필수">*</em><input value={form.contact} onChange={set('contact')} placeholder="010-1234-5678 또는 이메일" /></label>
         <label>희망 수량 <span className="muted">({product.unit} 기준)</span><input value={form.quantity} onChange={set('quantity')} inputMode="numeric" /></label>
       </div>
       <label>요청사항<textarea value={form.message} onChange={set('message')} maxLength={1000} rows={3} placeholder="납품 주기, 희망 날짜, 포장 방식 등" /></label>
-      <label className="check"><input type="checkbox" checked={form.privacyAgreed} onChange={set('privacyAgreed')} />개인정보 수집에 동의해요.* <span className="muted">{PRIVACY}</span></label>
+      <label className="check"><input type="checkbox" checked={form.privacyAgreed} onChange={set('privacyAgreed')} />개인정보 수집에 동의해요.<em className="req" title="필수">*</em> <span className="muted">{PRIVACY}</span></label>
       {errors.length > 0 && <ul className="error">{errors.map((e) => <li key={e}>{e}</li>)}</ul>}
       <div className="actions">
         <button type="button" className="button ghost" onClick={onClose} disabled={sending}>취소</button>

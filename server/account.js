@@ -18,10 +18,13 @@ const isEmail = (v) => /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(v)
 const isMobile = (v) => /^01[016789]\d{7,8}$/.test(v)
 const sha256 = (v) => createHash('sha256').update(v).digest('hex')
 
+// 비밀번호 규칙. 화면(src/account/rules.js 의 passwordRules)도 같은 규칙으로 적는 동안 바로 알려 준다
 export function checkPassword(password, email) {
   if (typeof password !== 'string' || password.length < 10 || password.length > 100) return '비밀번호는 10~100자로 정해 주세요.'
-  if (/^\d+$/.test(password) || /^(.)\1+$/.test(password)) return '숫자만 쓰거나 같은 글자만 반복한 비밀번호는 쓸 수 없어요.'
-  if (email && password.toLowerCase().includes(email.split('@')[0].toLowerCase())) return '이메일 아이디가 들어간 비밀번호는 쓸 수 없어요.'
+  if ([/[A-Za-z]/, /\d/, /[^A-Za-z0-9]/].filter((kind) => kind.test(password)).length < 2) return '비밀번호는 영문·숫자·특수문자 중 2가지 이상 섞어 주세요.'
+  if (/^(.)\1+$/.test(password)) return '같은 글자만 반복한 비밀번호는 쓸 수 없어요.'
+  const id = String(email ?? '').split('@')[0].toLowerCase()
+  if (id.length >= 3 && password.toLowerCase().includes(id)) return '이메일(아이디)이 들어간 비밀번호는 쓸 수 없어요.'
   return null
 }
 
