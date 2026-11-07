@@ -505,6 +505,9 @@ CREATE TABLE IF NOT EXISTS restock_requests (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS restock_requests_once ON restock_requests (product_code, (COALESCE(option_id, 0)), email_hash) WHERE notified_at IS NULL;
 CREATE INDEX IF NOT EXISTS restock_requests_waiting ON restock_requests (product_code) WHERE notified_at IS NULL;
+-- 신청 확인 메일의 취소 링크 (토큰은 해시만 저장)
+ALTER TABLE restock_requests ADD COLUMN IF NOT EXISTS cancel_token_hash TEXT;
+CREATE INDEX IF NOT EXISTS restock_requests_cancel ON restock_requests (cancel_token_hash) WHERE cancel_token_hash IS NOT NULL;
 
 -- 간편 로그인 (2026-11-07): 카카오·네이버 회원 번호는 그대로 두지 않고 찾기용 HMAC(lookupHash)만 저장한다 (server/oauth.js)
 CREATE TABLE IF NOT EXISTS customer_identities (
