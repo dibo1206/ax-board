@@ -299,9 +299,8 @@ export function SeasonCalendar({ onPick }) {
           onKeyDown={(e) => { if (e.key === 'ArrowLeft') setMonth(prevMonth); if (e.key === 'ArrowRight') setMonth(nextMonth) }}>
           {months.map((m) => (
             <button key={m} type="button" data-month={m} className={`s2-${SEASON_NAME(m)}${m === month ? ' on' : ''}`} aria-pressed={m === month} onClick={() => setMonth(m)}>
-              <small>{SEASON_LABEL[SEASON_NAME(m)]}</small>
+              <small>{m === now ? <span className="now-pill">지금</span> : SEASON_LABEL[SEASON_NAME(m)]}</small>
               <b>{m}월</b>
-              {m === now && <i>지금</i>}
             </button>
           ))}
         </div>

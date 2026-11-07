@@ -12,7 +12,7 @@ export function RatingBadge({ rating, count }) {
   return <span className="rating"><Stars value={rating} /> {rating} <span className="muted">({count})</span></span>
 }
 
-export function ReviewList({ code }) {
+export function ReviewList({ code, embedded = false, onCount }) {
   const [data, setData] = useState(null)
   const [items, setItems] = useState([])
   const [page, setPage] = useState(1)
@@ -24,10 +24,15 @@ export function ReviewList({ code }) {
     }).catch(() => setData({ count: 0, items: [] }))
   }, [code, page])
 
+  useEffect(() => { if (data) onCount?.(data.count) }, [data, onCount])
+
   if (!data) return null
+  const Wrap = embedded ? 'div' : 'section'
   return (
-    <section className="box">
-      <h3>구매 후기 {data.count}개 {data.count > 0 && <span className="rating"><Stars value={data.avg} /> {data.avg}</span>}</h3>
+    <Wrap className={embedded ? 'reviews-embedded' : 'box'}>
+      {embedded
+        ? data.count > 0 && <p className="rating">평균 <Stars value={data.avg} /> {data.avg} · 후기 {data.count}개</p>
+        : <h3>구매 후기 {data.count}개 {data.count > 0 && <span className="rating"><Stars value={data.avg} /> {data.avg}</span>}</h3>}
       {data.count === 0 ? <p className="muted">아직 후기가 없어요. 받아 보신 뒤 주문 조회·마이페이지에서 남길 수 있어요.</p> : (
         <>
           <ul className="reviews">
@@ -42,7 +47,7 @@ export function ReviewList({ code }) {
           {items.length < data.count && <button type="button" className="button ghost" onClick={() => setPage((p) => p + 1)}>후기 더 보기</button>}
         </>
       )}
-    </section>
+    </Wrap>
   )
 }
 
