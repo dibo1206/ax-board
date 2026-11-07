@@ -361,15 +361,14 @@
 .shop .detail .buy .price { margin: 0; }
 .shop .detail .buy .actions { display: flex; gap: 12px; }
 .shop .detail .buy .actions .button { flex: 1; justify-content: center; padding: 14px 16px; font-size: 16px; }
+/* 사진(.gallery)과 정보(.detail-info)를 두 칸으로. 정보 칸 안의 줄이 늘어도 사진 옆에 그대로 쌓인다 */
+.shop .detail-top { margin-bottom: 32px; }
+.shop .detail-info > :first-child { margin-top: 0; }
 @media (min-width: 861px) {
-  .shop .detail:has(> .gallery) { display: grid; grid-template-columns: 520px minmax(0, 1fr); column-gap: 48px; grid-template-rows: auto repeat(7, min-content) 1fr; align-items: start; }
-  .shop .detail:has(> .gallery) > * { grid-column: 1 / -1; }
-  .shop .detail:has(> .gallery) > button.link { justify-self: start; margin-bottom: 16px; }
-  .shop .detail:has(> .gallery) > .gallery { grid-column: 1; grid-row: 2 / 10; }
-  .shop .detail:has(> .gallery) > :is(h2, .price, .rating, .badge, dl, .buy, dl + .actions) { grid-column: 2; }
-  .shop .detail:has(> .gallery) > .box, .shop .detail:has(> .gallery) > .actions:not(dl + .actions) { margin-top: 32px; }
+  .shop .detail-top:has(> .gallery) { display: grid; grid-template-columns: 520px minmax(0, 1fr); column-gap: 48px; align-items: start; }
 }
-@media (min-width: 861px) and (max-width: 1100px) { .shop .detail:has(> .gallery) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+@media (min-width: 861px) and (max-width: 1100px) { .shop .detail-top:has(> .gallery) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+@media (max-width: 860px) { .shop .detail-top .gallery { margin-bottom: 20px; } }
 
 /* ===== 장바구니: 상품 줄과 금액 요약을 카드로, 주문 버튼을 크게 ===== */
 .shop .cart li.box { gap: 16px 24px; padding: 20px 24px; margin: 0 0 12px; border: 1px solid var(--border); }
@@ -388,7 +387,7 @@
 /* ===== 상품 상세 맨 위 [← 목록] 버튼: 밑줄 글씨 대신 작은 버튼으로 ===== */
 .shop .detail > button.link { display: inline-flex; align-items: center; gap: 6px; height: 40px; min-width: 88px; padding: 0 18px 0 14px; margin-bottom: 20px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 14px; font-weight: 500; text-decoration: none; cursor: pointer; transition: border-color 0.2s, background-color 0.2s; }
 .shop .detail > button.link:hover { border-color: var(--line); background: #fff; }
-.shop .detail:has(> .gallery) > button.link { margin-bottom: 16px; }
+.shop .detail:has(.gallery) > button.link { margin-bottom: 16px; }
 
 /* 아래쪽 구간은 위쪽보다 촘촘하지 않게, 너무 비어 보이지도 않게: 달력·이야기 구간의 높이를 줄인다 */
 .shop .season-section { padding-block: 32px; }

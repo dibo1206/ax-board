@@ -171,7 +171,10 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   return (
     <article className="detail">
       <button type="button" className="link" onClick={onBack}>← 목록</button>
+      {/* 사진은 왼쪽, 이름·가격·정보·구매 칸은 오른쪽에 한 덩어리로 (사진 옆이 비지 않게) */}
+      <div className="detail-top">
       <Gallery product={product} />
+      <div className="detail-info">
       <h2>{product.name}</h2>
       {product.has_options && !option
         ? <p className="price">{won(product.price)}부터 <span className="muted">/ {product.options.length > 0 ? `옵션 ${product.options.length}개 중 골라 주세요` : '판매 중인 옵션이 없어요'}</span></p>
@@ -206,6 +209,8 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         <dt>판매 농가</dt><dd>{seller.name} · {seller.region}</dd>
       </dl>
       <BuyBox product={product} option={option} onPick={setOptionId} onAsk={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })} />
+      </div>
+      </div>
 
       <Description text={product.description} />
       {product.notice_table && (
