@@ -851,7 +851,18 @@
 .shop .st-peak, .shop .st-only { background: #d9534a; }
 .shop .st-last { background: #b8892d; }
 
-.shop .season2-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+/* 카드는 한 줄에 4개만 보이고 나머지는 옆으로 넘긴다 (태블릿 3개, 휴대폰 2개 조금 넘게) */
+.shop .season2-rail { position: relative; }
+.shop .season2-cards { --cards: 4; --gap: 16px; display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - (var(--cards) - 1) * var(--gap)) / var(--cards));
+  gap: var(--gap); margin: 0; padding: 4px 2px 14px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 2px; overscroll-behavior-x: contain; list-style: none; scrollbar-width: none; }
+.shop .season2-cards::-webkit-scrollbar { display: none; }
+.shop .season2-cards > li { scroll-snap-align: start; }
+.shop .rail-btn { position: absolute; top: 38%; z-index: 2; display: grid; place-items: center; width: 46px; height: 46px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: #fff; color: var(--text); cursor: pointer; box-shadow: 0 4px 14px rgb(30 34 31 / 0.16); transform: translateY(-50%); }
+.shop .rail-btn.prev { left: -18px; }
+.shop .rail-btn.next { right: -18px; }
+.shop .rail-btn:hover { border-color: var(--text); }
+.shop .rail-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 1100px) { .shop .season2-cards { --cards: 3; } }
 .shop .season2-card { display: flex; flex-direction: column; width: 100%; height: 100%; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: #fff; color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; }
 .shop .season2-card:hover { transform: translateY(-3px); border-color: #c9c6bc; box-shadow: 0 10px 24px rgb(30 34 31 / 0.1); }
 .shop .season2-card:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
@@ -882,7 +893,8 @@
   .shop .season2-head { align-items: center; }
   .shop .season2-arrows button { width: 38px; height: 38px; }
   .shop .season2-strip { grid-template-columns: repeat(12, 64px); }
-  .shop .season2-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .shop .season2-cards { --cards: 2.2; --gap: 10px; }
+  .shop .rail-btn { display: none; }
   .shop .s2-body { padding: 10px 12px 12px; }
   .shop .s2-body strong { font-size: 16px; }
   .shop .s2-stage { top: 8px; left: 8px; padding: 3px 8px; font-size: 11px; }

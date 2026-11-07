@@ -240,6 +240,28 @@ export function SeasonCalendar({ onPick }) {
   }, [])
 
   // 고른 달 버튼이 띠 가운데 오도록 (휴대폰에서 옆으로 넘긴 상태여도)
+  const rail = useRef(null)
+  const [edge, setEdge] = useState({ left: false, right: false })
+  const checkEdge = () => {
+    const box = rail.current
+    if (!box) return
+    setEdge({ left: box.scrollLeft > 4, right: box.scrollLeft + box.clientWidth < box.scrollWidth - 4 })
+  }
+  const slide = (dir) => {
+    const box = rail.current
+    if (box) box.scrollBy({ left: dir * box.clientWidth * 0.9, behavior: 'smooth' })
+  }
+  // 달을 바꾸거나 상품 정보가 들어오면 카드 줄을 처음으로 돌리고 화살표를 다시 정한다
+  useEffect(() => {
+    if (rail.current) rail.current.scrollLeft = 0
+    const timer = setTimeout(checkEdge, 50)
+    window.addEventListener('resize', checkEdge)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('resize', checkEdge)
+    }
+  }, [month, info])
+
   const firstScroll = useRef(true)
   useEffect(() => {
     const box = strip.current
@@ -289,7 +311,10 @@ export function SeasonCalendar({ onPick }) {
         </div>
 
         {picked.length ? (
-          <ul className="season2-cards">
+          <div className="season2-rail">
+          {edge.left && <button type="button" className="rail-btn prev" aria-label="이전 카드" onClick={() => slide(-1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6" /></svg></button>}
+          {edge.right && <button type="button" className="rail-btn next" aria-label="다음 카드" onClick={() => slide(1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6" /></svg></button>}
+          <ul className="season2-cards" ref={rail} onScroll={checkEdge}>
             {picked.map(({ item, stage, data }) => (
               <li key={item.name}>
                 <button type="button" className="season2-card" onClick={() => onPick(term(item))}
@@ -314,6 +339,7 @@ export function SeasonCalendar({ onPick }) {
               </li>
             ))}
           </ul>
+          </div>
         ) : <p className="muted season2-empty">이 달에 제철로 표시한 품목이 없어요. 다른 달을 골라 보세요.</p>}
 
         {coming.length > 0 && (
