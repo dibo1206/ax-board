@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { netFetch } from './net.js'
+import { getAccount } from './shop/shared.js'
 
 // 4단계: 손님이 남기는 상품 질문과 기업(B2B) 구매 문의 폼
 async function post(path, body) {
@@ -26,9 +27,11 @@ function useForm(initial) {
 const PRIVACY = '연락처는 답변·견적 안내에만 쓰고, 공개 화면에는 보이지 않아요.'
 
 export function QuestionForm({ productCode, onSent }) {
-  const [form, set, reset] = useForm({ author: '', question: '', contact: '', privacyAgreed: false })
+  const [form, set, reset] = useForm({ author: '', question: '', contact: '', privacyAgreed: false, isPrivate: false })
   const [errors, setErrors] = useState([])
   const [sending, setSending] = useState(false)
+  const [account, setAccount] = useState(null) // 로그인한 회원이면 비밀글을 쓸 수 있고, 답변이 달리면 마이페이지에서 알려 준다
+  useEffect(() => { getAccount().then(setAccount) }, [])
 
   async function submit(event) {
     event.preventDefault()
@@ -47,11 +50,16 @@ export function QuestionForm({ productCode, onSent }) {
 
   return (
     <form className="form" onSubmit={submit}>
-      <label>이름(별명)* <span className="muted">화면에는 첫 글자만 보여요</span>
+      <label>이름(별명){account ? '' : '*'} <span className="muted">화면에는 첫 글자만 보여요{account ? ' · 비우면 회원 이름으로' : ''}</span>
         <input value={form.author} onChange={set('author')} maxLength={20} />
       </label>
       <label>질문*<textarea value={form.question} onChange={set('question')} maxLength={500} rows={3} placeholder="보관 방법, 배송, 선물 포장 등 궁금한 점을 적어 주세요" /></label>
-      <label>연락처 <span className="muted">(선택) 답변 알림을 받고 싶을 때만</span>
+      {account ? (
+        <label className="check"><input type="checkbox" checked={form.isPrivate} onChange={set('isPrivate')} />비밀글로 남기기 <span className="muted">나와 판매 농가·관리자만 볼 수 있어요</span></label>
+      ) : (
+        <p className="muted"><a href={`/account/login?next=${encodeURIComponent(`/p/${productCode}`)}`}>로그인</a>하면 비밀글로 남길 수 있고, 답변이 달리면 마이페이지에서 알려 드려요.</p>
+      )}
+      <label>연락처 <span className="muted">(선택) 이메일을 적으면 답변이 달릴 때 메일로 알려 드려요</span>
         <input value={form.contact} onChange={set('contact')} placeholder="010-1234-5678 또는 이메일" />
       </label>
       {form.contact && (

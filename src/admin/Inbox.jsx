@@ -21,7 +21,7 @@ export function QuestionRow({ q, onSaved, onError, request, canHide = true }) {
 
   return (
     <li className={`box${q.hidden ? ' dim' : ''}`}>
-      <p className="muted">{q.product_name} · {q.author} · {when(q.created_at)}{q.contact && ` · 연락처 ${q.contact}`}{q.hidden && ' · 숨김'}</p>
+      <p className="muted">{q.product_name} · {q.author} · {when(q.created_at)}{q.contact && ` · 연락처 ${q.contact}`}{q.hidden && ' · 숨김'}{q.is_private && ' · 비밀글'}</p>
       <p><strong>Q.</strong> {q.question}</p>
       {open ? (
         <div className="form">

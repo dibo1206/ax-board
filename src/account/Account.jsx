@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { adminApi } from '../admin/api.js'
 import { OrderDetail } from '../shop/Orders.jsx'
 import { Logo } from '../shop/ShopLayout.jsx'
@@ -465,13 +465,52 @@ function Security({ hasPassword = true }) {
   )
 }
 
-export function MyPage() {
-  const [me, setMe] = useState(undefined)
-  const [tab, setTab] = useState(() => (new URLSearchParams(window.location.search).get('social') ? 'security' : 'orders'))
+// 내가 남긴 상품 문의와 답변. 열면 새 답변을 봤다고 표시해서 화면 위 숫자가 사라진다
+function MyQuestions({ onSeen }) {
+  const [list, setList] = useState(null)
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    get('/account/me').then(setMe).catch(() => { window.location.href = '/account/login?next=/account' })
+    get('/account/questions').then((rows) => {
+      setList(rows)
+      if (rows.some((q) => q.is_new)) {
+        post('/account/questions/seen', {}).then(() => { onSeen(); window.dispatchEvent(new Event('account-change')) }).catch(() => {})
+      }
+    }).catch((e) => setError(e.message))
+  }, [onSeen])
+
+  if (error) return <p className="error">{error}</p>
+  if (!list) return <p className="muted">불러오는 중…</p>
+  if (!list.length) return <p className="muted">아직 남긴 문의가 없어요. 상품 화면 아래 Q&A에서 물어볼 수 있어요.</p>
+  return (
+    <ul className="my-questions">
+      {list.map((q) => (
+        <li key={q.id} className="box">
+          <p className="muted">
+            <a href={`/p/${encodeURIComponent(q.product_code)}`}>{q.product_name}</a> · {when(q.created_at)}
+            {q.is_private && <span className="qna-lock">비밀글</span>}{q.is_new && <span className="new-tag">새 답변</span>}
+          </p>
+          <p><strong>Q.</strong> {q.question}</p>
+          {q.answer
+            ? <p><strong>A.</strong> {q.answer} <span className="muted">({when(q.answered_at)})</span></p>
+            : <p className="muted">답변을 기다리는 중이에요. 답변이 달리면 화면 위 마이페이지 옆에 숫자로 알려 드려요.</p>}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+export function MyPage() {
+  const [me, setMe] = useState(undefined)
+  const [tab, setTab] = useState(() => {
+    const query = new URLSearchParams(window.location.search)
+    return query.get('social') ? 'security' : query.get('tab') === 'questions' ? 'questions' : 'orders'
+  })
+
+  useEffect(() => {
+    get('/account/me').then(setMe).catch(() => setMe(null)) // 로그인하지 않았으면 로그인 안내를 보여 준다
   }, [])
+  const markSeen = useCallback(() => setMe((prev) => ({ ...prev, unreadAnswers: 0 })), [])
 
   async function logout() {
     await post('/account/logout', {})
@@ -479,7 +518,20 @@ export function MyPage() {
     window.location.href = '/'
   }
 
-  if (!me) return <p className="muted">불러오는 중…</p>
+  if (me === undefined) return <p className="muted">불러오는 중…</p>
+  if (me === null) {
+    return (
+      <section className="box narrow login-needed">
+        <h2>마이페이지</h2>
+        <p>로그인이 필요해요. 로그인하면 주문 내역, 내 문의와 답변, 배송지를 한곳에서 볼 수 있어요.</p>
+        <div className="actions">
+          <a className="button" href="/account/login?next=/account">로그인하기</a>
+          <a className="button ghost" href="/account/signup">회원가입</a>
+        </div>
+        <p className="muted">회원가입 없이 주문하셨나요? <a href="/order/lookup">비회원 주문 조회</a></p>
+      </section>
+    )
+  }
   const socialMessage = new URLSearchParams(window.location.search).get('social') // 간편 로그인 연결 결과
   return (
     <section>
@@ -489,11 +541,14 @@ export function MyPage() {
       </div>
       {socialMessage && <p className="success">{socialMessage}</p>}
       <nav className="tabs">
-        {[['orders', '주문 내역'], ['profile', '내 정보·배송지'], ['security', '로그인·탈퇴']].map(([key, label]) => (
-          <button key={key} type="button" className={tab === key ? 'on' : ''} onClick={() => setTab(key)}>{label}</button>
+        {[['orders', '주문 내역'], ['questions', '내 문의'], ['profile', '내 정보·배송지'], ['security', '로그인·탈퇴']].map(([key, label]) => (
+          <button key={key} type="button" className={tab === key ? 'on' : ''} onClick={() => setTab(key)}>
+            {label}{key === 'questions' && me.unreadAnswers > 0 && <span className="new-dot" aria-label={`새 답변 ${me.unreadAnswers}개`}>{me.unreadAnswers}</span>}
+          </button>
         ))}
       </nav>
       {tab === 'orders' && <MyOrders />}
+      {tab === 'questions' && <MyQuestions onSeen={markSeen} />}
       {tab === 'profile' && <Profile me={me} onSaved={setMe} />}
       {tab === 'security' && <Security hasPassword={me.hasPassword !== false} />}
     </section>

@@ -769,3 +769,36 @@
   .shop { --hero-gap: 28px; }
   .shop .hero-text .eyebrow { margin-bottom: 12px; }
 }
+
+/* 헤더 검색 (2026-11): 누르면 그 자리에서 바로 적고, 아래에 맞는 상품이 바로 뜬다 */
+.shop .head-search { position: relative; }
+.shop .head-search form { display: flex; align-items: center; gap: 10px; width: 420px; height: 45px; padding: 0 16px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+.shop .head-search form:focus-within { border-color: var(--text); }
+.shop .head-search input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 16px; }
+.shop .head-search input::-webkit-search-cancel-button { cursor: pointer; }
+.shop .head-search svg { width: 20px; height: 20px; flex: none; fill: none; stroke: var(--text); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.shop .head-search-toggle { display: none; }
+.shop .head-search-list { position: absolute; top: calc(100% + 6px); right: 0; z-index: 60; width: max(100%, 380px); max-height: 70vh; overflow: auto; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: #fff; box-shadow: 0 12px 32px rgb(0 0 0 / 0.12); }
+.shop .head-search-list ul { margin: 0; padding: 0; list-style: none; }
+.shop .head-search-list p { margin: 6px 8px; font-size: 14px; line-height: 1.5; white-space: normal; }
+.shop .site-tools .head-search a.hs-item { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 6px; color: var(--text); font-size: 14px; white-space: normal; text-decoration: none; }
+.shop .site-tools .head-search a.hs-item:hover, .shop .site-tools .head-search a.hs-item:focus-visible { background: #f4f1e8; text-decoration: none; }
+.shop .head-search-list img, .shop .head-search-list .hs-ph { width: 44px; height: 44px; flex: none; border-radius: 4px; background: #eee; object-fit: cover; }
+.shop .head-search-list b { display: block; font-weight: 500; line-height: 1.4; }
+.shop .head-search-list small { color: var(--muted); font-size: 13px; }
+.shop .site-tools .head-search a.hs-all { display: block; margin-top: 4px; padding: 10px 8px; border-top: 1px solid var(--border); border-radius: 0; font-weight: 600; }
+.shop .new-dot { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 4px; padding: 0 5px; border-radius: 9px; background: #b3261e; color: #fff; font-size: 11px; font-weight: 700; line-height: 1; vertical-align: 2px; }
+.shop .qna-lock { display: inline-block; margin-right: 6px; padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font-size: 12px; vertical-align: 1px; }
+.shop .new-tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px; background: #b3261e; color: #fff; font-size: 12px; }
+.shop .my-questions { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.shop .login-needed .actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0; }
+@media (max-width: 1100px) { .shop .head-search form { width: 300px; } }
+@media (max-width: 1000px) { .shop .head-search form { width: 230px; } }
+@media (max-width: 900px) { .shop .head-search form { width: 200px; } .shop .site-tools .login-link { display: none; } }
+@media (max-width: 760px) {
+  .shop .head-search-toggle { display: grid; place-items: center; width: 45px; height: 45px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; }
+  .shop .head-search form { display: none; }
+  .shop .head-search.open form { position: fixed; top: 12px; right: 12px; left: 12px; z-index: 70; display: flex; width: auto; box-shadow: 0 8px 24px rgb(0 0 0 / 0.15); }
+  .shop .head-search.open .head-search-list { position: fixed; top: 64px; right: 12px; left: 12px; width: auto; }
+  .shop .site-tools .login-link { display: none; }
+}

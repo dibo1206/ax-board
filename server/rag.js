@@ -87,7 +87,7 @@ export async function buildChunks(db = pool) {
     db.query("SELECT * FROM items WHERE status <> 'pending'"),
     db.query("SELECT product_code, item_code, name, summary, description, faq FROM products WHERE status = 'active'"),
     db.query(`SELECT q.id, q.product_code, q.question, q.answer, p.item_code FROM questions q JOIN products p ON p.product_code = q.product_code
-              WHERE q.answer IS NOT NULL AND q.answer <> '' AND NOT q.hidden AND p.status = 'active'`),
+              WHERE q.answer IS NOT NULL AND q.answer <> '' AND NOT q.hidden AND NOT q.is_private AND p.status = 'active'`),
     db.query(`SELECT seller_code, name, region, story FROM sellers WHERE status = 'active'
               AND seller_code IN (SELECT seller_code FROM products WHERE status = 'active')`),
   ])

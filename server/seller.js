@@ -1,5 +1,6 @@
 // 판매자(농가) API. 로그인한 농가의 상품·질문·소개만 다룬다 (다른 농가 것은 없는 것처럼 404)
 // 새 상품은 '검토 대기'로 올라가고 회사 관리자가 승인해야 판매된다. 이미 판매 중인 상품의 수정(가격·재고 등)은 바로 반영된다.
+import { notifyAnswer } from './inquiry.js'
 import express from 'express'
 import { checkOptions, codeSets, insertProduct, itemRanges, noticeProblem, rawImage, recordChanges, removeImage, stoppedNote, storeImage, updateProduct } from './admin.js'
 import { requireSeller } from './auth.js'
@@ -163,7 +164,7 @@ sellerRouter.delete('/products/:code/image', ownProduct, removeImage)
 // 내 상품에 달린 질문 (연락처는 회사만 본다)
 sellerRouter.get('/questions', async (req, res) => {
   const { rows } = await pool.query(`
-    SELECT q.id, q.product_code, q.author, q.question, q.answer, q.created_at, q.answered_at, p.name AS product_name
+    SELECT q.id, q.product_code, q.author, q.question, q.answer, q.created_at, q.answered_at, q.is_private, p.name AS product_name
     FROM questions q JOIN products p ON p.product_code = q.product_code
     WHERE p.seller_code = $1 AND NOT q.hidden
     ORDER BY (q.answer IS NULL) DESC, q.created_at DESC`, [mine(req)])
@@ -180,10 +181,11 @@ sellerRouter.patch('/questions/:id', async (req, res) => {
     `UPDATE questions q SET answer = $1, answered_at = now()
      FROM products p
      WHERE q.id = $2 AND p.product_code = q.product_code AND p.seller_code = $3 AND NOT q.hidden
-     RETURNING q.id, q.product_code, q.author, q.question, q.answer, q.created_at, q.answered_at, p.name AS product_name`,
+     RETURNING q.id, q.product_code, q.author, q.question, q.answer, q.created_at, q.answered_at, q.is_private, p.name AS product_name`,
     [answer, req.params.id, mine(req)],
   )
   if (!rows.length) return res.status(404).json({ error: '내 상품 질문 중에서 찾지 못했어요.' })
   console.log(`[seller] ${req.seller.loginId} 질문 #${rows[0].id} 답변`)
+  notifyAnswer(rows[0].id).catch((e) => console.error(`[qna] 답변 알림 실패 · ${e.message}`))
   res.json(rows[0])
 })

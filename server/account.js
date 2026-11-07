@@ -105,7 +105,16 @@ accountRouter.post('/logout', (req, res) => {
   res.status(204).end()
 })
 
-accountRouter.get('/me', requireCustomer, (req, res) => res.json(me(req.customer)))
+// 내 정보 + 아직 보지 않은 새 답변 수 (화면 위 '마이페이지' 옆 숫자)
+accountRouter.get('/me', requireCustomer, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT count(*)::int AS n FROM questions
+     WHERE customer_id = $1 AND NOT hidden AND answered_at IS NOT NULL AND (answer_seen_at IS NULL OR answer_seen_at < answered_at)`,
+    [req.customer.id],
+  )
+  res.set('Cache-Control', 'private, no-store')
+  res.json({ ...me(req.customer), unreadAnswers: rows[0].n })
+})
 
 accountRouter.patch('/me', requireCustomer, async (req, res) => {
   const name = text(req.body.name ?? req.customer.name)
@@ -166,6 +175,7 @@ accountRouter.delete('/me', requireCustomer, async (req, res) => {
   )
   await pool.query('DELETE FROM password_resets WHERE customer_id = $1', [req.customer.id])
   await pool.query('DELETE FROM restock_requests WHERE customer_id = $1', [req.customer.id]) // 탈퇴하면 재입고 알림 신청도 지운다
+  await pool.query("UPDATE questions SET customer_id = NULL, author = '탈퇴 회원' WHERE customer_id = $1", [req.customer.id]) // 문의 글은 남기되 계정 연결과 이름은 지운다
   await pool.query('DELETE FROM customer_identities WHERE customer_id = $1', [req.customer.id]) // 간편 로그인 연결도 끊는다
   setCookie(res, COOKIE, '', 0)
   console.log(`[account] 회원 탈퇴 #${req.customer.id}`)
@@ -221,6 +231,23 @@ accountRouter.get('/orders', requireCustomer, async (req, res) => {
     FROM orders o WHERE o.customer_id = $1 AND o.status NOT IN ('pending', 'failed', 'expired')
     ORDER BY o.created_at DESC LIMIT 100`, [req.customer.id])
   res.json(rows)
+})
+
+// ---------- 내 문의 ----------
+accountRouter.get('/questions', requireCustomer, async (req, res) => {
+  const { rows } = await pool.query(`
+    SELECT q.id, q.product_code, p.name AS product_name, q.question, q.answer, q.is_private, q.created_at, q.answered_at,
+           (q.answered_at IS NOT NULL AND (q.answer_seen_at IS NULL OR q.answer_seen_at < q.answered_at)) AS is_new
+    FROM questions q JOIN products p ON p.product_code = q.product_code
+    WHERE q.customer_id = $1 AND NOT q.hidden ORDER BY q.created_at DESC LIMIT 100`, [req.customer.id])
+  res.set('Cache-Control', 'private, no-store')
+  res.json(rows)
+})
+
+// 답변을 봤다고 표시 (화면 위 '새 답변' 숫자가 사라진다)
+accountRouter.post('/questions/seen', requireCustomer, async (req, res) => {
+  await pool.query('UPDATE questions SET answer_seen_at = now() WHERE customer_id = $1 AND answered_at IS NOT NULL', [req.customer.id])
+  res.status(204).end()
 })
 
 export { requireCustomer }

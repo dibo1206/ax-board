@@ -5,7 +5,7 @@ import { Chat } from './Chat.jsx'
 import { B2bForm, QuestionForm } from './Inquiry.jsx'
 import { Related } from './Recommend.jsx'
 import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
-import { addToCart, getPolicy, post, preorderNote, thumbUrl, unitPrice } from './shop/shared.js'
+import { addToCart, get, getPolicy, post, preorderNote, thumbUrl, unitPrice } from './shop/shared.js'
 import { Guide } from './shop/Guide.jsx'
 import { RecipeCards } from './shop/RecipeCards.jsx'
 import { CategoryRows, Faq, Hero, ProductSection, QuizDialog, SeasonCalendar, Story } from './shop/home/Home.jsx'
@@ -167,6 +167,13 @@ function BuyBox({ product, option, onPick, onAsk }) {
 }
 
 // focus: AI 상담에서 넘어오면 'b2b'(기업 문의 폼 열기) 또는 'qna'(Q&A로 내리기)
+// 공개 Q&A 목록(모두에게 같은 캐시)에 내 문의(비밀글 내용 포함)를 덮어 쓴다
+function mergeQuestions(list, mine) {
+  const byId = new Map(mine.map((q) => [q.id, q]))
+  const shown = new Set(list.map((q) => q.id))
+  return [...mine.filter((q) => !shown.has(q.id)), ...list.map((q) => byId.get(q.id) ?? q)]
+}
+
 function ProductDetail({ code, focus, onBack, onOpen }) {
   const [product, setProduct] = useState(null)
   const [error, setError] = useState('')
@@ -174,9 +181,11 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   const [sentMessage, setSentMessage] = useState('')
   const [optionId, setOptionId] = useState(null) // 옵션 상품에서 고른 옵션
   const qnaRef = useRef(null)
+  const [myQuestions, setMyQuestions] = useState([]) // 내가 남긴 문의 (비밀글 내용 포함, 로그인했을 때만)
 
   useEffect(() => {
     api(`/products/${code}`).then(setProduct).catch((e) => setError(e.message))
+    get(`/products/${code}/my-questions`).then(setMyQuestions).catch(() => {})
   }, [code])
 
   useEffect(() => {
@@ -312,15 +321,21 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
             productCode={product.product_code}
             onSent={(q) => {
               setProduct((prev) => ({ ...prev, questions: [q, ...prev.questions] }))
-              setSentMessage('질문이 올라갔어요. 답변이 달리면 여기에 보여요.')
+              setSentMessage(q.is_private ? '비밀글이 올라갔어요. 답변이 달리면 마이페이지에서 알려 드려요.' : '질문이 올라갔어요. 답변이 달리면 여기에 보여요.')
             }}
           />
           {sentMessage && <p className="success">{sentMessage}</p>}
           <ul>
-            {product.questions.map((q) => (
+            {mergeQuestions(product.questions, myQuestions).map((q) => (
               <li key={q.id}>
-                <strong>Q.</strong> {q.question} <span className="muted">· {q.author}</span><br />
-                {q.answer ? <><strong>A.</strong> {q.answer}</> : <span className="muted">답변을 기다리는 중</span>}
+                {q.is_private && !q.mine ? (
+                  <><span className="qna-lock">비밀글</span> 작성자만 볼 수 있는 문의예요. <span className="muted">· {q.author} · {q.answered ? '답변 완료' : '답변을 기다리는 중'}</span></>
+                ) : (
+                  <>
+                    <strong>Q.</strong> {q.is_private && <span className="qna-lock">비밀글</span>}{q.question} <span className="muted">· {q.author}{q.mine && ' (내 문의)'}</span><br />
+                    {q.answer ? <><strong>A.</strong> {q.answer}</> : <span className="muted">답변을 기다리는 중</span>}
+                  </>
+                )}
               </li>
             ))}
           </ul>
@@ -454,7 +469,12 @@ function Storefront() {
   const first = useRef(loc) // 처음 들어온 주소 (아래로 내려 줄 위치를 정할 때 한 번만 쓴다)
 
   useEffect(() => {
-    const onPop = () => setLoc(readLocation())
+    const onPop = () => {
+      const next = readLocation()
+      setLoc(next)
+      setTyped(next.q)
+      if (!next.code && window.location.hash === '#products') setTimeout(() => scrollToId('products'), 150)
+    }
     const onQuiz = () => setQuizOpen(true)
     window.addEventListener('popstate', onPop)
     window.addEventListener('open-quiz', onQuiz)

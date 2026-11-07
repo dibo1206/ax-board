@@ -190,7 +190,7 @@ export function ProductSection({ groups, loc, typed, setTyped, list, sorts, onCh
         </div>
       ) : (
         <>
-          {loc.q && <p className="muted result-count">'{loc.q}' 검색 결과 {list.total}개</p>}
+          {loc.q && <p className="muted result-count">{list.loose ? `'${loc.q}'와 딱 맞는 상품이 없어 비슷한 상품 ${list.total}개를 보여 드려요` : `'${loc.q}' 검색 결과 ${list.total}개`}</p>}
           <ul className="pgrid">
             {list.items.map((p) => <li key={p.product_code}><ProductCard p={p} onOpen={onOpen} /></li>)}
           </ul>
