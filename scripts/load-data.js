@@ -66,6 +66,7 @@ const isInt = (v) => /^\d+$/.test(v)
 const isNum = (v) => /^\d+(\.\d+)?$/.test(v)
 const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v))
 const isYesNo = (v) => v === '예' || v === '아니오'
+const RECIPE_IMAGE = /^\/(?!.*\.\.)[A-Za-z0-9_\-./]+\.(webp|png|jpe?g)$/
 const list = (v) => (v ? v.split('|').map((s) => s.trim()).filter(Boolean) : [])
 
 function checkCommon(file, rows, codeKey, issues, needsExampleMark = false) {
@@ -109,7 +110,12 @@ function validate(sheets, issues) {
     if (r.category === '가공품' && !r.opened_note) issues.warn('items.csv', line, '가공품인데 개봉 후 안내가 비어 있어요')
     if (!r.danger_signs) issues.warn('items.csv', line, '먹으면 안 되는 신호가 비어 있어요')
     list(r.recipes).forEach((recipe) => {
-      if (recipe.split(':').length !== 3) issues.error('items.csv', line, `레시피 "${recipe}"는 제목:재료:방법 형식으로`)
+      const parts = recipe.split(':')
+      if (parts.length < 3 || parts.length > 4) issues.error('items.csv', line, `레시피 "${recipe}"는 제목:재료:방법 형식으로 (사진은 끝에 :/recipe-photos/kiwi-yogurt.webp)`)
+      // 레시피 카드 사진(선택): 이 저장소 public 안의 주소만. 없으면 요리 종류에 맞는 기본 그림이 나온다
+      const image = parts[3]?.trim()
+      if (image && !RECIPE_IMAGE.test(image)) issues.error('items.csv', line, `레시피 사진 "${image}"는 /recipe-photos/kiwi-yogurt.webp 처럼 / 로 시작하고 파일 이름이 영문·숫자인 webp·png·jpg 주소만`)
+      else if (image && !existsSync(new URL(`../public${image}`, import.meta.url))) issues.warn('items.csv', line, `레시피 사진 파일이 public${image} 에 없어요 (기본 그림이 나와요)`)
     })
     if (!r.reviewed_by) issues.warn('items.csv', line, '식품팀 검수 전 (reviewed_by 비어 있음)')
   })
@@ -174,8 +180,8 @@ function validate(sheets, issues) {
 const nullable = (v) => (v === '' ? null : v)
 const yes = (v) => v === '예'
 const recipesJson = (v) => JSON.stringify(list(v).map((r) => {
-  const [title, ingredients, method] = r.split(':')
-  return { title, ingredients, method }
+  const [title, ingredients, method, image] = r.split(':')
+  return { title, ingredients, method, ...(image?.trim() ? { image: image.trim() } : {}) }
 }))
 
 async function load(sheets) {

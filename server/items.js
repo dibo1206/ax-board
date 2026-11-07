@@ -8,6 +8,7 @@ import { pool } from './db.js'
 const CATEGORIES = ['과일', '채소', '가공품']
 const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
 const textList = (v, maxItems, maxLength) => (Array.isArray(v) ? v.map((s) => text(s, maxLength)).filter(Boolean).slice(0, maxItems) : [])
+const RECIPE_IMAGE = /^\/(?!.*\.\.)[A-Za-z0-9_\-./]+\.(webp|png|jpe?g)$/
 
 // POST /items/request {name, category} — 관리자·판매자. 같은 이름이 있으면 그 품목을 돌려준다
 export async function requestItem(req, res) {
@@ -73,7 +74,11 @@ export async function listReview(req, res) {
 export async function saveItem(req, res) {
   const b = req.body ?? {}
   const recipes = (Array.isArray(b.recipes) ? b.recipes : []).slice(0, 5)
-    .map((r) => ({ title: text(r?.title, 30), ingredients: text(r?.ingredients, 60), method: text(r?.method, 120) }))
+    .map((r) => {
+      // 레시피 카드 사진(선택): 이 사이트 public 안의 주소만 받는다. 없으면 화면이 요리 종류에 맞는 기본 그림을 쓴다
+      const image = text(r?.image, 200)
+      return { title: text(r?.title, 30), ingredients: text(r?.ingredients, 60), method: text(r?.method, 120), ...(RECIPE_IMAGE.test(image) ? { image } : {}) }
+    })
     .filter((r) => r.title && r.method)
   const brixLimit = (v) => (v === '' || v == null || !/^\d{1,2}(\.\d)?$/.test(String(v)) ? null : Number(v))
   const values = {
