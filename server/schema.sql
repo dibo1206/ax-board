@@ -490,3 +490,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS order_refunds_full_key ON order_refunds (order
 ALTER TABLE products ADD COLUMN IF NOT EXISTS ship_from DATE;
 ALTER TABLE order_items ADD COLUMN IF NOT EXISTS ship_from DATE;
 ALTER TABLE order_shipments ADD COLUMN IF NOT EXISTS ship_from DATE;
+
+-- 재입고 알림 (2026-11-07): 품절 상품·옵션에 남긴 이메일 (암호화). 다시 들어오면 한 번 알리고 notified_at 을 남긴다.
+-- 같은 상품·옵션·이메일은 알림 전까지 하나만. 보낸 신청은 30일, 못 보낸 신청은 180일 뒤 지운다 (server/restock.js)
+CREATE TABLE IF NOT EXISTS restock_requests (
+  id SERIAL PRIMARY KEY,
+  product_code TEXT NOT NULL REFERENCES products(product_code) ON DELETE CASCADE,
+  option_id INT REFERENCES product_options(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  email_hash TEXT NOT NULL,
+  customer_id INT REFERENCES customers(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  notified_at TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS restock_requests_once ON restock_requests (product_code, (COALESCE(option_id, 0)), email_hash) WHERE notified_at IS NULL;
+CREATE INDEX IF NOT EXISTS restock_requests_waiting ON restock_requests (product_code) WHERE notified_at IS NULL;

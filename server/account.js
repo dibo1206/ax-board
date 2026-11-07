@@ -162,6 +162,7 @@ accountRouter.delete('/me', requireCustomer, async (req, res) => {
     [req.customer.id, sealText(`deleted-${req.customer.id}-${randomBytes(4).toString('hex')}@invalid`), `deleted:${randomBytes(16).toString('hex')}`],
   )
   await pool.query('DELETE FROM password_resets WHERE customer_id = $1', [req.customer.id])
+  await pool.query('DELETE FROM restock_requests WHERE customer_id = $1', [req.customer.id]) // 탈퇴하면 재입고 알림 신청도 지운다
   setCookie(res, COOKIE, '', 0)
   console.log(`[account] 회원 탈퇴 #${req.customer.id}`)
   res.status(204).end()

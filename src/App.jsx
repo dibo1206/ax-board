@@ -4,7 +4,7 @@ import { Chat } from './Chat.jsx'
 import { B2bForm, QuestionForm } from './Inquiry.jsx'
 import { Related } from './Recommend.jsx'
 import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
-import { addToCart, getPolicy, preorderNote, thumbUrl, unitPrice } from './shop/shared.js'
+import { addToCart, getPolicy, post, preorderNote, thumbUrl, unitPrice } from './shop/shared.js'
 import { Guide } from './shop/Guide.jsx'
 import { CategoryRows, Faq, Hero, ProductSection, QuizDialog, SeasonCalendar, Story } from './shop/home/Home.jsx'
 import { ShopLayout } from './shop/ShopLayout.jsx'
@@ -77,16 +77,48 @@ function Description({ text }) {
 
 // 7단계: (옵션 상품은 옵션 고르기 →) 수량 고르기 → 장바구니 담기 / 바로 구매 (가격은 주문할 때 서버가 다시 계산)
 // 옵션 상품은 옵션을 고르기 전에는 담거나 살 수 없다. 옵션마다 가격·재고가 다르다
+// 품절 상품·옵션: 이메일을 남기면 다시 들어올 때 메일로 한 번 알려 준다 (server/restock.js)
+function RestockForm({ productCode, optionId }) {
+  const [email, setEmail] = useState('')
+  const [agree, setAgree] = useState(false)
+  const [state, setState] = useState({ busy: false, done: '', error: '' })
+  const submit = async (e) => {
+    e.preventDefault()
+    setState({ busy: true, done: '', error: '' })
+    try {
+      const data = await post(`/products/${encodeURIComponent(productCode)}/restock`, { email, optionId, agree })
+      setState({ busy: false, done: data.message, error: '' })
+    } catch (error) {
+      setState({ busy: false, done: '', error: error.message })
+    }
+  }
+  if (state.done) return <p className="success restock-done">{state.done}</p>
+  return (
+    <form className="restock" onSubmit={submit}>
+      <p className="restock-title"><strong>재입고 알림</strong> <span className="muted">다시 들어오면 메일로 한 번 알려 드려요</span></p>
+      <div className="restock-row">
+        <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="알림 받을 이메일" autoComplete="email" maxLength={254} aria-label="알림 받을 이메일" />
+        <button type="submit" className="button" disabled={state.busy || !agree}>알림 받기</button>
+      </div>
+      <label className="restock-agree"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> 재입고 알림을 위해 이메일을 수집·이용하는 데 동의해요 (보낸 뒤 30일 안에 지워요)</label>
+      {state.error && <p className="error">{state.error}</p>}
+    </form>
+  )
+}
+
 function BuyBox({ product, option, onPick, onAsk }) {
   const [quantity, setQuantity] = useState(1)
   const [added, setAdded] = useState(false)
   const soldOut = (
-    <div className="actions">
-      <span className="button ghost">품절</span>
-      <button type="button" className="button ghost" onClick={onAsk}>입고 문의하기</button>
-    </div>
+    <>
+      <div className="actions">
+        <span className="button ghost">품절</span>
+        <button type="button" className="button ghost" onClick={onAsk}>입고 문의하기</button>
+      </div>
+      <RestockForm key={option?.id ?? 'all'} productCode={product.product_code} optionId={option?.id ?? null} />
+    </>
   )
-  if (product.sold_out) return soldOut
+  if (product.sold_out) return <div className="buy">{soldOut}</div>
   const pick = product.has_options && (
     <label className="qty">옵션
       <select value={option?.id ?? ''} onChange={(e) => { onPick(Number(e.target.value) || null); setQuantity(1); setAdded(false) }}>

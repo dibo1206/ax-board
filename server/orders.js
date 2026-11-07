@@ -13,6 +13,7 @@ import { createLimiter } from './limit.js'
 import { cancelPartial, cancelPayment, checkApproved, clientKey, confirmPayment, isTestPayment, lookupPayment, orderingOpen, paymentMode } from './payments.js'
 import { POLICIES, RETURNS, SHIPPING, SHOP, shippingFee } from './policy.js'
 import { adminEmail, publicUrl, queueMail, retryMails } from './mailer.js'
+import { sweepRestock } from './restock.js'
 import { lockProducts, syncOptionTotals } from './options.js'
 import { openOrder, openReturn } from './pii.js'
 import { farmShipFrom, isPreorder, shipDateText } from './preorder.js'
@@ -200,6 +201,7 @@ export function startOrderSweeper() {
     expirePending().catch((e) => console.error(`[order] 만료 처리 실패 · ${e.message}`))
     autoConfirm().catch((e) => console.error(`[order] 구매 확정 실패 · ${e.message}`))
     retryMails().catch((e) => console.error(`[mail] 다시 보내기 실패 · ${e.message}`))
+    sweepRestock().catch((e) => console.error(`[restock] 알림 실패 · ${e.message}`)) // 취소·만료로 돌아온 재고도 알림
   }, 5 * 60_000).unref()
 }
 

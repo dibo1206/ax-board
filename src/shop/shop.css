@@ -361,6 +361,16 @@
 .shop .detail .buy .price { margin: 0; }
 .shop .detail .buy .actions { display: flex; gap: 12px; }
 .shop .detail .buy .actions .button { flex: 1; justify-content: center; padding: 14px 16px; font-size: 16px; }
+/* 재입고 알림 신청 칸 (품절일 때 구매 칸 아래) */
+.shop .restock { display: grid; gap: 10px; margin-top: 4px; padding: 16px; background: var(--surface); border: 1px dashed var(--line); }
+.shop .restock-title { margin: 0; font-size: 15px; }
+.shop .restock-title .muted { font-size: 13px; margin-left: 6px; }
+.shop .restock-row { display: flex; gap: 8px; }
+.shop .restock-row input { flex: 1; min-width: 0; height: 44px; padding: 0 12px; border: 1px solid var(--border); font: inherit; font-size: 15px; background: #fff; }
+.shop .restock-row .button { flex: none; padding: 0 20px; height: 44px; }
+.shop .restock-agree { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.5; color: var(--muted, #6b6b6b); }
+.shop .restock-agree input { margin-top: 3px; }
+.shop .restock-done { margin: 4px 0 0; }
 /* 사진(.gallery)과 정보(.detail-info)를 두 칸으로. 정보 칸 안의 줄이 늘어도 사진 옆에 그대로 쌓인다 */
 .shop .detail-top { margin-bottom: 32px; }
 .shop .detail-info > :first-child { margin-top: 0; }
