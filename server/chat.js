@@ -52,6 +52,19 @@ export function composeJamo(text) {
   })
 }
 
+// 사투리·말끝을 표준말로 (규칙이 알아듣게만 쓰고, 상담 기록에는 손님이 쓴 말을 그대로 남긴다)
+// "딱딱헌디 워치게 혀유" → "딱딱한데 어떻게 해요", "있어유" → "있어요". '우유'처럼 '유'로 끝나는 낱말은 건드리지 않는다
+const DIALECT = [
+  [/워치게|워찌케|어치케|어트케|어떡케/g, '어떻게'],
+  [/헌디|헌데/g, '한데'],
+  [/혀유|혀요/g, '해요'],
+  [/있슈|있남|있당가|있어라우|있어유/g, '있어요'],
+  [/뭐여|뭐시여|뭐다냐/g, '뭐예요'],
+  [/얼마여|얼마유|얼마다냐/g, '얼마예요'],
+  [/(어|아|해|돼|되|져|와|워|봐|줘|셔|없어|있어)유(?=[\s?!.~]|$)/g, '$1요'],
+]
+export const easySpeech = (text) => DIALECT.reduce((s, [re, to]) => s.replace(re, to), String(text))
+
 const QNA_HINT = `상품 페이지 아래 Q&A에 질문을 남겨 주시면 담당자가 직접 답해 드려요. 급하면 고객센터 ${SHOP.phone}로 연락해 주세요.`
 
 // 건강 질문: 드셔도 되는지는 판단하지 않는다(의료 판단·효능 표현 금지). 대신 전문가와 상담할 때 쓸 등록된 사실만 붙인다
@@ -72,6 +85,14 @@ function healthFacts(ctx) {
 
 // ---------- 1. 정해진 답으로 넘기는 질문 ----------
 const ROUTES = [
+  {
+    // 반려동물에게 줘도 되나: 사람 기준 상품 정보로 판단하지 않는다 (2026-11-07, 팀 시험 질문에서 놓친 안전 질문)
+    kind: 'pet',
+    re: /강아지|고양이|반려\s?(동물|견|묘)|애완|댕댕이|멍멍이|냥이|강쥐|(?<![가-힣])개(한테|에게)/,
+    answer: () => `반려동물에게 줘도 되는지는 제가 판단할 수 없어요. 수의사와 꼭 상의해 주세요. 이 쇼핑몰의 보관·섭취 정보는 사람이 먹는 기준이에요. ${QNA_HINT}`,
+    handoff: true,
+    action: 'qna',
+  },
   {
     kind: 'health',
     // 관절·빈혈·틀니 등은 받은 질문에서 놓쳤던 말 (2026-11-07). "씹는 맛"처럼 식감을 묻는 말은 잡지 않고, 씹기 힘들다는 몸 상태만
@@ -151,6 +172,30 @@ const ROUTES = [
     action: 'qna',
   },
   {
+    // 전화 주문: 정해진 방법이 없어서 약속하지 않고 고객센터로 (어르신 손님이 자주 묻는 말)
+    kind: 'phone_order',
+    re: /전화로?\s?(주문|시켜|사|구매|살\s?수)|전화\s?주문|전화해서\s?(주문|사)/,
+    answer: () => `상담창에서는 전화 주문을 약속드릴 수 없어요. 주문이 어려우시면 고객센터 ${SHOP.phone}로 전화해 주세요 (${SHOP.hours}). 상품 페이지의 [바로 구매]로도 주문할 수 있고, 회원이 아니어도 돼요.`,
+    handoff: true,
+    action: null,
+  },
+  {
+    // 다른 사람 집으로 보내기: 주문서의 받는 분 칸에 따로 적는다
+    kind: 'ship_to_other',
+    re: /(아들|딸|부모님?|엄마|아빠|어머니|아버지|어머님|아버님|시댁|친정|할머니|할아버지|친구|지인|며느리|사위|손주|손자|손녀|형|누나|언니|오빠|동생)(네|님)?\s?(집|댁)?\s?(으로|에|한테|에게|로)?\s?(바로\s?|직접\s?)?(보내|배송|받게|부쳐|부치)/,
+    answer: () => '네, 주문서의 [받는 분]에 받으실 분의 이름·연락처·주소를 적으면 그곳으로 보내요. 주문하신 분 정보와 따로 적을 수 있어요. 주문 조회는 주문하신 분 휴대폰 번호로 해요.',
+    handoff: false,
+    action: null,
+  },
+  {
+    // 글씨가 작아요: 없는 기능을 지어내지 않고 화면 확대 방법과 전화 안내만
+    kind: 'small_text',
+    re: /(글씨|글자).{0,8}(작|안\s?보|크게|키워|키우)/,
+    answer: () => `휴대폰에서는 두 손가락으로 화면을 벌리면 글씨가 커지고, 컴퓨터에서는 Ctrl 키와 + 키를 함께 누르면 커져요. 주문이 어려우시면 고객센터 ${SHOP.phone}로 전화해 주세요 (${SHOP.hours}).`,
+    handoff: false,
+    action: null,
+  },
+  {
     kind: 'payment',
     re: /결제|결재|카드|무통장|계좌|네이버\s?페이|카카오\s?페이|토스(?!트)|현금\s?영수증|영수증/,
     answer: () => `결제는 주문서에서 토스페이먼츠 결제창으로 해요. 쓸 수 있는 결제 수단은 결제창에서 볼 수 있어요. 계좌 번호나 카드 번호는 상담창에 적지 말아 주세요. 영수증이나 다른 결제 문의는 고객센터 ${SHOP.phone}로 알려 주세요 (${SHOP.hours}).`,
@@ -219,7 +264,7 @@ const ROUTES = [
   {
     // 칼로리·영양 성분은 자료에 없다: 지어내지 않는다
     kind: 'nutrition',
-    re: /칼로리|열량|kcal|영양\s?(성분|정보)|성분표|당류|나트륨|단백질|탄수화물/i,
+    re: /칼로리|열량|kcal|영양\s?(성분|정보|소)|성분표|당류|나트륨|단백질|탄수화물|철분|비타민|칼슘|칼륨|식이\s?섬유|미네랄/i,
     answer: (ctx) => `${ctx.items.length ? `${ctx.items.map((i) => i.name).join(', ')}의 ` : ''}칼로리·영양 성분 정보는 아직 상품 정보에 없어요. 정확한 값이 필요하면 ${QNA_HINT.replace('질문을 남겨', '물어봐')}`,
     handoff: false,
     action: 'qna',
@@ -367,7 +412,7 @@ const FACTS = [
   },
   {
     id: 'price',
-    re: /얼마|가격|값/,
+    re: /얼마|가격|값|몇\s?(키로|킬로|kg)|(어느|어떤|몇)\s?(용량|크기|사이즈|단위)/,
     explicit: /가격|값/,
     say: (p) => (p.picked.length === 1
       ? `${p.label} ${p.picked[0].name} 가격은 ${won(p.picked[0].price)}이에요.${p.picked[0].stock > 0 ? '' : ' 다만 지금은 품절이라 살 수 없어요.'}`
@@ -376,7 +421,7 @@ const FACTS = [
       : `${p.label} 가격은 ${won(p.price)}이에요 (판매 단위: ${p.unit}).${p.sold_out ? ' 다만 지금은 품절이라 살 수 없어요.' : ''}`),
   },
   {
-    re: /팔아|팔어|파나|파니|파냐|파시|파세요|파는지|판매\s?(해|하|중)|살\s?수\s?있|주문\s?(돼|되|가능|할\s?수)|구매.{0,4}(가능|돼|되나)|구입|재고|품절|남았|재입고|다시\s?(들어|나와)|^\S+(\s[\d.]+\S*)?\s?(있어|있나|있냐|있음|있니)/,
+    re: /(지금|아직|혹시|요즘)\s?(있|팔)|팔아|팔어|파나|파니|파냐|파시|파세요|파는지|판매\s?(해|하|중)|살\s?수\s?있|주문\s?(돼|되|가능|할\s?수)|구매.{0,4}(가능|돼|되나)|구입|재고|품절|남았|재입고|다시\s?(들어|나와)|^\S+(\s[\d.]+\S*)?\s?(있어|있나|있냐|있음|있니)/,
     id: 'stock',
     explicit: /살\s?수\s?있|재고|품절|남았|팔아|팔어|파나/,
     say: (p) => (p.sold_out
@@ -417,7 +462,7 @@ const NEEDS_EXPLAIN = /보관|레시피|만들|개봉|먹어도|드셔도|마셔
 
 // ---------- 2-2. 추천 질문 (6단계) ----------
 // 말에서 조건(태그·예산)을 찾고, 못 찾으면 AI에게 태그만 고르게 한다. 상품은 항상 DB 규칙(recommend.js)이 고른다
-const WANTS_RECOMMEND = /추천|골라|뭐가 좋|뭘 사|뭐 사|뭐 살까|쓸\s?만한|먹을\s?만한|살\s?만한|달콤한\s?(과일|거|것)|먹을\s?(달콤|새콤|담백)/
+const WANTS_RECOMMEND = /추천|골라|뭐가 좋|뭘 사|뭐 사|뭐 살까|쓸\s?만한|먹을\s?만한|살\s?만한|달콤한\s?(과일|거|것)|먹을\s?(달콤|새콤|담백)|(애들|아이들?|손주|손자|손녀|어린이)\s?(이|가|들)?\s?(먹기|먹을|간식).{0,8}(좋|괜찮|뭐|있)/
 // "사과로 만들 수 있는 요리 추천해 주세요"처럼 품목 이름과 요리·레시피를 함께 물으면 상품 추천이 아니라 그 품목의 레시피 질문이다
 // (품목 없이 "요리해 먹기 좋은 상품 추천"이면 지금처럼 태그 추천)
 const ASKS_RECIPE = /레시피|요리|만들|만드|해\s?먹/
@@ -624,7 +669,8 @@ const TOPICS = [
   { kind: 'safety', word: '먹어도 괜찮은지', re: new RegExp(`(먹어|드셔|마셔|섭취해)도|드실\\s?수|마실\\s?수|상하면|싹(이|\\s?났)|상했|상한\\s?(것|거)|변했|변색|곰팡|이상한\\s?냄새|냄새가\\s?(나|이상)|(술|발효|시큼한|썩은)\\s?냄새|물렀|물러졌|썩|끈적|미끈|점액|쭈글|초록색으로|${ELAPSED.source}`) },
   { kind: 'compare', word: '차이', re: /차이|비교|뭐가\s?달라|다른\s?점|뭐가\s?나아|어떤\s?게\s?나아/ },
   { kind: 'recipe', word: '레시피', re: /레시피|만들|만드|요리|활용|먹는\s?(법|방법)|어떻게\s?먹|해\s?먹|비율|음료|에이드/ },
-  { kind: 'storage', word: '보관법', re: /보관|오래\s?두|둬야|두는\s?법|냉장|냉동|상온|실온|어디에?\s?(둬|두|놔)|(같이|함께)\s?(둬|두|놔|넣)|(둬|두어|놔)도|넣어도|개봉|뜯(은|으면|고)|언제까지|며칠|유통\s?기한|얼마나\s?(가|두|오래)/ },
+  { kind: 'ripe', word: '익었는지 보는 법', re: /익었는지|익은\s?(건지|지|거)|다\s?익었|잘\s?익었|숙성\s?(됐|되었)/ },
+  { kind: 'storage', word: '보관법', re: /딱딱|후숙|덜\s?익|안\s?익|얼려|얼리|많이\s?남|남았는데|남은\s?(거|것)|다\s?못\s?먹|보관|오래\s?두|둬야|두는\s?법|냉장|냉동|상온|실온|어디에?\s?(둬|두|놔)|(같이|함께)\s?(둬|두|놔|넣)|(둬|두어|놔)도|넣어도|개봉|뜯(은|으면|고)|언제까지|며칠|유통\s?기한|얼마나\s?(가|두|오래)/ },
   { kind: 'taste', word: '맛', re: /맛있|맛이\s?(어때|좋|괜찮)|맛은|무슨\s?맛/ },
   { kind: 'allergy', word: '알레르기 정보', re: /알레르기|알러지/ },
   // "어디서"만으로는 산지로 보지 않는다 ("취소는 어디서 해요", "쿠폰은 어디서 받아요"가 산지 답으로 가던 문제)
@@ -647,6 +693,8 @@ function askedDish(item, message) {
   const at = words.findIndex((w) => w.includes(item.name))
   if (at < 0) return null
   const dish = words[at] !== item.name ? words[at] : words[at + 1]
+  // 띄어쓰지 않은 질문("감자로뭐해먹으면좋아요")을 요리 이름으로 보지 않는다
+  if (dish && /뭐|뭘|어떻게|좋아|먹으면|해먹|할까|있어|만들|알려/.test(dish)) return null
   return dish && !NOT_DISH.test(dish) ? dish : null
 }
 
@@ -663,13 +711,20 @@ const SAY_ITEM = {
       '애매하면 드시지 마시고, 사진과 함께 상품 Q&A나 고객센터로 알려 주세요.',
     ].filter(Boolean).join(' ')
   },
+  ripe: (item) => (item.stage1_state
+    ? `${josa(item.name, '은', '는')} 이런 상태면 신선한 때예요: ${sentence(item.stage1_state)}${item.stage2_state ? ` 이런 상태면 품질이 떨어진 거예요: ${sentence(item.stage2_state)}` : ''} 드셔도 되는지는 제가 판단하지 않아요.`
+    : `${item.name}가 익었는지 알아보는 기준은 아직 상품 정보에 없어요. ${QNA_HINT}`),
   storage: (item, message) => {
     const asksHowLong = /언제까지|며칠|유통|얼마나/.test(message)
+    const asksFreeze = /얼려|얼리|냉동/.test(message)
+    const leftover = /많이\s?남|남았는데|남은\s?(거|것)|다\s?못\s?먹/.test(message)
     return [
       `${item.name} 보관법은 이래요: ${sentence(item.storage_method || '보관 방법 정보가 아직 없어요')}`,
       (item.storage_method ?? '').includes('개봉 후') ? '' : opened(item),
       asksHowLong ? keepPeriod(item) : '',
-      asksHowLong || (!item.opened_note && !item.stage1_state) ? timeline(item) : '',
+      asksHowLong || leftover || (!item.opened_note && !item.stage1_state) ? timeline(item) : '',
+      // 냉동 정보가 없으면 지어내지 않는다
+      asksFreeze && !/냉동/.test(item.storage_method ?? '') ? '냉동 보관 정보는 아직 상품 정보에 없어요.' : '',
       /유통/.test(message) && !item.fresh_days_stage1 && !item.keep_period ? '유통기한은 상품 포장에 적힌 날짜를 확인해 주세요.' : '',
     ].filter(Boolean).join(' ')
   },
@@ -762,7 +817,8 @@ const ASKS_CATALOG = /(뭐|뭘|무엇|무슨|어떤)\s?(상품|과일|채소|걸
 function answerOddWords(message, catalog, ctx) {
   const base = { sources: [], productCode: ctx.current?.product_code ?? null, handoff: false, action: null, blocked: false }
   const selling = catalog.items.filter((i) => catalog.products.some((p) => p.item_code === i.item_code)).map((i) => i.name)
-  if (ASKS_CATALOG.test(message) && !findItems(message, catalog.items).length && selling.length) {
+  // "애들 먹기 좋은 거 뭐 있어요"처럼 추천을 바라는 말은 품목 목록이 아니라 추천으로 보낸다
+  if (ASKS_CATALOG.test(message) && !WANTS_RECOMMEND.test(message) && !findItems(message, catalog.items).length && selling.length) {
     return { ...base, answer: `지금 파는 품목: ${selling.join(', ')}. 품목 이름을 넣어 물어보시면 가격과 당도를 알려 드려요.`, suggestions: selling.slice(0, 3).map((name) => `${name} 가격`), model: 'rule:list' }
   }
   if (GRADE_WORD.test(message) && !catalog.products.some((p) => GRADE_WORD.test(p.name))) {
@@ -1172,6 +1228,24 @@ async function writeCache(key, reply, model) {
   )
 }
 
+// ---------- 제철: "지금 무슨 과일이 철이에요?", "이맘때 뭐가 맛있어요?" ----------
+// 상품에 '제철'(season) 태그가 있고 살 수 있는 것만. '철분'은 영양 질문이라 잡지 않는다
+const ASKS_SEASON = /제철|철이(에요|야|예요|냐|지|인)|철인\s?(거|것|과일)|이맘때|요즘\s?(뭐가|어떤\s?게|뭐)\s?(맛있|좋|나와|많이)|지금\s?(뭐가|어떤\s?게|무슨)\s?(맛있|철|나와)/
+function answerSeason(message, catalog) {
+  if (!ASKS_SEASON.test(message) || /철분/.test(message)) return null
+  const live = catalog.products.filter((p) => (p.tags ?? []).includes('season') && !p.sold_out)
+  const base = { handoff: false, action: null, model: 'rule:season', blocked: false }
+  if (!live.length) return { ...base, answer: '지금 제철로 표시해 둔 상품이 없어요. 상품 목록에서 둘러봐 주세요.', sources: [], productCode: null }
+  const names = [...new Set(live.map((p) => catalog.items.find((i) => i.item_code === p.item_code)?.name).filter(Boolean))]
+  const shown = names.map((n) => live.filter((p) => catalog.items.find((i) => i.item_code === p.item_code)?.name === n).sort((a, b) => a.price - b.price)[0]).slice(0, 4)
+  return {
+    ...base,
+    answer: `지금 제철로 표시해 둔 품목은 ${names.slice(0, 8).join(', ')}이에요. 예를 들면 ${shown.map((p) => `${label(p)} ${won(p.price)}${p.options?.length ? '부터' : ''}`).join(', ')}이 있어요. 상품 목록의 [제철] 표시로도 찾을 수 있어요.`,
+    sources: shown.map((p) => ({ code: p.product_code, name: p.name })),
+    productCode: shown[0]?.product_code ?? null,
+  }
+}
+
 // ---------- 출고 날짜·예약 판매 ----------
 // "절임배추 언제 받아요?", "곶감 언제 보내요?", "예약 판매하는 거 있어요?": 상품의 출고 시작일(DB)로 답한다.
 // 품목을 말하지 않은 "언제 와요?"는 아래 배송 규칙(결제 후 1~3일 안내)으로 간다
@@ -1246,7 +1320,7 @@ export async function answerChat({ message: raw, history = [], productCode = nul
   // 연락처 같은 개인정보는 AI·기록 모두에 들어가기 전에 가린다
   const { text: message, masked } = maskPersonal(composeJamo(raw))
   const safeHistory = history.map((h) => ({ ...h, content: maskPersonal(composeJamo(h.content)).text }))
-  const result = await answerMasked({ message, history: safeHistory, productCode }, { useCache, allowAi })
+  const result = await answerMasked({ message: easySpeech(message), history: safeHistory, productCode }, { useCache, allowAi })
   return { ...result, answer: tidyAnswer(result.answer), question: message, masked }
 }
 
@@ -1273,6 +1347,8 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
       blocked: false,
     }
   }
+  const season = answerSeason(said, catalog)
+  if (season) return season
   const odd = allowAi ? null : answerOddWords(message, catalog, ctx)
   if (odd) return odd
   // 두 품목(또는 같은 품목의 두 품종) 비교·선택: 규칙 답에서 [AI에게 물어보기]를 누른 경우(allowAi)에만 아래 규칙을 건너뛰고 AI에게 간다
