@@ -26,6 +26,7 @@ const SignupPage = page(() => import('./account/Account.jsx'), 'SignupPage')
 const FindPasswordPage = page(() => import('./account/Account.jsx'), 'FindPasswordPage')
 const ResetPasswordPage = page(() => import('./account/Account.jsx'), 'ResetPasswordPage')
 const MyPage = page(() => import('./account/Account.jsx'), 'MyPage')
+const SocialSignupPage = page(() => import('./account/Account.jsx'), 'SocialSignupPage')
 const loading = <p className="muted">불러오는 중…</p>
 
 // 1단계 데이터 확인용 화면. 실제 디자인은 시안이 나오면 3단계에서 새로 만든다.
@@ -379,6 +380,7 @@ function innerPage(path) {
   if (path === '/account/find') return <FindPasswordPage />
   if (path === '/account/reset') return <ResetPasswordPage />
   if (path === '/account') return <MyPage />
+  if (path === '/account/social') return <SocialSignupPage />
   return null
 }
 

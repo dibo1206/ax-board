@@ -505,3 +505,14 @@ CREATE TABLE IF NOT EXISTS restock_requests (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS restock_requests_once ON restock_requests (product_code, (COALESCE(option_id, 0)), email_hash) WHERE notified_at IS NULL;
 CREATE INDEX IF NOT EXISTS restock_requests_waiting ON restock_requests (product_code) WHERE notified_at IS NULL;
+
+-- 간편 로그인 (2026-11-07): 카카오·네이버 회원 번호는 그대로 두지 않고 찾기용 HMAC(lookupHash)만 저장한다 (server/oauth.js)
+CREATE TABLE IF NOT EXISTS customer_identities (
+  id SERIAL PRIMARY KEY,
+  customer_id INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL CHECK (provider IN ('kakao', 'naver')),
+  provider_user_hash TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (provider, provider_user_hash),
+  UNIQUE (customer_id, provider)
+);

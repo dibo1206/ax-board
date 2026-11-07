@@ -365,6 +365,16 @@
 .shop .detail .buy .price { margin: 0; }
 .shop .detail .buy .actions { display: flex; gap: 12px; }
 .shop .detail .buy .actions .button { flex: 1; justify-content: center; padding: 14px 16px; font-size: 16px; }
+/* 간편 로그인 버튼 (카카오 노랑 · 네이버 초록, 각 회사 안내 색) */
+.shop .social-login { display: grid; gap: 8px; margin-top: 8px; }
+.shop .social-or { display: flex; align-items: center; gap: 10px; margin: 8px 0 4px; font-size: 13px; color: var(--muted); }
+.shop .social-or::before, .shop .social-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.social-btn { display: flex; align-items: center; justify-content: center; gap: 10px; height: 46px; border-radius: 6px; font-size: 15px; font-weight: 600; text-decoration: none; }
+.social-btn small { font-weight: 400; opacity: 0.8; }
+.social-btn.kakao { background: #fee500; color: rgba(0, 0, 0, 0.85); }
+.social-btn.naver { background: #03c75a; color: #fff; }
+.social-btn .social-mark { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 4px; font-size: 13px; font-weight: 800; background: rgba(0, 0, 0, 0.08); }
+.social-btn.small { display: inline-flex; height: 32px; padding: 0 12px; font-size: 13px; }
 /* 재입고 알림 신청 칸 (품절일 때 구매 칸 아래) */
 .shop .restock { display: grid; gap: 10px; margin-top: 4px; padding: 16px; background: var(--surface); border: 1px dashed var(--line); }
 .shop .restock-title { margin: 0; font-size: 15px; }

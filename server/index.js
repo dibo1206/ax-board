@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import compression from 'compression'
 import express from 'express'
 import { accountRouter } from './account.js'
+import { oauthRouter } from './oauth.js'
 import { accessLogger, adminAccessLogRouter } from './accessLog.js'
 import { dashboardRouter } from './dashboard.js'
 import { adminRouter, UPLOAD_DIR } from './admin.js'
@@ -330,6 +331,7 @@ app.use('/api', reviewRouter)
 app.use('/api', shopGroupRouter)
 app.use('/api/account/orders', memberReturnRouter)
 app.use('/api/account/orders', memberOrderRouter)
+app.use('/api/account/oauth', oauthRouter)
 app.use('/api/account', accountRouter)
 // 올린 사진은 그림으로만 쓰이게: 사진 주소를 직접 열어도 스크립트가 돌지 않는다
 app.use('/uploads', express.static(fileURLToPath(UPLOAD_DIR), {

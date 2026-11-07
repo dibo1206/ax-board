@@ -236,7 +236,7 @@ const ONE_CHAR = {
 }
 const PROCESSED = /^(즙|주스|가루|칩|와인|분말)/ // 잼·청은 레시피(사과잼, 귤청)로도 묻는 말이라 넣지 않는다
 function findItems(text, items) {
-  let rest = text.replace(/택배|배송|배달|배합|배치|배려/g, ' ').replace(/메실/g, '매실').replace(/황도/g, '복숭아')
+  let rest = text.replace(/택배|배송|배달|배합|배치|배려/g, ' ').replace(/메실/g, '매실').replace(/황도/g, '복숭아').replace(/(골드|그린)?키위/g, '참다래')
   if (!/랑|하고|비교|차이/.test(text)) rest = rest.replace(/부사|후지/g, '사과')
   const found = []
   for (const item of [...items].sort((a, b) => b.name.length - a.name.length)) {
