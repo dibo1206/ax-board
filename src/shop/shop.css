@@ -1047,3 +1047,45 @@
   .shop .lookup-tips { grid-template-columns: 1fr; }
   .shop .lookup-steps li { font-size: 12px; }
 }
+
+/* 상품 상세 후기·문의 탭 칸 (2026-11-08) */
+.shop .talk-panel { display: flex; flex-direction: column; gap: 14px; }
+.shop .talk-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); }
+.shop .talk-tabs button { padding: 10px 16px 12px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--muted); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; margin-bottom: -1px; }
+.shop .talk-tabs button b { margin-left: 4px; color: var(--accent); }
+.shop .talk-tabs button.on { border-bottom-color: var(--accent); color: var(--text); }
+.shop .talk-panel [role=tabpanel] { display: flex; flex-direction: column; gap: 12px; }
+.shop .talk-panel [role=tabpanel][hidden] { display: none; }
+.shop .qna-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.shop .qna-list li { padding: 14px 2px; border-bottom: 1px solid var(--border); line-height: 1.7; }
+.shop .qna-list li:last-child { border-bottom: 0; }
+.shop .talk-ask, .shop .talk-more { align-self: flex-start; }
+.shop .reviews-embedded { display: flex; flex-direction: column; gap: 10px; }
+.shop .qna-member { margin: 0; }
+
+/* 장바구니 전체 삭제 */
+.shop .cart-head { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 8px; }
+.shop .cart-clear { color: var(--muted); font-size: 14px; }
+.shop .cart-clear:hover { color: #b3261e; }
+
+/* 제철 달력 색·선택 표시 (2026-11-08 시안): 채도를 낮춘 계절 색, 고른 달은 연한 살구색 + 주황 테두리, 이번 달은 위에 '지금' */
+.shop .season-section { --s-spring: #a8b98c; --s-summer: #7f9c8d; --s-autumn: #b98b5d; --s-winter: #8693a6; }
+.shop .season2-strip button { border-color: #e5e1d7; box-shadow: 0 1px 2px rgb(30 34 31 / 0.04); }
+.shop .season2-strip button small { font-weight: 500; }
+.shop .season2-strip button b { font-weight: 500; }
+.shop .season2-strip button.on { border: 2px solid #d9a46a; background: #f6e9d8; color: #8a5a2b; box-shadow: 0 0 0 4px rgb(217 164 106 / 0.18); }
+.shop .season2-strip button.on small { color: #a8763f; }
+.shop .season2-strip button.on b { color: #8a5a2b; font-weight: 600; }
+.shop .now-pill { display: inline-block; padding: 1px 9px; border-radius: 999px; background: #c98b4f; color: #fff; font-size: 11px; font-weight: 700; line-height: 1.5; }
+.shop .st-new { background: #8fa86d; }
+.shop .st-peak, .shop .st-only { background: #b9574c; }
+.shop .st-last { background: #b08b47; }
+.shop .s2-stage { padding: 4px 11px; font-weight: 600; box-shadow: none; }
+.shop .s2-sold { background: rgb(40 40 38 / 0.72); font-weight: 500; }
+.shop .season2-card { border-color: #e5e1d7; border-radius: 18px; }
+.shop .s2-photo { background: #f1ece2; }
+.shop .s2-bar i.in { background: #9bb08a; opacity: 1; }
+.shop .s2-bar i.in.cur { background: #6f8a5e; }
+/* 정사각형 사진이 4:3 칸을 밀어내지 않게 (세로 flex 안에서는 최소 높이가 사진 크기로 잡힌다) */
+.shop .s2-photo { flex: none; min-height: 0; overflow: hidden; }
+.shop .s2-photo img { position: absolute; inset: 0; }

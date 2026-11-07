@@ -181,6 +181,15 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   const [sentMessage, setSentMessage] = useState('')
   const [optionId, setOptionId] = useState(null) // 옵션 상품에서 고른 옵션
   const qnaRef = useRef(null)
+  const [talkTab, setTalkTab] = useState(focus === 'qna' ? 'qna' : 'reviews') // 후기·문의 칸에서 보고 있는 탭
+  const [reviewCount, setReviewCount] = useState(null)
+  const [qnaShown, setQnaShown] = useState(5)
+  const [askOpen, setAskOpen] = useState(focus === 'qna')
+  const openAsk = () => {
+    setTalkTab('qna')
+    setAskOpen(true)
+    qnaRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
   const [myQuestions, setMyQuestions] = useState([]) // 내가 남긴 문의 (비밀글 내용 포함, 로그인했을 때만)
 
   useEffect(() => {
@@ -214,6 +223,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   const price = option ? option.price : product.price
   const unit = option ? option.name : product.unit
 
+  const questions = mergeQuestions(product.questions, myQuestions)
   return (
     <article className="detail">
       <button type="button" className="link" onClick={onBack}>← 목록</button>
@@ -254,9 +264,9 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {product.info_answers >= 3 && <><dt>구매자 확인</dt><dd>표시와 맞았어요 {product.info_matched}/{product.info_answers}</dd></>}
         <dt>판매 농가</dt><dd>{seller.name} · {seller.region}</dd>
       </dl>
-      <BuyBox product={product} option={option} onPick={setOptionId} onAsk={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })} />
+      <BuyBox product={product} option={option} onPick={setOptionId} onAsk={openAsk} />
       <div className="buy-aside">
-        <button type="button" onClick={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })}>상품 문의하기</button>
+        <button type="button" onClick={openAsk}>상품 문의하기</button>
         {product.b2b_available && (
           <button type="button" onClick={() => { setShowB2b(true); setTimeout(() => document.getElementById('b2b-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50) }}>기업 구매 문의 <small>대량·납품</small></button>
         )}
@@ -266,20 +276,8 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
 
       <div className="detail-body">
         <Description text={product.description} />
-        {product.notice_table && (
-          <section className="box notice-box">
-            <h3>상품정보 제공 고시 <span className="muted">{product.notice_table.title}</span></h3>
-            <table className="notice-table"><tbody>
-              {product.notice_table.rows.map((r) => <tr key={r.label}><th scope="row">{r.label}</th><td className={r.missing ? 'muted' : ''}>{r.value}</td></tr>)}
-            </tbody></table>
-          </section>
-        )}
-        {product.faq?.length > 0 && (
-          <section className="box faq-box">
-            <h3>자주 묻는 질문</h3>
-            {product.faq.map((f) => <details key={f.q}><summary>{f.q}</summary><p>{f.a}</p></details>)}
-          </section>
-        )}
+        {/* 순서 (2026-11-08 피드백): 즐기는 법 → 보관·섭취 → 농가 이야기 → 고시 → 자주 묻는 질문 → 후기·문의 */}
+        <RecipeCards recipes={item.recipes} />
         <section className="box">
           <h3>보관·섭취 안내</h3>
           {item.pending && <p className="muted">새로 들어온 품목이라 담당자가 보관·섭취 정보를 확인하고 있어요. 궁금한 점은 아래 상품 Q&A로 물어봐 주세요.</p>}
@@ -305,40 +303,74 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
           {item.reviewed_by && item.source && <p className="note">출처: {item.source}</p>}
         </section>
 
-        <RecipeCards recipes={item.recipes} />
-
         <section className="box">
           <h3>판매 농가 이야기</h3>
           <p>{seller.story}</p>
         </section>
+        {product.notice_table && (
+          <section className="box notice-box">
+            <h3>상품정보 제공 고시 <span className="muted">{product.notice_table.title}</span></h3>
+            <table className="notice-table"><tbody>
+              {product.notice_table.rows.map((r) => <tr key={r.label}><th scope="row">{r.label}</th><td className={r.missing ? 'muted' : ''}>{r.value}</td></tr>)}
+            </tbody></table>
+          </section>
+        )}
+        {product.faq?.length > 0 && (
+          <section className="box faq-box">
+            <h3>자주 묻는 질문</h3>
+            {product.faq.map((f) => <details key={f.q}><summary>{f.q}</summary><p>{f.a}</p></details>)}
+          </section>
+        )}
 
         {showB2b && <div id="b2b-form"><B2bForm product={product} onClose={() => setShowB2b(false)} /></div>}
 
-        <ReviewList code={product.product_code} />
-        <section className="box" ref={qnaRef}>
-          <h3>Q&A {product.questions.length}개</h3>
-          <QuestionForm
-            productCode={product.product_code}
-            onSent={(q) => {
-              setProduct((prev) => ({ ...prev, questions: [q, ...prev.questions] }))
-              setSentMessage(q.is_private ? '비밀글이 올라갔어요. 답변이 달리면 마이페이지에서 알려 드려요.' : '질문이 올라갔어요. 답변이 달리면 여기에 보여요.')
-            }}
-          />
-          {sentMessage && <p className="success">{sentMessage}</p>}
-          <ul>
-            {mergeQuestions(product.questions, myQuestions).map((q) => (
-              <li key={q.id}>
-                {q.is_private && !q.mine ? (
-                  <><span className="qna-lock">비밀글</span> 작성자만 볼 수 있는 문의예요. <span className="muted">· {q.author} · {q.answered ? '답변 완료' : '답변을 기다리는 중'}</span></>
-                ) : (
-                  <>
-                    <strong>Q.</strong> {q.is_private && <span className="qna-lock">비밀글</span>}{q.question} <span className="muted">· {q.author}{q.mine && ' (내 문의)'}</span><br />
-                    {q.answer ? <><strong>A.</strong> {q.answer}</> : <span className="muted">답변을 기다리는 중</span>}
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
+        {/* 후기와 문의는 탭 한 칸에 모은다. 5개씩 보여 주고 [더 보기]로 늘려서, 많아져도 상세 화면이 끝없이 길어지지 않게 */}
+        <section className="box talk-panel" ref={qnaRef}>
+          <div className="talk-tabs" role="tablist" aria-label="후기와 문의">
+            <button type="button" role="tab" id="tab-reviews" aria-controls="panel-reviews" aria-selected={talkTab === 'reviews'} className={talkTab === 'reviews' ? 'on' : ''} onClick={() => setTalkTab('reviews')}>
+              구매 후기 <b>{reviewCount ?? ''}</b>
+            </button>
+            <button type="button" role="tab" id="tab-qna" aria-controls="panel-qna" aria-selected={talkTab === 'qna'} className={talkTab === 'qna' ? 'on' : ''} onClick={() => setTalkTab('qna')}>
+              상품 문의 <b>{product.questions.length}</b>
+            </button>
+          </div>
+          <div role="tabpanel" id="panel-reviews" aria-labelledby="tab-reviews" hidden={talkTab !== 'reviews'}>
+            <ReviewList code={product.product_code} embedded onCount={setReviewCount} />
+          </div>
+          <div role="tabpanel" id="panel-qna" aria-labelledby="tab-qna" hidden={talkTab !== 'qna'}>
+            {askOpen ? (
+              <QuestionForm
+                productCode={product.product_code}
+                onSent={(q) => {
+                  setProduct((prev) => ({ ...prev, questions: [q, ...prev.questions] }))
+                  setSentMessage(q.is_private ? '비밀글이 올라갔어요. 답변이 달리면 마이페이지에서 알려 드려요.' : '질문이 올라갔어요. 답변이 달리면 여기에 보여요.')
+                  setAskOpen(false)
+                }}
+              />
+            ) : (
+              <button type="button" className="button ghost talk-ask" onClick={() => setAskOpen(true)}>상품 문의 남기기</button>
+            )}
+            {sentMessage && <p className="success">{sentMessage}</p>}
+            {questions.length === 0 ? <p className="muted">아직 문의가 없어요. 궁금한 점을 남겨 주세요.</p> : (
+              <ul className="qna-list">
+                {questions.slice(0, qnaShown).map((q) => (
+                  <li key={q.id}>
+                    {q.is_private && !q.mine ? (
+                      <><span className="qna-lock">비밀글</span> 작성자만 볼 수 있는 문의예요. <span className="muted">· {q.author} · {q.answered ? '답변 완료' : '답변을 기다리는 중'}</span></>
+                    ) : (
+                      <>
+                        <strong>Q.</strong> {q.is_private && <span className="qna-lock">비밀글</span>}{q.question} <span className="muted">· {q.author}{q.mine && ' (내 문의)'}</span><br />
+                        {q.answer ? <><strong>A.</strong> {q.answer}</> : <span className="muted">답변을 기다리는 중</span>}
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {questions.length > qnaShown && (
+              <button type="button" className="button ghost talk-more" onClick={() => setQnaShown((n) => n + 5)}>문의 더 보기 ({qnaShown}/{questions.length})</button>
+            )}
+          </div>
         </section>
       </div>
       <Related code={product.product_code} onOpen={onOpen} />

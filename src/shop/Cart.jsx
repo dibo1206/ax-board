@@ -97,6 +97,10 @@ export function Cart() {
         </div>
       ) : (
         <>
+          <div className="cart-head">
+            <span className="muted">담은 상품 {lines.length}개</span>
+            <button type="button" className="link cart-clear" onClick={() => { if (window.confirm('장바구니를 모두 비울까요?')) writeCart([]) }}>전체 삭제</button>
+          </div>
           <ul className="cart">
             {cart.rows.map((r) => (
               <li key={`${r.productCode}:${r.optionId ?? ''}`} className={`box${r.problem ? ' dim' : ''}`}>
@@ -116,7 +120,7 @@ export function Cart() {
               </li>
             ))}
           </ul>
-          <Totals {...cart} shopMore />
+          <Totals {...cart} />
           {account === null && (
             <p className="guest-note">회원가입 없이 바로 주문할 수 있어요. 비회원은 <a href="/order/lookup">주문 조회</a>에서 주문번호와 휴대폰 번호로 확인해요. <a href="/account/login?next=/cart">로그인</a>하면 주문 내역이 저장돼요.</p>
           )}

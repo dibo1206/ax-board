@@ -33,16 +33,17 @@ publicInquiryRouter.post('/products/:code/questions', async (req, res) => {
   // 로그인한 회원이면 질문을 계정에 묶는다 (답변 알림·마이페이지 '내 문의'). 비밀글은 회원만: 답변을 본인만 볼 수 있어야 해서
   const customer = await currentCustomer(req)
   const isPrivate = req.body.isPrivate === true
-  const author = text(req.body.author) || (customer ? text(customer.name) : '')
+  const author = customer ? text(customer.name).slice(0, 20) || '회원' : text(req.body.author)
   const question = text(req.body.question)
-  const contact = text(req.body.contact)
+  // 회원은 연락처 칸이 없다: [회원 이메일로도 알림]을 고르면 가입한 이메일로 답변 알림을 보낸다
+  const contact = customer ? (req.body.notifyEmail === true ? text(customer.email) : '') : text(req.body.contact)
   const errors = []
   if (isPrivate && !customer) errors.push('비밀글은 로그인한 뒤에 남길 수 있어요.')
   if (!author || author.length > 20) errors.push('이름(별명)을 20자 안으로 적어 주세요.')
   if (question.length < 5 || question.length > 500) errors.push('질문은 5~500자로 적어 주세요.')
   if (contact.length > MAX_CONTACT) errors.push(`연락처는 ${MAX_CONTACT}자 안으로 적어 주세요.`)
   else if (contact && !isPhone(contact) && !isEmail(contact)) errors.push('연락처는 전화번호나 이메일 형식으로 적어 주세요.')
-  if (contact && !req.body.privacyAgreed) errors.push('연락처를 남기려면 개인정보 수집에 동의해 주세요.')
+  if (contact && !customer && !req.body.privacyAgreed) errors.push('연락처를 남기려면 개인정보 수집에 동의해 주세요.')
   const abuse = findBanned(`${author} ${question}`, ['욕설', '광고'])
   if (abuse.length) errors.push(`쓸 수 없는 표현이 있어요: ${abuse.join(', ')}`)
   const sensitive = findSensitive(author, question)
