@@ -270,6 +270,28 @@ app.get('/api/catalog', async (req, res) => {
   res.json(result)
 })
 
+// 제철 달력 카드: 찾을 말(품목 이름)마다 판매 중 상품 수, 살 수 있는 상품의 가장 싼 값, 대표 사진 (60초 캐시)
+// 찾을 말은 상품 검색과 같은 방식(server/search.js)으로 SQL 값($n)으로만 넘긴다
+app.get('/api/season-items', async (req, res) => {
+  const terms = [...new Set(String(req.query.q ?? '').split(',').map((t) => t.trim().slice(0, 20)).filter(Boolean))].slice(0, 30)
+  res.json(await cached(`season-items:${terms.join(',')}`, 60_000, async () => {
+    const out = {}
+    for (const term of terms) {
+      const params = []
+      const filter = searchWhere(searchWords(term), params, 'all')
+      const { rows } = await pool.query(
+        `SELECT count(*)::int AS products, count(*) FILTER (WHERE x.stock > 0)::int AS live,
+                min(x.price) FILTER (WHERE x.stock > 0) AS price,
+                (array_agg(x.image_url ORDER BY (x.stock = 0), x.sold_30d DESC, x.price) FILTER (WHERE x.image_url IS NOT NULL))[1] AS image
+         FROM (${PRODUCT_SELECT} ${filter}) x`,
+        params,
+      )
+      out[term] = { products: rows[0].products, live: rows[0].live, price: rows[0].price == null ? null : Number(rows[0].price), image: rows[0].image }
+    }
+    return out
+  }))
+})
+
 app.get('/api/products/:code', async (req, res) => {
   const detail = await cached(`product:${req.params.code}`, 15_000, () => loadProductDetail(req.params.code))
   if (!detail) return res.status(404).json({ error: '상품을 찾지 못했어요.' })

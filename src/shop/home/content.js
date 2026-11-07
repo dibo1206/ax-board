@@ -36,7 +36,7 @@ export const SEASON = {
   // 판매 중인 품목의 제철 달 (search: 상품을 찾을 때 쓸 말, 없으면 name)
   items: [
     { name: '사과', months: [9, 10, 11, 12] },
-    { name: '배', months: [9, 10, 11] },
+    { name: '배', search: '신고배', months: [9, 10, 11] },
     { name: '단감', months: [10, 11] },
     { name: '감귤', months: [11, 12, 1, 2] },
     { name: '딸기', months: [12, 1, 2, 3, 4] },
@@ -46,7 +46,7 @@ export const SEASON = {
     { name: '복숭아', months: [7, 8] },
     { name: '고구마', months: [9, 10, 11] },
     { name: '감자', months: [6, 7, 8] },
-    { name: '가을무', search: '무', months: [10, 11, 12] },
+    { name: '가을무', search: '가을무', months: [10, 11, 12] },
     { name: '배추', months: [10, 11, 12] },
     { name: '절임배추', months: [11, 12] },
     { name: '대파', months: [11, 12, 1, 2] },
