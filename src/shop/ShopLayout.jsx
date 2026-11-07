@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import './shop.css'
 import { BRAND } from './home/content.js'
-import { cartCount, get, getAccount, getPolicy, thumbUrl, won } from './shared.js'
+import { cartCount, get, getAccount, getPolicy, post, thumbUrl, won } from './shared.js'
 
 // 손님 화면 공통 틀 (디자인 시안): 위쪽 YOONJU MARKET · 가운데 메뉴 · 오른쪽 검색·로그인·장바구니, 아래쪽 회사 정보·약관
 const MENU = [['상품', 'products'], ['제철 달력', 'season'], ['이야기', 'story'], ['문의·FAQ', 'faq']]
@@ -46,6 +46,12 @@ export function ShopLayout({ children }) {
     }
   }, [])
 
+  async function logout() {
+    await post('/account/logout', {}).catch(() => {})
+    window.dispatchEvent(new Event('account-change'))
+    window.location.href = '/'
+  }
+
   const shop = policy?.shop
   return (
     <div className="shop">
@@ -60,19 +66,28 @@ export function ShopLayout({ children }) {
             {MENU.map(([label, id]) => <a key={id} href={`/#${id}`} onClick={(e) => goSection(e, id)}>{label}</a>)}
             <a href="/#recommend" onClick={openQuiz}>추천받기</a>
           </nav>
-          <nav className="site-tools" aria-label="내 메뉴">
-            <HeaderSearch />
-            {!account && <a href="/account/login" className="login-link">로그인</a>}
-            {/* 마이페이지는 로그인하지 않아도 보인다 (누르면 로그인 안내). 새 답변이 있으면 숫자로 알린다 */}
-            <a href={account?.unreadAnswers ? '/account?tab=questions' : '/account'} className="my-link"
-              aria-label={account?.unreadAnswers ? `마이페이지, 새 답변 ${account.unreadAnswers}개` : account ? `${account.name}님 마이페이지` : '마이페이지'}>
-              마이페이지{account?.unreadAnswers > 0 && <span className="new-dot" aria-hidden="true">{account.unreadAnswers}</span>}
-            </a>
-            <a href="/cart" className="icon-link cart-link" aria-label={`장바구니 ${count}개`}>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2.5l2.2 10.5h10.1L20 7H6.3" /><circle cx="9" cy="19" r="1.3" /><circle cx="17" cy="19" r="1.3" /></svg>
-              {count > 0 && <span className="count-box" aria-hidden="true">{count}</span>}
-            </a>
-          </nav>
+          <HeaderSearch />
+          <div className="site-tools">
+            <nav className="tools-main" aria-label="내 메뉴">
+              <a href="/order/lookup" className="order-link">주문조회</a>
+              {/* 마이페이지는 로그인하지 않아도 보인다 (누르면 로그인 화면). 새 답변이 있으면 숫자로 알린다 */}
+              <a href={account?.unreadAnswers ? '/account?tab=questions' : '/account'} className="my-link"
+                aria-label={account?.unreadAnswers ? `마이페이지, 새 답변 ${account.unreadAnswers}개` : '마이페이지'}>
+                마이페이지{account?.unreadAnswers > 0 && <span className="new-dot" aria-hidden="true">{account.unreadAnswers}</span>}
+              </a>
+              <a href="/cart" className="icon-link cart-link" aria-label={`장바구니 ${count}개`}>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2.5l2.2 10.5h10.1L20 7H6.3" /><circle cx="9" cy="19" r="1.3" /><circle cx="17" cy="19" r="1.3" /></svg>
+                {count > 0 && <span className="count-box" aria-hidden="true">{count}</span>}
+              </a>
+            </nav>
+            <p className="tools-auth">
+              {account ? (
+                <><span>{account.name}님</span><button type="button" className="link-btn" onClick={logout}>로그아웃</button></>
+              ) : (
+                <><a href="/account/login">로그인</a><a href="/account/signup">회원가입</a></>
+              )}
+            </p>
+          </div>
         </div>
       </header>
       <main id="main">{children}</main>
@@ -176,16 +191,16 @@ function HeaderSearch() {
         onClick={() => { flushSync(() => setOpen(true)); input.current?.focus() }}>
         <SearchIcon />
       </button>
-      <form role="search" onSubmit={(e) => { e.preventDefault(); if (q) go(allUrl) }}>
-        <SearchIcon />
+      <form role="search" onSubmit={(e) => { e.preventDefault(); if (q) go(allUrl); else input.current?.focus() }}>
         <label htmlFor="head-search-input" className="sr-only">상품 검색</label>
-        <input id="head-search-input" ref={input} type="search" value={text} placeholder="상품 검색 (사과, 농축액…)" maxLength={50} autoComplete="off"
+        <input id="head-search-input" ref={input} type="search" value={text} placeholder="무엇을 찾으세요? (사과, 농축액, 김장 배추…)" maxLength={50} autoComplete="off"
           aria-controls="head-search-list" aria-expanded={show && ready}
           onChange={(e) => { setText(e.target.value); setShow(true) }} onFocus={() => setShow(true)}
           onKeyDown={(e) => {
             if (e.key === 'Escape') { setShow(false); setOpen(false) }
             if (e.key === 'ArrowDown' && ready) { e.preventDefault(); box.current?.querySelector('.head-search-list a')?.focus() }
           }} />
+        <button type="submit" className="hs-submit" aria-label="검색"><SearchIcon /></button>
       </form>
       {show && ready && (
         <div className="head-search-list" id="head-search-list" onKeyDown={onListKey}>

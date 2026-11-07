@@ -519,19 +519,7 @@ export function MyPage() {
   }
 
   if (me === undefined) return <p className="muted">불러오는 중…</p>
-  if (me === null) {
-    return (
-      <section className="box narrow login-needed">
-        <h2>마이페이지</h2>
-        <p>로그인이 필요해요. 로그인하면 주문 내역, 내 문의와 답변, 배송지를 한곳에서 볼 수 있어요.</p>
-        <div className="actions">
-          <a className="button" href="/account/login?next=/account">로그인하기</a>
-          <a className="button ghost" href="/account/signup">회원가입</a>
-        </div>
-        <p className="muted">회원가입 없이 주문하셨나요? <a href="/order/lookup">비회원 주문 조회</a></p>
-      </section>
-    )
-  }
+  if (me === null) return <LoginPage /> // 로그인하지 않았으면 로그인 화면을 그대로 (로그인하면 마이페이지로 돌아온다)
   const socialMessage = new URLSearchParams(window.location.search).get('social') // 간편 로그인 연결 결과
   return (
     <section>
