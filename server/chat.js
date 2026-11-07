@@ -54,15 +54,32 @@ export function composeJamo(text) {
 
 const QNA_HINT = `상품 페이지 아래 Q&A에 질문을 남겨 주시면 담당자가 직접 답해 드려요. 급하면 고객센터 ${SHOP.phone}로 연락해 주세요.`
 
+// 건강 질문: 드셔도 되는지는 판단하지 않는다(의료 판단·효능 표현 금지). 대신 전문가와 상담할 때 쓸 등록된 사실만 붙인다
+// 알레르기 표시, 가공품 원재료, 당·혈당을 물으면 당도 수치(판매자 측정). 사실이 없으면 붙이지 않는다
+function healthFacts(ctx) {
+  const facts = ctx.items.flatMap((i) => [
+    ...(i.allergens.length ? [`${i.name} 알레르기 표시: ${i.allergens.join(', ')}`] : []),
+    ...(i.allergen_note ? [`${i.name}: ${i.allergen_note}`] : []),
+  ])
+  const products = [ctx.current, ...ctx.products].filter((p, i, all) => p && all.findIndex((x) => x?.product_code === p.product_code) === i).slice(0, 3)
+  const asksSugar = /당뇨|혈당|당\s?(이\s?)?(올라|오르|높)|설탕|단\s?거|달아/.test(ctx.message ?? '')
+  for (const p of products) {
+    if (p.notice?.ingredients) facts.push(`${p.name} 원재료: ${p.notice.ingredients}`)
+    if (asksSugar && p.brix) facts.push(`${p.name} 당도(단맛 정도): ${p.brix}Brix — 판매자가 잰 값이에요`)
+  }
+  return facts
+}
+
 // ---------- 1. 정해진 답으로 넘기는 질문 ----------
 const ROUTES = [
   {
     kind: 'health',
-    re: /당뇨|임신|임산부|수유|(?<!이)아기|애기|유아|이유식|먹여도|혈압|혈당|복용|질환|환자|수술|아토피|신장|통풍|감기|기침|변비|소화|다이어트|체중|살\s?(빠|찌)|면역|효능|효과|건강에|몸에\s?(좋|나쁘|안\s?좋)|피부|숙취|수험생|어르신|노인|이가\s?안\s?좋|목\s?(이\s?)?(안\s?)?아|당\s?(이\s?)?(올라|오르)|(알레르기|알러지)(가|이)?\s?(있|반응)|(알레르기|알러지)\s?체질/,
+    // 관절·빈혈·틀니 등은 받은 질문에서 놓쳤던 말 (2026-11-07). "씹는 맛"처럼 식감을 묻는 말은 잡지 않고, 씹기 힘들다는 몸 상태만
+    re: /관절|빈혈|틀니|잇몸|씹기\s?(힘|어려)|잘\s?못\s?씹|삼키기|골다공|뼈\s?(에|건강)|콜레스테롤|불면|갱년기|입덧|배탈|설사|구토|천식|비염|염증|당뇨|임신|임산부|수유|(?<!이)아기|애기|유아|이유식|먹여도|혈압|혈당|복용|질환|환자|수술|아토피|신장|통풍|감기|기침|변비|소화|다이어트|체중|살\s?(빠|찌)|면역|효능|효과|건강에|몸에\s?(좋|나쁘|안\s?좋)|피부|숙취|수험생|어르신|노인|이가\s?안\s?좋|목\s?(이\s?)?(안\s?)?아|당\s?(이\s?)?(올라|오르)|(알레르기|알러지)(가|이)?\s?(있|반응)|(알레르기|알러지)\s?체질/,
     answer: (ctx) => {
-      const allergy = ctx.items.filter((i) => i.allergens.length).map((i) => `${i.name}: ${i.allergens.join(', ')}`)
-      return '건강 상태에 따라 드셔도 되는지는 제가 판단할 수 없어요. 의사·약사 같은 전문가와 꼭 상의해 주세요. '
-        + (allergy.length ? `참고로 상품 정보에 적힌 알레르기 표시는 ${allergy.join(' / ')}예요. ` : '')
+      const facts = healthFacts(ctx)
+      return '건강 상태에 따라 드셔도 되는지는 제가 판단할 수 없어요. 의사·약사 같은 전문가와 꼭 상의해 주세요.\n'
+        + (facts.length ? `상담받을 때 참고할 수 있는 상품 정보예요.\n${facts.map((f) => `- ${f}`).join('\n')}\n` : '')
         + QNA_HINT
     },
     handoff: true,
@@ -1205,12 +1222,32 @@ function answerShipDate(message, catalog, ctx) {
 // allowAi: 손님 화면은 [AI에게 물어보기]를 눌렀을 때만 true. false면 AI 대신 고를 수 있는 질문을 돌려준다
 export { loadCatalog, pickContext }
 
+// ---------- 답 정리: 손님 화면에 보여 줄 모양 (규칙 답·AI 답·저장된 답이 모두 여기를 지난다) ----------
+// 1) 한 문장에 한 줄, "1) 2)" 목록도 줄을 나눈다  2) "- " 목록 줄은 그대로
+// 3) 담당자·고객센터 안내는 빈 줄 뒤 맨 아래로  4) 손님에게 필요 없는 표시([예시], AI가 붙인 ** # ` 꾸밈)는 뺀다
+// 5) 같은 줄이 두 번 나오면 하나만. 두 번 지나가도 모양이 같다 (예전 답을 다시 쓸 때)
+const HELP_LINE = /고객센터|상품 페이지 아래 Q&A|Q&A에 (질문|적어)|담당자가 직접/
+export function tidyAnswer(text) {
+  const lines = String(text ?? '')
+    .replace(/\[예시\]\s*/g, '')
+    .replace(/\*\*|__|`/g, '')
+    .replace(/^#+\s*/gm, '')
+    .replace(/\s+(?=\d\)\s)/g, '\n')
+    .split('\n')
+    .flatMap((line) => (/^\s*- /.test(line) ? [line.trim()] : line.split(/(?<=\D[.!?])\s+(?=\S)/).map((s) => s.trim())))
+    .filter(Boolean)
+  const unique = [...new Set(lines)]
+  const main = unique.filter((l) => !HELP_LINE.test(l))
+  const help = unique.filter((l) => HELP_LINE.test(l))
+  return [main.join('\n'), help.join('\n')].filter(Boolean).join('\n\n')
+}
+
 export async function answerChat({ message: raw, history = [], productCode = null }, { useCache = true, allowAi = true } = {}) {
   // 연락처 같은 개인정보는 AI·기록 모두에 들어가기 전에 가린다
   const { text: message, masked } = maskPersonal(composeJamo(raw))
   const safeHistory = history.map((h) => ({ ...h, content: maskPersonal(composeJamo(h.content)).text }))
   const result = await answerMasked({ message, history: safeHistory, productCode }, { useCache, allowAi })
-  return { ...result, question: message, masked }
+  return { ...result, answer: tidyAnswer(result.answer), question: message, masked }
 }
 
 async function answerMasked({ message, history, productCode }, { useCache, allowAi }) {
