@@ -8,7 +8,7 @@
   --border: #dddcd7;
   --line: #22261f;
   --text: #1e221f;
-  --muted: #6b6c68;
+  --muted: #3f413d; /* 본문·설명 글자: 진한 차콜 (굵기는 그대로) */
   --accent: #2f6f3a;
   --accent-ink: #ffffff;
   --gold: #e3bd52;
@@ -151,10 +151,6 @@
 .shop .pcard-seller { font-size: 13px; color: var(--muted); }
 .shop .pcard-name { font-size: 14px; font-weight: 400; line-height: 20px; color: var(--muted); }
 .shop .pcard:hover .pcard-name { text-decoration: underline; text-underline-offset: 4px; }
-/* 카드 아래 [장바구니 담기]: 카드 링크 밖에 둔 버튼 (링크 안에 버튼을 넣지 않는다) */
-.shop .pcard-cart { width: 100%; height: 40px; margin-top: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; transition: border-color 0.2s, background-color 0.2s, color 0.2s; }
-.shop .pcard-cart:hover { border-color: var(--line); background: #fff; }
-.shop .pcard-cart.added { border-color: #2e6b3a; background: #2e6b3a; color: #fff; }
 .shop .pcard-price { font-weight: 700; font-size: 18px; }
 .shop .pcard-price small { font-weight: 400; color: var(--muted); font-size: 13px; }
 .shop .pcard-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
@@ -396,7 +392,7 @@
 
 /* ===== 장바구니: 상품 줄과 금액 요약을 카드로, 주문 버튼을 크게 ===== */
 .shop .cart li.box { gap: 16px 24px; padding: 20px 24px; margin: 0 0 12px; border: 1px solid var(--border); }
-.shop .cart ~ .totals { max-width: 420px; margin: 24px 0 0 auto; padding: 20px 24px; row-gap: 10px; background: var(--surface); border: 1px solid var(--border); }
+.shop .cart ~ .totals { max-width: none; margin: 24px 0 0; padding: 20px 24px; row-gap: 10px; background: var(--surface); border: 1px solid var(--border); }
 .shop .cart ~ .totals .sum { font-size: 20px; }
 .shop .cart ~ .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
 .shop .cart ~ .actions .button { padding: 14px 24px; font-size: 16px; }
@@ -405,8 +401,8 @@
 
 /* ===== 이동할 때 고정 헤더에 가려지지 않게: 이동한 영역의 맨 위가 헤더 바로 아래에 놓인다 ===== */
 .shop #products, .shop #season, .shop #story, .shop #faq { scroll-margin-top: 154px; }
-.shop .detail > .box { scroll-margin-top: 170px; }
-@media (max-width: 900px) { .shop #products, .shop #season, .shop #story, .shop #faq { scroll-margin-top: 106px; } .shop .detail > .box { scroll-margin-top: 122px; } }
+.shop .detail .box { scroll-margin-top: 170px; }
+@media (max-width: 900px) { .shop #products, .shop #season, .shop #story, .shop #faq { scroll-margin-top: 106px; } .shop .detail .box { scroll-margin-top: 122px; } }
 
 /* ===== 상품 상세 맨 위 [← 목록] 버튼: 밑줄 글씨 대신 작은 버튼으로 ===== */
 .shop .detail > button.link { display: inline-flex; align-items: center; gap: 6px; height: 40px; min-width: 88px; padding: 0 18px 0 14px; margin-bottom: 20px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 14px; font-weight: 500; text-decoration: none; cursor: pointer; transition: border-color 0.2s, background-color 0.2s; }
@@ -484,3 +480,239 @@
 .shop .guide h2, .shop .guide h3, .shop .guide p { margin: 0; }
 .shop .guide ol { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 4px; }
 .shop .share { margin: 4px 0; font-size: 14px; }
+
+/* ===== 상세·목록 다듬기 ===== */
+/* 1. 헤더 검색: 돋보기만 있던 것을 "상품 검색" 글씨가 있는 입력창 모양으로 */
+.shop .site-tools a.tool-search { display: inline-flex; align-items: center; gap: 10px; min-width: 420px; height: 45px; padding: 0 20px; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--muted); font-size: 16px; }
+.shop .tool-search svg { width: 20px; height: 20px; flex: none; fill: none; stroke: var(--text); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.shop .site-tools a.tool-search:hover { border-color: var(--line); color: var(--text); text-decoration: none; }
+@media (max-width: 900px) { .shop .site-tools a.tool-search { min-width: 250px; } }
+@media (max-width: 560px) { .shop .site-tools a.tool-search { min-width: 0; padding: 0 12px; } }
+
+/* 2. 상품 사진 모서리: 아주 살짝만 둥글게 */
+.shop .pcard-img, .shop .detail .gallery .hero { border-radius: 6px; }
+.shop .gallery-thumbs button, .shop .gallery-thumbs img { border-radius: 4px; }
+
+/* 3. 본문 글자는 진하게(굵기는 그대로). 가격은 따로 정한 굵기를 쓴다 */
+.shop .pcard-name, .shop .pcard-seller, .shop .detail dt, .shop .detail-list dt { color: var(--text); }
+.shop .detail dd, .shop .detail .box p, .shop .detail .box li { color: var(--text); }
+
+/* 4. 가격과 정보(박스당 …) 사이 빈틈 줄이기 */
+.shop .detail .price { margin: 0 0 5px; line-height: 32.5px; }
+.shop .detail .rating { margin-bottom: 5px; }
+.shop .detail dl { grid-template-columns: 95px 1fr; gap: 3.8px 10px; margin: 10px 0 17.5px; }
+.shop .detail .badge.soldout { margin: 2.5px 0 0; }
+
+/* 5. 사진 오른쪽 아래 장바구니 버튼: 마우스를 올리면 나타난다 (카드 바깥 형제라서 사진 높이만큼 내려서 얹는다) */
+.shop .pcard-wrap { --img-h: 320px; position: relative; }
+@media (max-width: 560px) { .shop .pcard-wrap { --img-h: 220px; } }
+.shop .quick-cart { position: absolute; right: 10px; top: calc(var(--img-h) - 55px); z-index: 2; display: grid; place-items: center; width: 45px; height: 45px; padding: 0; border: 0; border-radius: 50%; background: rgb(255 255 255 / 0.95); color: var(--text); box-shadow: 0 1px 6px rgb(0 0 0 / 0.25); cursor: pointer; transition: background-color 0.2s, color 0.2s, transform 0.2s, opacity 0.2s; }
+.shop .quick-cart svg { width: 22.5px; height: 22.5px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.shop .quick-cart:hover, .shop .quick-cart:focus-visible { background: var(--accent); color: #fff; transform: scale(1.06); }
+.shop .quick-cart.done { background: var(--accent); color: #fff; }
+@media (hover: hover) { .shop .quick-cart:not(.done) { opacity: 0; } .shop .pcard-wrap:hover .quick-cart, .shop .quick-cart:focus-visible { opacity: 1; } }
+
+/* 함께 보면 좋은 상품: 카드 아래 담기 버튼 */
+.shop .picks > li { display: flex; flex-direction: column; gap: 7.5px; }
+.shop .picks > li > .card { flex: 1; }
+.shop .pick-add { min-height: 42.5px; border: 1px solid var(--accent); border-radius: 6px; background: #fff; color: var(--accent); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; transition: background-color 0.2s, color 0.2s; }
+.shop .pick-add:hover, .shop .pick-add:focus-visible, .shop .pick-add.done { background: var(--accent); color: #fff; }
+
+/* 6. 상세 화면: 위(사진·가격·구매) → 아래(설명·보관·레시피·농가·후기·Q&A) 한 줄기로, 들어올 때 부드럽게 */
+.shop .detail-body { display: grid; gap: 20px; margin-top: 30px; }
+.shop .detail-body > .box, .shop .detail-body > .actions { margin: 0; }
+.shop .detail { animation: detail-in 0.28s ease both; }
+@keyframes detail-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .shop .detail { animation: none; } .shop .quick-cart { transition: none; } }
+
+/* ===== 구매 박스·문의 버튼 다듬기 ===== */
+.shop .detail .buy { gap: 17.5px; padding: 20px 22.5px; border: 1px solid var(--border); border-radius: 8px; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 0.04); }
+.shop .buy-row { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding-bottom: 17.5px; border-bottom: 1px solid var(--border); }
+.shop .buy .qty { gap: 12.5px; font-size: 15px; color: var(--text); }
+.shop .buy .qty select { height: 40px; min-width: 80px; margin: 0; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); font-size: 16px; cursor: pointer; }
+.shop .buy-total { display: flex; align-items: baseline; gap: 10px; }
+.shop .buy-total small { font-size: 14px; color: var(--muted); }
+.shop .detail .buy-total .price { font-size: 25px; line-height: 1.2; }
+.shop .detail .buy .actions { gap: 10px; }
+.shop .detail .buy .actions .button, .shop .detail .actions .button { justify-content: center; min-height: 55px; padding: 0 20px; border-radius: 6px; font-size: 16.2px; font-weight: 600; transition: background-color 0.2s, border-color 0.2s, color 0.2s, transform 0.1s; }
+.shop .detail .buy .actions .button.ghost { background: #fff; border: 1px solid var(--accent); color: var(--accent); font-weight: 600; }
+.shop .detail .buy .actions .button.ghost:hover { background: var(--accent); color: #fff; filter: none; }
+.shop .detail .buy .actions .button:not(.ghost):hover { filter: none; background: #255c2e; }
+.shop .detail .buy .actions .button:active { transform: translateY(1px); }
+.shop .detail .buy .success { margin: 0; padding: 10px 15px; border-radius: 6px; background: rgb(47 111 58 / 0.08); font-size: 15px; font-weight: 500; }
+.shop .detail .buy .success a { margin-left: 7.5px; font-weight: 600; }
+
+/* 문의 버튼: 구매 박스 바로 아래, 조용한 두 칸 */
+.shop .buy-aside { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; margin-top: 10px; }
+.shop .buy-aside button { display: inline-flex; align-items: center; justify-content: center; gap: 7.5px; min-height: 47.5px; padding: 0 15px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text); font: inherit; font-size: 15px; cursor: pointer; transition: border-color 0.2s, background-color 0.2s; }
+.shop .buy-aside button small { font-size: 13px; color: var(--muted); }
+.shop .buy-aside button:hover, .shop .buy-aside button:focus-visible { border-color: var(--line); background: #fff; }
+@media (max-width: 560px) { .shop .buy-row { flex-wrap: wrap; } }
+
+/* ===== 장바구니: 무료 배송 게이지·비회원 안내·함께 보면 좋은 상품 ===== */
+.shop .free-ship { display: grid; gap: 7.5px; margin: 5px 0 0; }
+.shop .free-bar { display: block; height: 10px; border-radius: 4px; background: var(--border); overflow: hidden; }
+.shop .free-bar > span { display: block; height: 100%; border-radius: 4px; background: var(--accent); transition: width 0.4s ease; }
+.shop .free-scale { display: flex; justify-content: space-between; font-size: 13px; }
+.shop .free-done { color: var(--accent); font-weight: 600; }
+.shop .guest-note { margin: 20px 0 0; padding: 12.5px 17.5px; border-radius: 6px; background: #fff; border: 1px solid var(--border); font-size: 14px; line-height: 22px; color: var(--text); }
+.shop .guest-note a { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
+.shop .cart-related { margin-top: 48px; padding-top: 27.5px; border-top: 1px solid var(--border); }
+.shop .cart-related h3 { margin: 0 0 15px; font-size: 17.5px; }
+@media (prefers-reduced-motion: reduce) { .shop .free-bar > span { transition: none; } }
+
+/* ===== 장바구니 카드 키우기: 상품 줄·금액 요약의 여백과 글자를 한 단계 크게 ===== */
+.shop .cart li.box { gap: 20px 30px; padding: 30px 35px; margin-bottom: 17.5px; font-size: 17.5px; line-height: 27.5px; border-radius: 8px; }
+.shop .cart li.box strong { font-size: 18.8px; }
+.shop .cart li.box .muted { font-size: 16px; }
+.shop .cart .qty { gap: 15px; }
+.shop .cart .qty button { width: 47.5px; height: 47.5px; font-size: 20px; border-radius: 6px; }
+.shop .cart ~ .totals { padding: 30px 35px; row-gap: 15px; font-size: 17.5px; line-height: 27.5px; border-radius: 8px; }
+.shop .cart ~ .totals .sum { font-size: 23.8px; }
+.shop .cart ~ .actions .button { padding: 17.5px 30px; font-size: 17.5px; border-radius: 6px; }
+.shop .cart ~ .actions .button:not(.ghost) { padding-inline: 55px; }
+.shop .guest-note { padding: 17.5px 22.5px; font-size: 16px; line-height: 25px; }
+.shop .cart ~ .actions .button { padding: 20px 35px; font-size: 20px; }
+.shop .cart ~ .actions .button:not(.ghost) { padding-inline: 65px; }
+
+/* 첫 화면 큰 버튼 "취향에 맞는 상품 추천받기": 한 단계 키움 */
+.shop .home-hero .btn-dark { padding: 16.2px 32.5px; font-size: 18px; gap: 12.5px; }
+
+/* 첫 화면 문구: 큰 제목~소개 문구 간격과 소개 문구~추천받기 버튼 간격을 똑같이 (둘을 합친 길이는 그대로, 문구만 아래로) */
+.shop .hero-text .lead { margin-block: 18px; }
+@media (min-width: 861px) { .shop .hero-text .lead { margin-block: 28.2px; } }
+
+/* 첫 화면 소개 문구: 바탕 박스 없이, 글자색만 더 진하게 (흰 후광은 그대로) */
+.shop .hero-text .lead { color: #111410; }
+
+/* 헤더 메뉴 줄(상품·제철 달력·이야기·문의·FAQ·추천받기) 글자 키움 */
+.shop .site-menu a { font-size: 19px; }
+
+/* 히어로: 예전의 따뜻하고 가벼운 분위기로 — 흰 그라데이션은 원래 값(옅게, 슬라이드 설정대로)으로 되돌리고,
+   읽기 쉽게 하는 건 소개 문구의 크기·굵기와 따뜻한 짙은 갈색 글자색으로 맡긴다 */
+.shop .hero-text .lead { font-size: 18.5px; line-height: 30px; font-weight: 500; color: #2b2118; }
+@media (min-width: 861px) { .shop .hero-text .lead { font-size: 20.6px; line-height: 33.8px; } }
+
+/* 히어로 흰 그라데이션: 원래 값(0.88·0.72·58%까지)과 진하게 했던 값(0.94·0.84·66%까지)의 중간. 모든 슬라이드에 적용 */
+.shop .hero-scrim { opacity: 1; background: linear-gradient(to right, rgb(246 245 242 / 0.91) 0%, rgb(246 245 242 / 0.78) 33%, rgb(246 245 242 / 0) 62%); }
+@media (max-width: 860px) { .shop .hero-scrim { background: linear-gradient(to right, rgb(246 245 242 / 0.9) 0%, rgb(246 245 242 / 0.76) 60%, rgb(246 245 242 / 0.4) 100%); } }
+
+/* 히어로 왼쪽: 회색빛 흰색 대신 따뜻한 크림색을 덮고, 불투명도를 낮춰 뒤의 흐린 사과 사진 색(붉은·노란 기운)이 비치게 한다 */
+.shop .hero-scrim { background: linear-gradient(to right, rgb(255 241 221 / 0.8) 0%, rgb(255 238 214 / 0.62) 34%, rgb(255 236 210 / 0) 64%); }
+@media (max-width: 860px) { .shop .hero-scrim { background: linear-gradient(to right, rgb(255 241 221 / 0.8) 0%, rgb(255 238 214 / 0.66) 60%, rgb(255 236 210 / 0.36) 100%); } }
+
+/* 히어로 글씨 주변의 흰 후광(아우라) 제거 */
+.shop .hero-text .lead, .shop .hero-text .eyebrow, .shop .hero-text .display { text-shadow: none; }
+
+/* 히어로 큰 제목 "이번 달, 식탁에 올릴 과일": 조금 키움 (PC 1.2배 → 1.35배, 모바일 1.12배) */
+@media (min-width: 861px) { .shop .hero-text .display { font-size: calc(var(--hf) * 1.35); } }
+@media (max-width: 860px) { .shop .hero-text .display { font-size: calc(round(clamp(24px, min(2.88vw, calc(3.68vh + max(0px, 80vh - 880px) * 0.12)), 52px), 2.5px) * 1.12); } }
+
+/* 헤더 오른쪽 "로그인"(로그인 후에는 "○○님") 글씨 키움 */
+.shop .site-tools a:not(.tool-search):not(.icon-link) { font-size: 17px; }
+
+/* 카드 사진 위 알약(당도·제철) 채도 높임 */
+.shop .ptag { background: #5a7080; }
+.shop .ptag.brix-high { background: #f25c05; }
+.shop .ptag.brix-mid { background: #16a043; }
+.shop .ptag.ptag-season { background: #e09b00; }
+
+/* 카드 사진 위 알약: 채도를 한 번 더 높임 */
+.shop .ptag { background: #1f7ae0; }
+.shop .ptag.brix-high { background: #ff4d00; }
+.shop .ptag.brix-mid { background: #00b341; }
+.shop .ptag.ptag-season { background: #ffb000; color: #3a2800; }
+
+/* 상품 사진 모서리 둥글기 줄임 (6px → 3px, 썸네일 4px → 2px) */
+.shop .pcard-img, .shop .detail .gallery .hero { border-radius: 3px; }
+.shop .gallery-thumbs button, .shop .gallery-thumbs img { border-radius: 2px; }
+
+/* 카드 사진 위 알약: 채도를 조금 낮춤 (직전 값과 그 전 값의 중간) */
+.shop .ptag { background: #3d75b0; }
+.shop .ptag.brix-high { background: #f85404; }
+.shop .ptag.brix-mid { background: #08a93f; }
+.shop .ptag.ptag-season { background: #f0a500; color: #3a2800; }
+
+/* 카드 사진 위 알약: 채도를 더 낮춤 */
+.shop .ptag { background: #4f6f8f; }
+.shop .ptag.brix-high { background: #e8651a; }
+.shop .ptag.brix-mid { background: #2e9a54; }
+.shop .ptag.ptag-season { background: #e0a21a; color: #3a2800; }
+
+/* 카드 사진 위 알약(당도·제철) 글씨 키움: 9.6px → 11.5px, 알약도 글씨에 맞춰 약간 키움 */
+.shop .ptag, .shop .pcard-flag { font-size: 14.4px; line-height: 20px; padding: 2.5px 8.8px; }
+
+/* 알약 글씨 살짝 줄임: 11.5px → 10.8px */
+.shop .ptag, .shop .pcard-flag { font-size: 13.5px; }
+
+/* 상품 사진 아래 글자(판매자·상품명·가격·별점) 한 단계 키움 */
+.shop .pcard-seller { font-size: 14.8px; }
+.shop .pcard-name { font-size: 16.5px; line-height: 23.8px; }
+.shop .pcard-price { font-size: 20.5px; }
+.shop .pcard-price small { font-size: 14.8px; }
+.shop .pcard-meta { font-size: 14.8px; }
+
+/* "고객사 직영" 줄을 사진에서 조금 아래로 */
+.shop .pcard-seller { margin-top: 5px; }
+
+/* 판매자·상품명·가격 세 줄을 조금 위로 (사진과의 간격 되돌림) */
+.shop .pcard-seller { margin-top: 0; }
+
+/* 상품 상세 문의 버튼(상품 문의하기·기업 구매 문의): 흰 바탕에 또렷한 테두리·글씨로 잘 보이게 */
+.shop .buy-aside button { background: #fff; border: 1px solid #b9b8b2; color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 0.06); }
+.shop .buy-aside button:hover, .shop .buy-aside button:focus-visible { background: #fff; border-color: var(--line); box-shadow: 0 2px 6px rgb(0 0 0 / 0.1); }
+
+/* ===== 로그인 화면: 로고 → 큼직한 둥근 입력칸 → 넓은 초록 버튼 → 아래 링크 ===== */
+.shop .login-card { max-width: 500px; margin: 30px auto 60px; padding: 45px 40px 35px; border: 1px solid var(--border); border-radius: 14px; background: #fff; gap: 15px; box-shadow: 0 2px 14px rgb(0 0 0 / 0.05); }
+.shop .login-logo { display: flex; justify-content: center; margin-bottom: 5px; }
+.shop .login-logo .logo img { width: 250px; height: 43.8px; }
+.shop .login-title { margin: 0 0 7.5px; text-align: center; font-size: 18.8px; font-weight: 600; color: var(--muted); letter-spacing: 1px; }
+.shop .login-card input { height: 57.5px; padding: 0 20px; border: 1px solid var(--border); border-radius: 10px; background: #fff; font-size: 17px; transition: border-color 0.2s, box-shadow 0.2s; }
+.shop .login-card input::placeholder { color: #8b8c87; }
+.shop .login-card input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgb(47 111 58 / 0.15); }
+.shop .login-submit { justify-content: center; height: 57.5px; margin-top: 5px; border-radius: 10px; background: var(--accent); color: #fff; font-size: 17.5px; font-weight: 600; }
+.shop .login-links { display: flex; justify-content: space-between; margin-top: 7.5px; font-size: 15px; }
+.shop .login-links a { color: var(--text); text-underline-offset: 3.8px; }
+.shop .login-guest { margin: 10px 0 0; padding-top: 17.5px; border-top: 1px solid var(--border); text-align: center; font-size: 14px; color: var(--muted); }
+.shop .login-guest a { color: var(--accent); font-weight: 600; }
+
+/* 로그인 아래 "회원가입"·"비밀번호 찾기" 글씨 키움 */
+.shop .login-links { font-size: 17.5px; }
+.shop .login-links { font-size: 16.2px; }
+
+/* 로그인 버튼 채도 높임 (#2f6f3a → #25913a) */
+.shop .login-submit { background: #25913a; }
+.shop .login-submit:hover { background: #1f7d32; filter: none; }
+.shop .login-submit { background: #2a8040; font-size: 19.4px; }
+.shop .login-submit:hover { background: #236e36; }
+
+/* 히어로 아래 카테고리 카드 네 개 글씨 키움 (11.2~14.4px → 13~16.5px) */
+
+/* 상품 목록 위 카테고리 탭(전체·생과일·선물세트·농축액·가공식품·채소) 글씨 키움 (12px → 14px) */
+.shop .text-tabs button { font-size: 17.5px; }
+
+/* "이달의 상품" 제목을 옆 검색칸보다 조금 위로 */
+.shop #products-title { position: relative; top: -7.5px; }
+
+/* 당도 알약 → 동그라미: 위에 "당도", 아래에 숫자 */
+.shop .ptag.ptag-brix { display: inline-grid; align-content: center; justify-items: center; gap: 0; width: 52.5px; height: 52.5px; padding: 0; border-radius: 50%; line-height: 1.1; text-align: center; box-shadow: 0 1px 4px rgb(0 0 0 / 0.2); }
+.shop .ptag-brix small { font-size: 12px; font-weight: 500; opacity: 0.95; }
+.shop .ptag-brix b { font-size: 16.9px; font-weight: 700; letter-spacing: -0.3px; }
+
+/* 제철·품절도 같은 크기(42px)의 동그라미로 */
+.shop .ptag.ptag-season, .shop .pcard-flag { display: inline-grid; place-items: center; width: 52.5px; height: 52.5px; padding: 0; border-radius: 50%; font-size: 15px; font-weight: 600; line-height: 1; letter-spacing: -0.2px; text-align: center; box-shadow: 0 1px 4px rgb(0 0 0 / 0.2); }
+
+/* 제철 원: 카레빛 겨자색 대신 채도·밝기를 높인 선명한 노랑 */
+.shop .ptag.ptag-season { background: #ffd21f; color: #4a3300; }
+.shop .ptag.ptag-season { background: #f6d44a; }
+.shop .ptag.ptag-season { color: #3a2106; font-weight: 700; }
+
+/* 카테고리 카드 글씨(최종) */
+.shop .cat-name { font-size: round(clamp(15px, 1.75vw, 19.5px), 0.5px); }
+
+/* 예약 판매 표시는 글이 길어 동그라미 대신 원래 모양 */
+.shop .pcard-flag.preorder { display: block; width: auto; height: auto; padding: 3px 9px; border-radius: 3px; font-size: 12px; line-height: 16px; box-shadow: none; }
+
+/* "수확 ○일째": 사진 위 알약 대신 사진 아래 글자로 (별점 줄 앞) */
+.shop .pcard-harvest { color: var(--muted); font-size: 14.5px; }
+.shop .pcard-harvest + .rating::before { content: "·"; margin-right: 6px; color: var(--muted); }

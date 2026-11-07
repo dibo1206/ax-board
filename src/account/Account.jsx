@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from '../admin/api.js'
 import { OrderDetail } from '../shop/Orders.jsx'
+import { Logo } from '../shop/ShopLayout.jsx'
 import { get, loadScript, ORDER_STATUS, post, send, when, won } from '../shop/shared.js'
 
 // 손님 회원: 로그인 · 가입 · 비밀번호 찾기 · 마이페이지(주문 내역 · 내 정보·배송지 · 비밀번호 · 탈퇴)
@@ -70,14 +71,19 @@ export function LoginPage() {
   }
 
   return (
-    <form className="box form narrow" onSubmit={submit}>
-      <h2>로그인</h2>
-      <label>이메일 또는 판매자 아이디<input value={email} onChange={(e) => setEmail(e.target.value.trim())} autoComplete="username" autoCapitalize="none" /></label>
-      <label>비밀번호<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></label>
-      {needOtp && <label>인증 앱 코드 (6자리)<input value={otp} onChange={(e) => setOtp(e.target.value)} inputMode="numeric" autoComplete="one-time-code" /></label>}
+    <form className="box form narrow login-card" onSubmit={submit}>
+      <div className="login-logo"><Logo /></div>
+      <h2 className="sr-only">로그인</h2>
+      <label><span className="sr-only">이메일 또는 판매자 아이디</span><input value={email} onChange={(e) => setEmail(e.target.value.trim())} placeholder="이메일 또는 판매자 아이디" autoComplete="username" autoCapitalize="none" /></label>
+      <label><span className="sr-only">비밀번호</span><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호" autoComplete="current-password" /></label>
+      {needOtp && <label><span className="sr-only">인증 앱 코드 (6자리)</span><input value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="인증 앱 코드 (6자리)" inputMode="numeric" autoComplete="one-time-code" /></label>}
       <Errors list={errors} />
-      <button type="submit" className="button">로그인</button>
-      <p className="muted"><a href="/account/signup">회원가입</a> · <a href="/account/find">비밀번호 찾기</a> · 회원가입 없이도 주문할 수 있어요</p>
+      <button type="submit" className="button login-submit">로그인</button>
+      <div className="login-links">
+        <a href="/account/signup">회원가입</a>
+        <a href="/account/find">비밀번호 찾기</a>
+      </div>
+      <p className="login-guest">회원가입 없이도 주문할 수 있어요 · <a href="/order/lookup">비회원 주문 조회</a></p>
       <SocialButtons next={query.get('next') ?? '/account'} />
     </form>
   )

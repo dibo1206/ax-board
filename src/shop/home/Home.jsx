@@ -93,55 +93,68 @@ export function CategoryRows({ groups, onPick }) {
   )
 }
 
-// 옵션 상품(5kg·10kg …)은 판매 중 옵션의 가장 낮은 가격을 "~부터"로, 100g당 가격도 그 옵션으로. 모든 옵션이 품절이면 품절
-// 목록에서 바로 장바구니에 담기: 옵션 없는 상품은 1개를 바로 담고, 옵션 상품은 상세에서 옵션을 고르게 연다. 품절이면 버튼 없음
-function CardCart({ p, onOpen }) {
-  const [added, setAdded] = useState(false)
+// 사진 오른쪽 아래 장바구니 버튼(마우스를 올리면 나타남): 상세로 들어가기 전에 1개를 바로 담는다 (링크 안에 버튼을 넣을 수 없어 카드 바깥 형제로 둔다)
+// 옵션 상품은 옵션을 골라야 담을 수 있어서, 이 버튼이 상세로 보내 준다
+function QuickCart({ p, onOpen }) {
+  const [done, setDone] = useState(false)
   useEffect(() => {
-    if (!added) return undefined
-    const timer = setTimeout(() => setAdded(false), 1800)
+    if (!done) return undefined
+    const timer = setTimeout(() => setDone(false), 1600)
     return () => clearTimeout(timer)
-  }, [added])
+  }, [done])
   if (p.sold_out) return null
-  if (p.has_options) {
-    return <button type="button" className="pcard-cart" onClick={() => onOpen(p.product_code)}>옵션 고르고 담기</button>
-  }
+  const name = p.name.replace(/\[예시\]\s*/g, '')
+  const pickOption = p.has_options
   return (
-    <button type="button" className={`pcard-cart${added ? ' added' : ''}`} aria-live="polite"
-      onClick={() => { addToCart(p.product_code, 1, null); setAdded(true) }}>
-      {added ? '장바구니에 담았어요' : '장바구니 담기'}
+    <button type="button" className={`quick-cart${done ? ' done' : ''}`}
+      aria-label={pickOption ? `${name} 옵션 고르기` : done ? `${name} 장바구니에 담았어요` : `${name} 장바구니 담기`}
+      onClick={() => { if (pickOption) onOpen(p.product_code); else { addToCart(p.product_code, 1); setDone(true) } }}>
+      {done
+        ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
+        : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2.5l2.2 10.5h10.1L20 7H6.3" /><circle cx="9" cy="19" r="1.3" /><circle cx="17" cy="19" r="1.3" /></svg>}
+      <span className="sr-only" role="status">{done ? '담았어요' : ''}</span>
     </button>
   )
 }
 
+// 옵션 상품(5kg·10kg …)은 판매 중 옵션의 가장 낮은 가격을 "~부터"로, 100g당 가격도 그 옵션으로. 모든 옵션이 품절이면 품절
 function ProductCard({ p, onOpen }) {
   const cheapest = cheapestOption(p)
   const unit = cheapest ? unitPrice(cheapest.price, cheapest.name) : unitPrice(p.price, p.unit)
   return (
-    <a href={`/p/${encodeURIComponent(p.product_code)}`} className={`pcard${p.sold_out ? ' soldout' : ''}`} onClick={(e) => { e.preventDefault(); onOpen(p.product_code) }}>
-      <span className="pcard-img">
-        {p.image_url
-          ? <img src={thumbUrl(p.image_url)} alt="" loading="lazy" width="400" height="400" />
-          : <span className="photo-need"><span>사진 준비 중</span></span>}
-        <span className="pcard-tags">
-          {/* 등급은 품목·품종별 공식 기준으로 서버가 정한다. 기준이 없거나 보통 당도면 측정값만 */}
-          {p.show_brix && p.brix && !p.info_disputed && <span className={`ptag ${p.brix_rank === 3 ? 'brix-high' : p.brix_rank === 2 ? 'brix-mid' : ''}`}>{p.brix_rank >= 2 ? `${p.brix_grade} ${Number(p.brix)}°Bx` : `당도 ${Number(p.brix)}°Bx`}</span>}
-          {p.harvest_days != null && p.harvest_days <= 30 && <span className="ptag">수확 {p.harvest_days}일째</span>}
-          {p.tags?.includes('season') && <span className="ptag ptag-season">제철</span>}
+    <div className="pcard-wrap">
+      <a href={`/p/${encodeURIComponent(p.product_code)}`} className={`pcard${p.sold_out ? ' soldout' : ''}`} onClick={(e) => { e.preventDefault(); onOpen(p.product_code) }}>
+        <span className="pcard-img">
+          {p.image_url
+            ? <img src={thumbUrl(p.image_url)} alt="" loading="lazy" width="400" height="400" />
+            : <span className="photo-need"><span>사진 준비 중</span></span>}
+          <span className="pcard-tags">
+            {/* 등급은 품목·품종별 공식 기준으로 서버가 정한다. 기준이 없거나 보통 당도면 측정값만. 동그라미에는 숫자만 넣고, 등급은 마우스 올림·스크린리더 글로 알린다 */}
+            {p.show_brix && p.brix && !p.info_disputed && (
+              <span className={`ptag ptag-brix ${p.brix_rank === 3 ? 'brix-high' : p.brix_rank === 2 ? 'brix-mid' : ''}`}
+                title={p.brix_rank >= 2 ? `${p.brix_grade} ${Number(p.brix)}°Bx` : `당도 ${Number(p.brix)}°Bx`}
+                aria-label={p.brix_rank >= 2 ? `${p.brix_grade} ${Number(p.brix)}°Bx` : `당도 ${Number(p.brix)}°Bx`}>
+                <small aria-hidden="true">당도</small><b aria-hidden="true">{Number(p.brix)}</b>
+              </span>
+            )}
+            {p.tags?.includes('season') && <span className="ptag ptag-season">제철</span>}
+          </span>
+          {p.sold_out && <span className="pcard-flag">품절</span>}
+          {p.preorder && !p.sold_out && <span className="pcard-flag preorder">예약 · {shipDay(p.ship_from)}부터</span>}
         </span>
-        {p.sold_out && <span className="pcard-flag">품절</span>}
-        {p.preorder && !p.sold_out && <span className="pcard-flag preorder">예약 · {shipDay(p.ship_from)}부터</span>}
-      </span>
-      <span className="pcard-seller">{p.seller_name.replace(/\[예시\]\s*/g, '')}</span>
-      <strong className="pcard-name">{p.name}</strong>
-      {p.has_options
-        ? <span className="pcard-price">{won(p.price)}부터 {p.options.length > 0 && <small>/ 옵션 {p.options.length}개</small>}</span>
-        : <span className="pcard-price">{won(p.price)} <small>/ {p.unit}</small></span>}
-      {unit && <span className="pcard-unit">{unit}{cheapest && p.options.length > 1 && ` (${cheapest.name})`}</span>}
-      <span className="pcard-meta">
-        <RatingBadge rating={p.rating} count={p.review_count} />
-      </span>
-    </a>
+        <span className="pcard-seller">{p.seller_name.replace(/\[예시\]\s*/g, '')}</span>
+        <strong className="pcard-name">{p.name}</strong>
+        {p.has_options
+          ? <span className="pcard-price">{won(p.price)}부터 {p.options.length > 0 && <small>/ 옵션 {p.options.length}개</small>}</span>
+          : <span className="pcard-price">{won(p.price)} <small>/ {p.unit}</small></span>}
+        {unit && <span className="pcard-unit">{unit}{cheapest && p.options.length > 1 && ` (${cheapest.name})`}</span>}
+        <span className="pcard-meta">
+          {p.harvest_days != null && p.harvest_days <= 30 && <span className="pcard-harvest">수확 {p.harvest_days}일째</span>}
+          <RatingBadge rating={p.rating} count={p.review_count} />
+        </span>
+      </a>
+      <QuickCart p={p} onOpen={onOpen} />
+    </div>
   )
 }
 
@@ -177,7 +190,7 @@ export function ProductSection({ groups, loc, typed, setTyped, list, sorts, onCh
         <>
           {loc.q && <p className="muted result-count">'{loc.q}' 검색 결과 {list.total}개</p>}
           <ul className="pgrid">
-            {list.items.map((p) => <li key={p.product_code}><ProductCard p={p} onOpen={onOpen} /><CardCart p={p} onOpen={onOpen} /></li>)}
+            {list.items.map((p) => <li key={p.product_code}><ProductCard p={p} onOpen={onOpen} /></li>)}
           </ul>
           {list.page < list.pages && (
             <button type="button" className="btn-line more" onClick={onMore} disabled={loadingMore}>
@@ -201,7 +214,7 @@ export function SeasonCalendar({ onPick }) {
         <Photo photo={SEASON.photo} className="season-photo" />
         <div className="season-body">
           <h2 id="season-title" className="display-sm">제철 달력</h2>
-          <p className="lead">언제 가장 맛있는지 한눈에. 지금은 {now}月입니다.</p>
+          <p className="lead">언제 가장 맛있는지 한눈에. 지금은 {now}월입니다.</p>
           <div className="season-chart">
             <div className="season-row season-months" aria-hidden="true">
               <span />
