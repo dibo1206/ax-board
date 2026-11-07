@@ -817,19 +817,90 @@
 }
 @media (max-width: 480px) { .shop .site-tools .order-link { display: none; } }
 
-/* 제철 달력: 1~12월 버튼 → 그 달 제철 품목 */
-.shop .season-pick-months { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 6px; margin-top: 22px; }
-.shop .season-pick-months button { height: 40px; padding: 0; border: 1px solid var(--border); border-radius: 999px; background: #fff; color: var(--text); font: inherit; font-size: 14px; cursor: pointer; }
-.shop .season-pick-months button:hover { border-color: var(--text); }
-.shop .season-pick-months button.now { box-shadow: inset 0 -3px 0 var(--gold); }
-.shop .season-pick-months button.on { border-color: var(--accent); background: var(--accent); color: #fff; font-weight: 600; }
-.shop .season-picked { margin-top: 20px; }
-.shop .season-picked h3 { margin: 0 0 10px; font-family: var(--display); font-size: 19px; }
-.shop .season-picked h3 span { margin-left: 4px; color: var(--muted); font-size: 15px; font-weight: 400; }
-.shop .season-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.shop .season-chips button { display: inline-flex; align-items: baseline; gap: 6px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 999px; background: #fff; color: var(--text); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
-.shop .season-chips button:hover { border-color: var(--accent); color: var(--accent); }
-.shop .season-chips small { color: var(--muted); font-size: 12px; font-weight: 400; }
-.shop .season-chart .season-row { cursor: default; }
-.shop .season-months .pick { color: var(--accent); font-weight: 700; }
-@media (max-width: 640px) { .shop .season-pick-months { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+/* 제철 달력 (사진 카드형, 2026-11-07): 계절 색 달 띠 + 상품 사진 카드 */
+.shop .season-section { --s-spring: #8db04a; --s-summer: #2f8a5b; --s-autumn: #d0782a; --s-winter: #4f6f99; }
+.shop .season2 { display: flex; flex-direction: column; gap: 18px; }
+.shop .season2-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.shop .season2-head .lead { margin: 6px 0 0; }
+.shop .season2-arrows { display: flex; gap: 8px; }
+.shop .season2-arrows button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: #fff; color: var(--text); cursor: pointer; }
+.shop .season2-arrows button:hover { border-color: var(--text); }
+.shop .season2-arrows svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+.shop .season2-strip { display: grid; grid-template-columns: repeat(12, minmax(64px, 1fr)); gap: 8px; overflow-x: auto; padding: 4px 2px 12px; scrollbar-width: none; scroll-snap-type: x proximity; }
+.shop .season2-strip button { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px 12px; border: 1px solid var(--border); border-radius: 16px; background: #fff; color: var(--text); font: inherit; cursor: pointer; scroll-snap-align: center; transition: transform 0.15s, border-color 0.15s; }
+.shop .season2-strip button::before { content: ''; position: absolute; top: 0; left: 18%; right: 18%; height: 3px; border-radius: 0 0 3px 3px; background: var(--s-color); }
+.shop .season2-strip .s2-spring { --s-color: var(--s-spring); }
+.shop .season2-strip .s2-summer { --s-color: var(--s-summer); }
+.shop .season2-strip .s2-autumn { --s-color: var(--s-autumn); }
+.shop .season2-strip .s2-winter { --s-color: var(--s-winter); }
+.shop .season2-strip button small { color: var(--s-color); font-size: 11px; font-weight: 600; }
+.shop .season2-strip button b { font-size: 17px; font-weight: 600; }
+.shop .season2-strip button i { position: absolute; bottom: -9px; left: 50%; transform: translateX(-50%); padding: 1px 7px; border-radius: 999px; background: var(--gold); color: #3a2800; font-size: 11px; font-style: normal; font-weight: 700; white-space: nowrap; }
+.shop .season2-strip button:hover { border-color: var(--s-color); transform: translateY(-1px); }
+.shop .season2-strip button.on { border-color: var(--s-color); background: var(--s-color); color: #fff; }
+.shop .season2-strip button.on small { color: rgb(255 255 255 / 0.85); }
+.shop .season2-strip button.on::before { display: none; }
+
+.shop .season2-title { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; }
+.shop .season2-title h3 { margin: 0; font-family: var(--display); font-size: 22px; font-weight: 600; }
+.shop .season2-title h3 span { margin-left: 6px; color: var(--muted); font-size: 16px; font-weight: 400; }
+.shop .season2-legend { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+.shop .season2-legend i { display: inline-block; width: 10px; height: 10px; margin-left: 8px; border-radius: 50%; }
+.shop .st-new { background: #7aa83a; }
+.shop .st-peak, .shop .st-only { background: #d9534a; }
+.shop .st-last { background: #b8892d; }
+
+/* 카드는 한 줄에 4개만 보이고 나머지는 옆으로 넘긴다 (태블릿 3개, 휴대폰 2개 조금 넘게) */
+.shop .season2-rail { position: relative; }
+.shop .season2-cards { --cards: 4; --gap: 16px; display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - (var(--cards) - 1) * var(--gap)) / var(--cards));
+  gap: var(--gap); margin: 0; padding: 4px 2px 14px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 2px; overscroll-behavior-x: contain; list-style: none; scrollbar-width: none; }
+.shop .season2-cards::-webkit-scrollbar { display: none; }
+.shop .season2-cards > li { scroll-snap-align: start; }
+.shop .rail-btn { position: absolute; top: 38%; z-index: 2; display: grid; place-items: center; width: 46px; height: 46px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: #fff; color: var(--text); cursor: pointer; box-shadow: 0 4px 14px rgb(30 34 31 / 0.16); transform: translateY(-50%); }
+.shop .rail-btn.prev { left: -18px; }
+.shop .rail-btn.next { right: -18px; }
+.shop .rail-btn:hover { border-color: var(--text); }
+.shop .rail-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 1100px) { .shop .season2-cards { --cards: 3; } }
+.shop .season2-card { display: flex; flex-direction: column; width: 100%; height: 100%; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: #fff; color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; }
+.shop .season2-card:hover { transform: translateY(-3px); border-color: #c9c6bc; box-shadow: 0 10px 24px rgb(30 34 31 / 0.1); }
+.shop .season2-card:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.shop .s2-photo { position: relative; display: block; aspect-ratio: 4 / 3; background: #efe7d4; }
+.shop .s2-photo img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s; }
+.shop .season2-card:hover .s2-photo img { transform: scale(1.04); }
+.shop .s2-photo-empty { display: grid; place-items: center; height: 100%; color: var(--muted); font-size: 18px; font-weight: 600; }
+.shop .s2-stage { position: absolute; top: 10px; left: 10px; padding: 4px 10px; border-radius: 999px; color: #fff; font-size: 12px; font-style: normal; font-weight: 700; box-shadow: 0 1px 4px rgb(0 0 0 / 0.2); }
+.shop .s2-sold { position: absolute; top: 10px; right: 10px; padding: 4px 10px; border-radius: 999px; background: rgb(30 34 31 / 0.82); color: #fff; font-size: 12px; font-style: normal; font-weight: 600; }
+.shop .s2-body { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 16px; flex: 1; }
+.shop .s2-body strong { font-family: var(--display); font-size: 18px; font-weight: 700; }
+.shop .s2-range { color: var(--muted); font-size: 13px; }
+.shop .s2-bar { display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px; margin: 2px 0 4px; }
+.shop .s2-bar i { height: 6px; border-radius: 2px; background: #ebe8df; }
+.shop .s2-bar i.in { background: var(--accent); opacity: 0.55; }
+.shop .s2-bar i.cur { outline: 2px solid var(--text); outline-offset: 1px; }
+.shop .s2-bar i.in.cur { opacity: 1; }
+.shop .s2-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: auto; font-size: 13px; color: var(--muted); }
+.shop .s2-foot b { color: var(--text); font-size: 16px; font-weight: 700; }
+.shop .season2-empty { margin: 0; }
+
+.shop .season2-coming { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; padding: 14px 16px; border: 1px dashed var(--border); border-radius: 14px; background: rgb(255 255 255 / 0.6); font-size: 14px; }
+.shop .season2-coming span { margin-right: 4px; color: var(--muted); font-weight: 600; }
+.shop .season2-coming button { padding: 5px 12px; border: 1px solid var(--border); border-radius: 999px; background: #fff; color: var(--text); font: inherit; font-size: 14px; cursor: pointer; }
+.shop .season2-coming button:hover { border-color: var(--accent); color: var(--accent); }
+
+@media (max-width: 640px) {
+  .shop .season2-head { align-items: center; }
+  .shop .season2-arrows button { width: 38px; height: 38px; }
+  .shop .season2-strip { grid-template-columns: repeat(12, 64px); }
+  .shop .season2-cards { --cards: 2.2; --gap: 10px; }
+  .shop .rail-btn { display: none; }
+  .shop .s2-body { padding: 10px 12px 12px; }
+  .shop .s2-body strong { font-size: 16px; }
+  .shop .s2-stage { top: 8px; left: 8px; padding: 3px 8px; font-size: 11px; }
+  .shop .season2-legend { display: none; }
+  .shop .s2-foot { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .shop .s2-foot b { font-size: 15px; white-space: nowrap; }
+}
+.shop .season2-strip { position: relative; }
+@media (prefers-reduced-motion: reduce) { .shop .season2-card, .shop .s2-photo img, .shop .season2-strip button { transition: none; } }

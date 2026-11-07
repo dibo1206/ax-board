@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Quiz } from '../../Recommend.jsx'
 import { RatingBadge } from '../Reviews.jsx'
-import { addToCart, cheapestOption, shipDay, thumbUrl, unitPrice, won } from '../shared.js'
+import { addToCart, cheapestOption, get, shipDay, thumbUrl, unitPrice, won } from '../shared.js'
 import { FAQ, GROUP_PHOTOS, HERO, SEASON, STORY } from './content.js'
 
 // 첫 화면 (디자인 시안): 큰 제목 → 카테고리 → 상품 → 제철 달력 → 이야기 → 자주 묻는 질문
@@ -205,60 +205,150 @@ export function ProductSection({ groups, loc, typed, setTyped, list, sorts, onCh
   )
 }
 
-// 제철 달력: 1~12월을 누르면 그 달에 맛있는 품목을 보여 준다 (처음엔 이번 달). 아래 막대는 그 품목들의 제철 기간.
-// 품목을 누르면 그 이름으로 상품을 찾는다
+// 제철 달력 (사진 카드형): 달 띠에서 달을 고르면 그 달 제철 품목을 실제 상품 사진 카드로 보여 준다.
+// 카드: 대표 사진 · 막 나왔어요/지금 한창/끝물 · 가장 싼 값 · 상품 수 · 열두 달 제철 막대. 누르면 그 품목 상품을 찾는다.
+// 아래 줄에는 다음 달에 새로 나오는 품목. 달 띠는 옆으로 넘기고, 화살표·좌우 키로도 바꾼다
+const SEASON_NAME = (m) => (m <= 2 || m === 12 ? 'winter' : m <= 5 ? 'spring' : m <= 8 ? 'summer' : 'autumn')
+const SEASON_LABEL = { spring: '봄', summer: '여름', autumn: '가을', winter: '겨울' }
+const nextMonth = (m) => (m === 12 ? 1 : m + 1)
+const prevMonth = (m) => (m === 1 ? 12 : m - 1)
+
+// 제철 기간 안에서 고른 달이 어디쯤인지: 막 나왔어요 / 지금 한창 / 끝물 (한 달뿐이면 이달만)
+function seasonStage(list, month) {
+  if (!list.includes(month)) return null
+  if (list.length >= 12) return { key: 'peak', text: '사계절' }
+  let start = month
+  while (list.includes(prevMonth(start)) && start !== nextMonth(month)) start = prevMonth(start)
+  let end = month
+  while (list.includes(nextMonth(end)) && end !== prevMonth(month)) end = nextMonth(end)
+  if (start === end) return { key: 'only', text: '이달만 나와요' }
+  if (month === start) return { key: 'new', text: '막 나왔어요' }
+  if (month === end) return { key: 'last', text: '끝물이에요' }
+  return { key: 'peak', text: '지금 한창' }
+}
+
 export function SeasonCalendar({ onPick }) {
   const [now] = useState(() => new Date().getMonth() + 1) // 이번 달 (처음 그릴 때 한 번 정한다)
   const [month, setMonth] = useState(now)
+  const [info, setInfo] = useState({}) // 찾을 말 → { products, live, price, image }
+  const strip = useRef(null)
   const months = Array.from({ length: 12 }, (_, i) => i + 1)
-  const picked = SEASON.items.filter((item) => item.months.includes(month))
+  const term = (item) => item.search ?? item.name
+
+  useEffect(() => {
+    get(`/season-items?${new URLSearchParams({ q: SEASON.items.map(term).join(',') })}`).then(setInfo).catch(() => {})
+  }, [])
+
+  // 고른 달 버튼이 띠 가운데 오도록 (휴대폰에서 옆으로 넘긴 상태여도)
+  const rail = useRef(null)
+  const [edge, setEdge] = useState({ left: false, right: false })
+  const checkEdge = () => {
+    const box = rail.current
+    if (!box) return
+    setEdge({ left: box.scrollLeft > 4, right: box.scrollLeft + box.clientWidth < box.scrollWidth - 4 })
+  }
+  const slide = (dir) => {
+    const box = rail.current
+    if (box) box.scrollBy({ left: dir * box.clientWidth * 0.9, behavior: 'smooth' })
+  }
+  // 달을 바꾸거나 상품 정보가 들어오면 카드 줄을 처음으로 돌리고 화살표를 다시 정한다
+  useEffect(() => {
+    if (rail.current) rail.current.scrollLeft = 0
+    const timer = setTimeout(checkEdge, 50)
+    window.addEventListener('resize', checkEdge)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('resize', checkEdge)
+    }
+  }, [month, info])
+
+  const firstScroll = useRef(true)
+  useEffect(() => {
+    const box = strip.current
+    const btn = box?.querySelector(`[data-month="${month}"]`)
+    // 처음에는 바로(페이지 스크롤과 겹쳐도 끊기지 않게), 그다음부터는 부드럽게
+    if (box && btn) box.scrollTo({ left: btn.offsetLeft - box.clientWidth / 2 + btn.offsetWidth / 2, behavior: firstScroll.current ? 'auto' : 'smooth' })
+    firstScroll.current = false
+  }, [month])
+
+  // 판매 중인 상품이 있는 품목만, 한창인 것 → 막 나온 것 → 끝물 순서
+  const order = { peak: 0, new: 1, only: 1, last: 2 }
+  const picked = SEASON.items
+    .map((item) => ({ item, stage: seasonStage(item.months, month), data: info[term(item)] }))
+    .filter((x) => x.stage && (!x.data || x.data.products > 0))
+    .sort((a, b) => order[a.stage.key] - order[b.stage.key])
+  const coming = SEASON.items.filter((item) => item.months.includes(nextMonth(month)) && !item.months.includes(month))
+  const season = SEASON_NAME(month)
+
   return (
-    <section id="season" className="section season-section" aria-labelledby="season-title">
-      <div className="wrap season">
-        <Photo photo={SEASON.photo} className="season-photo" />
-        <div className="season-body">
-          <h2 id="season-title" className="display-sm">제철 달력</h2>
-          <p className="lead">달을 누르면 그때 맛있는 것을 알려 드려요. 지금은 {now}월이에요.</p>
-          <div className="season-pick-months" role="group" aria-label="달 고르기">
-            {months.map((m) => (
-              <button key={m} type="button" className={`${m === month ? 'on' : ''}${m === now ? ' now' : ''}`} aria-pressed={m === month} onClick={() => setMonth(m)}>
-                {m}월{m === now && <span className="sr-only"> (이번 달)</span>}
-              </button>
-            ))}
+    <section id="season" className={`section season-section season-${season}`} aria-labelledby="season-title">
+      <div className="wrap season2">
+        <div className="season2-head">
+          <div>
+            <h2 id="season-title" className="display-sm">제철 달력</h2>
+            <p className="lead">달을 고르면 그때 가장 맛있는 것을 보여 드려요. 지금은 {now}월이에요.</p>
           </div>
-          <div className="season-picked" aria-live="polite">
-            <h3>{month}월 제철 <span>{picked.length}가지</span></h3>
-            {picked.length ? (
-              <ul className="season-chips">
-                {picked.map((item) => (
-                  <li key={item.name}>
-                    <button type="button" onClick={() => onPick(item.search ?? item.name)} aria-label={`${item.name}, 제철 ${seasonRange(item.months)}. 누르면 상품 찾기`}>
-                      {item.name}<small>{seasonRange(item.months)}</small>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : <p className="muted">이 달에 제철로 표시한 품목이 없어요.</p>}
+          <div className="season2-arrows">
+            <button type="button" aria-label="이전 달" onClick={() => setMonth(prevMonth)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6" /></svg></button>
+            <button type="button" aria-label="다음 달" onClick={() => setMonth(nextMonth)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6" /></svg></button>
           </div>
-          {picked.length > 0 && (
-            <div className="season-chart" aria-hidden="true">
-              <div className="season-row season-months">
-                <span />
-                {months.map((m) => <span key={m} className={`${m === month ? 'pick' : ''}${m === now ? ' now' : ''}`}>{m}</span>)}
-              </div>
-              {picked.map((item) => (
-                <div key={item.name} className="season-row">
-                  <span className="season-name">{item.name}</span>
-                  {/* 이어진 달은 막대 하나로 그린다 (12월→1월로 넘어가는 품목은 두 막대) */}
-                  {months.map((m) => item.months.includes(m) && !item.months.includes(m - 1) && (
-                    <span key={m} className="season-bar" style={{ gridColumn: `${m + 1} / span ${spanFrom(item.months, m)}` }} />
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
-          <p className="note">{SEASON.note}</p>
         </div>
+
+        <div className="season2-strip" ref={strip} role="group" aria-label="달 고르기"
+          onKeyDown={(e) => { if (e.key === 'ArrowLeft') setMonth(prevMonth); if (e.key === 'ArrowRight') setMonth(nextMonth) }}>
+          {months.map((m) => (
+            <button key={m} type="button" data-month={m} className={`s2-${SEASON_NAME(m)}${m === month ? ' on' : ''}`} aria-pressed={m === month} onClick={() => setMonth(m)}>
+              <small>{SEASON_LABEL[SEASON_NAME(m)]}</small>
+              <b>{m}월</b>
+              {m === now && <i>지금</i>}
+            </button>
+          ))}
+        </div>
+
+        <div className="season2-title" aria-live="polite">
+          <h3>{month}월에 맛있는 것 <span>{picked.length}가지</span></h3>
+          <span className="season2-legend" aria-hidden="true"><i className="st-new" />막 나왔어요<i className="st-peak" />지금 한창<i className="st-last" />끝물</span>
+        </div>
+
+        {picked.length ? (
+          <div className="season2-rail">
+          {edge.left && <button type="button" className="rail-btn prev" aria-label="이전 카드" onClick={() => slide(-1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6" /></svg></button>}
+          {edge.right && <button type="button" className="rail-btn next" aria-label="다음 카드" onClick={() => slide(1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6" /></svg></button>}
+          <ul className="season2-cards" ref={rail} onScroll={checkEdge}>
+            {picked.map(({ item, stage, data }) => (
+              <li key={item.name}>
+                <button type="button" className="season2-card" onClick={() => onPick(term(item))}
+                  aria-label={`${item.name}, ${stage.text}, 제철 ${seasonRange(item.months)}${data?.price ? `, ${won(data.price)}부터` : ''}. 누르면 상품 보기`}>
+                  <span className="s2-photo">
+                    {data?.image ? <img src={thumbUrl(data.image)} alt="" loading="lazy" width="400" height="300" /> : <span className="s2-photo-empty">{item.name}</span>}
+                    <em className={`s2-stage st-${stage.key}`}>{stage.text}</em>
+                    {data && data.live === 0 && <em className="s2-sold">지금은 품절</em>}
+                  </span>
+                  <span className="s2-body">
+                    <strong>{item.name}</strong>
+                    <span className="s2-range">{seasonRange(item.months)}</span>
+                    <span className="s2-bar" aria-hidden="true">
+                      {months.map((m) => <i key={m} className={`${item.months.includes(m) ? 'in' : ''}${m === month ? ' cur' : ''}`} />)}
+                    </span>
+                    <span className="s2-foot">
+                      {data?.price ? <b>{won(data.price)}부터</b> : <b className="muted">{data ? '준비 중' : '…'}</b>}
+                      {data?.products > 0 && <span>상품 {data.products}개 →</span>}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          </div>
+        ) : <p className="muted season2-empty">이 달에 제철로 표시한 품목이 없어요. 다른 달을 골라 보세요.</p>}
+
+        {coming.length > 0 && (
+          <p className="season2-coming">
+            <span>{nextMonth(month)}월에 새로 나와요</span>
+            {coming.map((item) => <button key={item.name} type="button" onClick={() => setMonth(nextMonth(month))}>{item.name}</button>)}
+          </p>
+        )}
+        <p className="note">{SEASON.note}</p>
       </div>
     </section>
   )
@@ -267,20 +357,13 @@ export function SeasonCalendar({ onPick }) {
 // [11, 12, 1, 2] → '11~2월', [3, 4, 5, 9, 10, 11] → '3~5월, 9~11월'
 function seasonRange(list) {
   if (list.length >= 12) return '사계절'
-  const next = (m) => (m === 12 ? 1 : m + 1)
-  const prev = (m) => (m === 1 ? 12 : m - 1)
-  return [...list].sort((a, b) => a - b).filter((m) => !list.includes(prev(m))).map((start) => {
+  return [...list].sort((a, b) => a - b).filter((m) => !list.includes(prevMonth(m))).map((start) => {
     let end = start
-    while (list.includes(next(end))) end = next(end)
+    while (list.includes(nextMonth(end)) && nextMonth(end) !== start) end = nextMonth(end)
     return end === start ? `${start}월` : `${start}~${end}월`
   }).join(', ')
 }
 
-const spanFrom = (list, start) => {
-  let n = 0
-  while (list.includes(start + n) && start + n <= 12) n += 1
-  return n
-}
 
 // 이야기: 3장짜리 슬라이드 배너 (왼쪽 글, 오른쪽 사진). 저절로 넘어가고, 마우스·포커스가 있거나 정지를 누르면 멈춘다.
 // '움직임 줄이기'를 켠 손님에게는 처음부터 멈춰 있다. 화살표 키로도 넘긴다
