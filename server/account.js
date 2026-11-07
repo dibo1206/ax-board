@@ -25,7 +25,7 @@ export function checkPassword(password, email) {
   return null
 }
 
-function startSession(res, customer) {
+export function startSession(res, customer) {
   const token = signToken({ kind: 'customer', id: customer.id, sv: customer.session_version, exp: Date.now() + SESSION_DAYS * 86_400_000 })
   setCookie(res, COOKIE, token, SESSION_DAYS * 86_400)
 }
@@ -50,7 +50,7 @@ async function requireCustomer(req, res, next) {
   next()
 }
 
-const me = (c) => ({ email: c.email, name: c.name, phone: c.phone, zipcode: c.zipcode, address1: c.address1, address2: c.address2 })
+const me = (c) => ({ email: c.email, name: c.name, phone: c.phone, zipcode: c.zipcode, address1: c.address1, address2: c.address2, hasPassword: !String(c.password_hash).startsWith('oauth:') })
 
 export const accountRouter = express.Router()
 const tooManySignups = createLimiter({ limit: 5, windowMs: 60 * 60_000 })
@@ -152,8 +152,11 @@ accountRouter.post('/password', requireCustomer, async (req, res) => {
 accountRouter.delete('/me', requireCustomer, async (req, res) => {
   const key = `c:${req.customer.email}`
   if (!reserveAttempt(key, req.ip)) return res.status(429).json({ error: '여러 번 틀렸어요. 10분 뒤에 다시 시도해 주세요.' })
-  if (!(await verifyPassword(String(req.body.password ?? ''), req.customer.password_hash))) {
-    return res.status(401).json({ error: '비밀번호가 맞지 않아요.' })
+  // 간편 로그인으로만 가입해 비밀번호가 없는 계정은 '탈퇴'라고 적어 확인한다 (비밀번호가 있으면 비밀번호로)
+  const socialOnly = String(req.customer.password_hash).startsWith('oauth:')
+  const confirmed = socialOnly ? req.body.confirm === '탈퇴' : await verifyPassword(String(req.body.password ?? ''), req.customer.password_hash)
+  if (!confirmed) {
+    return res.status(401).json({ error: socialOnly ? '확인 칸에 "탈퇴"라고 적어 주세요.' : '비밀번호가 맞지 않아요.' })
   }
   undoAttempt(key, req.ip)
   await pool.query(
@@ -162,6 +165,8 @@ accountRouter.delete('/me', requireCustomer, async (req, res) => {
     [req.customer.id, sealText(`deleted-${req.customer.id}-${randomBytes(4).toString('hex')}@invalid`), `deleted:${randomBytes(16).toString('hex')}`],
   )
   await pool.query('DELETE FROM password_resets WHERE customer_id = $1', [req.customer.id])
+  await pool.query('DELETE FROM restock_requests WHERE customer_id = $1', [req.customer.id]) // 탈퇴하면 재입고 알림 신청도 지운다
+  await pool.query('DELETE FROM customer_identities WHERE customer_id = $1', [req.customer.id]) // 간편 로그인 연결도 끊는다
   setCookie(res, COOKIE, '', 0)
   console.log(`[account] 회원 탈퇴 #${req.customer.id}`)
   res.status(204).end()

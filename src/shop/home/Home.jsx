@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Quiz } from '../../Recommend.jsx'
 import { RatingBadge } from '../Reviews.jsx'
-import { cheapestOption, shipDay, thumbUrl, unitPrice, won } from '../shared.js'
+import { addToCart, cheapestOption, shipDay, thumbUrl, unitPrice, won } from '../shared.js'
 import { FAQ, GROUP_PHOTOS, HERO, SEASON, STORY } from './content.js'
 
 // 첫 화면 (디자인 시안): 큰 제목 → 카테고리 → 이달의 상품 → 제철 달력 → 이야기 → 자주 묻는 질문
@@ -93,35 +93,68 @@ export function CategoryRows({ groups, onPick }) {
   )
 }
 
+// 사진 오른쪽 아래 장바구니 버튼(마우스를 올리면 나타남): 상세로 들어가기 전에 1개를 바로 담는다 (링크 안에 버튼을 넣을 수 없어 카드 바깥 형제로 둔다)
+// 옵션 상품은 옵션을 골라야 담을 수 있어서, 이 버튼이 상세로 보내 준다
+function QuickCart({ p, onOpen }) {
+  const [done, setDone] = useState(false)
+  useEffect(() => {
+    if (!done) return undefined
+    const timer = setTimeout(() => setDone(false), 1600)
+    return () => clearTimeout(timer)
+  }, [done])
+  if (p.sold_out) return null
+  const name = p.name.replace(/\[예시\]\s*/g, '')
+  const pickOption = p.has_options
+  return (
+    <button type="button" className={`quick-cart${done ? ' done' : ''}`}
+      aria-label={pickOption ? `${name} 옵션 고르기` : done ? `${name} 장바구니에 담았어요` : `${name} 장바구니 담기`}
+      onClick={() => { if (pickOption) onOpen(p.product_code); else { addToCart(p.product_code, 1); setDone(true) } }}>
+      {done
+        ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
+        : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2.5l2.2 10.5h10.1L20 7H6.3" /><circle cx="9" cy="19" r="1.3" /><circle cx="17" cy="19" r="1.3" /></svg>}
+      <span className="sr-only" role="status">{done ? '담았어요' : ''}</span>
+    </button>
+  )
+}
+
 // 옵션 상품(5kg·10kg …)은 판매 중 옵션의 가장 낮은 가격을 "~부터"로, 100g당 가격도 그 옵션으로. 모든 옵션이 품절이면 품절
 function ProductCard({ p, onOpen }) {
   const cheapest = cheapestOption(p)
   const unit = cheapest ? unitPrice(cheapest.price, cheapest.name) : unitPrice(p.price, p.unit)
   return (
-    <a href={`/p/${encodeURIComponent(p.product_code)}`} className={`pcard${p.sold_out ? ' soldout' : ''}`} onClick={(e) => { e.preventDefault(); onOpen(p.product_code) }}>
-      <span className="pcard-img">
-        {p.image_url
-          ? <img src={thumbUrl(p.image_url)} alt="" loading="lazy" width="400" height="400" />
-          : <span className="photo-need"><span>사진 준비 중</span></span>}
-        <span className="pcard-tags">
-          {/* 등급은 품목·품종별 공식 기준으로 서버가 정한다. 기준이 없거나 보통 당도면 측정값만 */}
-          {p.show_brix && p.brix && !p.info_disputed && <span className={`ptag ${p.brix_rank === 3 ? 'brix-high' : p.brix_rank === 2 ? 'brix-mid' : ''}`}>{p.brix_rank >= 2 ? `${p.brix_grade} ${Number(p.brix)}°Bx` : `당도 ${Number(p.brix)}°Bx`}</span>}
-          {p.harvest_days != null && p.harvest_days <= 30 && <span className="ptag">수확 {p.harvest_days}일째</span>}
-          {p.tags?.includes('season') && <span className="ptag ptag-season">제철</span>}
+    <div className="pcard-wrap">
+      <a href={`/p/${encodeURIComponent(p.product_code)}`} className={`pcard${p.sold_out ? ' soldout' : ''}`} onClick={(e) => { e.preventDefault(); onOpen(p.product_code) }}>
+        <span className="pcard-img">
+          {p.image_url
+            ? <img src={thumbUrl(p.image_url)} alt="" loading="lazy" width="400" height="400" />
+            : <span className="photo-need"><span>사진 준비 중</span></span>}
+          <span className="pcard-tags">
+            {/* 등급은 품목·품종별 공식 기준으로 서버가 정한다. 기준이 없거나 보통 당도면 측정값만. 동그라미에는 숫자만 넣고, 등급은 마우스 올림·스크린리더 글로 알린다 */}
+            {p.show_brix && p.brix && !p.info_disputed && (
+              <span className={`ptag ptag-brix ${p.brix_rank === 3 ? 'brix-high' : p.brix_rank === 2 ? 'brix-mid' : ''}`}
+                title={p.brix_rank >= 2 ? `${p.brix_grade} ${Number(p.brix)}°Bx` : `당도 ${Number(p.brix)}°Bx`}
+                aria-label={p.brix_rank >= 2 ? `${p.brix_grade} ${Number(p.brix)}°Bx` : `당도 ${Number(p.brix)}°Bx`}>
+                <small aria-hidden="true">당도</small><b aria-hidden="true">{Number(p.brix)}</b>
+              </span>
+            )}
+            {p.tags?.includes('season') && <span className="ptag ptag-season">제철</span>}
+          </span>
+          {p.sold_out && <span className="pcard-flag">품절</span>}
+          {p.preorder && !p.sold_out && <span className="pcard-flag preorder">예약 · {shipDay(p.ship_from)}부터</span>}
         </span>
-        {p.sold_out && <span className="pcard-flag">품절</span>}
-        {p.preorder && !p.sold_out && <span className="pcard-flag preorder">예약 · {shipDay(p.ship_from)}부터</span>}
-      </span>
-      <span className="pcard-seller">{p.seller_name.replace(/\[예시\]\s*/g, '')}</span>
-      <strong className="pcard-name">{p.name}</strong>
-      {p.has_options
-        ? <span className="pcard-price">{won(p.price)}부터 {p.options.length > 0 && <small>/ 옵션 {p.options.length}개</small>}</span>
-        : <span className="pcard-price">{won(p.price)} <small>/ {p.unit}</small></span>}
-      {unit && <span className="pcard-unit">{unit}{cheapest && p.options.length > 1 && ` (${cheapest.name})`}</span>}
-      <span className="pcard-meta">
-        <RatingBadge rating={p.rating} count={p.review_count} />
-      </span>
-    </a>
+        <span className="pcard-seller">{p.seller_name.replace(/\[예시\]\s*/g, '')}</span>
+        <strong className="pcard-name">{p.name}</strong>
+        {p.has_options
+          ? <span className="pcard-price">{won(p.price)}부터 {p.options.length > 0 && <small>/ 옵션 {p.options.length}개</small>}</span>
+          : <span className="pcard-price">{won(p.price)} <small>/ {p.unit}</small></span>}
+        {unit && <span className="pcard-unit">{unit}{cheapest && p.options.length > 1 && ` (${cheapest.name})`}</span>}
+        <span className="pcard-meta">
+          {p.harvest_days != null && p.harvest_days <= 30 && <span className="pcard-harvest">수확 {p.harvest_days}일째</span>}
+          <RatingBadge rating={p.rating} count={p.review_count} />
+        </span>
+      </a>
+      <QuickCart p={p} onOpen={onOpen} />
+    </div>
   )
 }
 
@@ -181,7 +214,7 @@ export function SeasonCalendar({ onPick }) {
         <Photo photo={SEASON.photo} className="season-photo" />
         <div className="season-body">
           <h2 id="season-title" className="display-sm">제철 달력</h2>
-          <p className="lead">언제 가장 맛있는지 한눈에. 지금은 {now}月입니다.</p>
+          <p className="lead">언제 가장 맛있는지 한눈에. 지금은 {now}월입니다.</p>
           <div className="season-chart">
             <div className="season-row season-months" aria-hidden="true">
               <span />
@@ -212,26 +245,50 @@ const spanFrom = (list, start) => {
   return n
 }
 
+// 이야기: 3장짜리 슬라이드 배너 (왼쪽 글, 오른쪽 사진). 저절로 넘어가고, 마우스·포커스가 있거나 정지를 누르면 멈춘다.
+// '움직임 줄이기'를 켠 손님에게는 처음부터 멈춰 있다. 화살표 키로도 넘긴다
 export function Story() {
+  const slides = STORY.slides
+  const [index, setIndex] = useState(0)
+  const [stopped, setStopped] = useState(() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false)
+  const [hold, setHold] = useState(false)
+  const go = (i) => setIndex((i + slides.length) % slides.length)
+  useEffect(() => {
+    if (stopped || hold) return undefined
+    const timer = setInterval(() => setIndex((i) => (i + 1) % slides.length), STORY.interval)
+    return () => clearInterval(timer)
+  }, [stopped, hold, slides.length])
+  const now = slides[index]
   return (
-    <section id="story" className="section story-section" aria-labelledby="story-title">
+    <section id="story" className="section story-section" aria-roledescription="carousel" aria-label={STORY.label}
+      onMouseEnter={() => setHold(true)} onMouseLeave={() => setHold(false)} onFocus={() => setHold(true)} onBlur={() => setHold(false)}
+      onKeyDown={(e) => { if (e.key === 'ArrowLeft') go(index - 1); if (e.key === 'ArrowRight') go(index + 1) }}>
       <div className="wrap story">
-        <div>
-          <h2 id="story-title" className="display-sm">{STORY.title.map((line) => <span key={line}>{line}</span>)}</h2>
-          <Photo photo={STORY.photos[0]} className="story-photo" />
+      <div className="story-banner">
+        <div className="story-photos" aria-hidden="true">
+          {slides.map((sl, i) => <img key={sl.photo.src} className={i === index ? 'on' : ''} src={sl.photo.src} alt="" loading="lazy" style={{ objectPosition: sl.photo.position }} />)}
         </div>
-        <div>
-          <ol className="story-points">
-            {STORY.points.map((p, i) => (
-              <li key={p.title}>
-                <span className="story-no">{String(i + 1).padStart(2, '0')}</span>
-                <h3>{p.title}</h3>
-                <p>{p.text}</p>
-              </li>
+        <div className="story-text" aria-live={stopped ? 'polite' : 'off'}>
+          <p className="story-label">{STORY.label} <span>{index + 1} / {slides.length}</span></p>
+          <h2 key={index} className="display-sm story-title">{now.title.map((line) => <span key={line}>{line}</span>)}</h2>
+          <p className="story-lead">{now.text}</p>
+          <span className="sr-only">사진: {now.photo.alt}</span>
+          <div className="story-links">
+            {now.links.map((l, i) => (
+              <a key={l.label} className={i === 0 ? 'story-btn' : 'story-btn ghost'} href={l.href}
+                {...(l.href.startsWith('http') ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>{l.label}</a>
             ))}
-          </ol>
-          <Photo photo={STORY.photos[1]} className="story-photo tall" />
+          </div>
+          <div className="story-ctrl" role="group" aria-label="이야기 넘기기">
+            <button type="button" aria-label="이전 이야기" onClick={() => go(index - 1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6" /></svg></button>
+            <button type="button" aria-label={stopped ? '자동 넘김 시작' : '자동 넘김 정지'} aria-pressed={stopped} onClick={() => setStopped((v) => !v)}>
+              {stopped ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" className="fill" /></svg> : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12" /></svg>}
+            </button>
+            <button type="button" aria-label="다음 이야기" onClick={() => go(index + 1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6" /></svg></button>
+            <span className="story-bars" aria-hidden="true">{slides.map((sl, i) => <button key={sl.photo.src} type="button" tabIndex={-1} className={i === index ? 'on' : ''} onClick={() => go(i)} />)}</span>
+          </div>
         </div>
+      </div>
       </div>
     </section>
   )

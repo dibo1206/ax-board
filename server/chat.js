@@ -236,7 +236,7 @@ const ONE_CHAR = {
 }
 const PROCESSED = /^(즙|주스|가루|칩|와인|분말)/ // 잼·청은 레시피(사과잼, 귤청)로도 묻는 말이라 넣지 않는다
 function findItems(text, items) {
-  let rest = text.replace(/택배|배송|배달|배합|배치|배려/g, ' ').replace(/메실/g, '매실').replace(/황도/g, '복숭아')
+  let rest = text.replace(/택배|배송|배달|배합|배치|배려/g, ' ').replace(/메실/g, '매실').replace(/황도/g, '복숭아').replace(/(골드|그린)?키위/g, '참다래')
   if (!/랑|하고|비교|차이/.test(text)) rest = rest.replace(/부사|후지/g, '사과')
   const found = []
   for (const item of [...items].sort((a, b) => b.name.length - a.name.length)) {
@@ -345,7 +345,7 @@ const FACTS = [
     re: /어디서\s?(사|살|구매|주문)|구매처|판매처|어디.{0,3}(팔아|파나|판매)/,
     only: true,
     say: (p) => (p.sold_out
-      ? `${p.label} 상품은 지금 품절이라 살 수 없어요. 다시 들어오는 날짜는 아직 안내된 정보가 없어요.`
+      ? `${p.label} 상품은 지금 품절이라 살 수 없어요. 다시 들어오는 날짜는 아직 안내된 정보가 없어요. 상품 페이지에서 [재입고 알림]을 신청하면 다시 들어올 때 메일로 알려 드려요.`
       : `${p.label} 상품은 ${BUY_HOW}할 수 있어요. 회원이 아니어도 주문할 수 있어요.`),
   },
   {
@@ -363,7 +363,7 @@ const FACTS = [
     id: 'stock',
     explicit: /살\s?수\s?있|재고|품절|남았|팔아|팔어|파나/,
     say: (p) => (p.sold_out
-      ? `${p.label} 상품은 지금 품절이라 살 수 없어요. 다시 들어오는 날짜는 아직 안내된 정보가 없어요.`
+      ? `${p.label} 상품은 지금 품절이라 살 수 없어요. 다시 들어오는 날짜는 아직 안내된 정보가 없어요. 상품 페이지에서 [재입고 알림]을 신청하면 다시 들어올 때 메일로 알려 드려요.`
       : p.picked.length
       ? `${p.label} 상품은 옵션별로 ${p.picked.map((o) => `${o.name} ${o.stock > 0 ? '살 수 있어요' : '품절이에요'}`).join(', ')}.${p.picked.some((o) => o.stock > 0) ? ` 상품 페이지에서 옵션을 골라 ${BUY_HOW.replace('이 쇼핑몰 상품 페이지에서 ', '')}해 주세요.` : ''}`
       : `${p.label} 상품은 지금 살 수 있어요. ${BUY_HOW}해 주세요.`),
@@ -498,7 +498,7 @@ function manyProducts(products, facts, catalog) {
   let answer = null
   let shown = []
   if (!live.length) {
-    answer = `${name} 상품은 지금 모두 품절이에요. 다시 들어오는 날짜는 아직 안내된 정보가 없어요.`
+    answer = `${name} 상품은 지금 모두 품절이에요. 다시 들어오는 날짜는 아직 안내된 정보가 없어요. 상품 페이지에서 [재입고 알림]을 신청하면 다시 들어올 때 메일로 알려 드려요.`
   } else if (ids.includes('brix')) {
     if (!item?.show_brix) answer = noBrix(item)
     else {

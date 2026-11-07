@@ -77,6 +77,15 @@ function BrixGradeFields({ item, brix, variety, hasPhoto, onChange }) {
 
 // 상품정보 제공 고시: 판매자가 직접 적는 칸. 품목·용량·생산자·보관법·상담 전화는 자동으로 채워진다. AI 가 채우지 않는다
 function NoticeFields({ item, notice, hasHarvest, onChange }) {
+  if (!item) {
+    // 품목을 고르기 전에도 자리와 안내를 보여 준다 (농산물·가공품마다 적는 칸이 달라서 품목을 먼저 골라야 한다)
+    return (
+      <fieldset className="preview notice-fields is-empty">
+        <legend><strong>상품정보 제공 고시</strong> <span className="muted">법으로 보여 줘야 하는 정보예요</span></legend>
+        <p>위에서 <b>품목</b>을 먼저 골라 주세요. 농산물(원산지·상품 구성 등)과 가공품(식품 유형·원재료 등)은 적는 칸이 달라서, 품목을 고르면 맞는 칸이 여기에 나와요.</p>
+      </fieldset>
+    )
+  }
   const set = (key) => (e) => onChange({ ...notice, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
   const text = (key, label, placeholder) => <label>{label}<input value={notice[key] ?? ''} onChange={set(key)} maxLength={300} placeholder={placeholder} /></label>
   const processed = item.category === '가공품'
@@ -324,7 +333,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
           {form.ship_from && <button type="button" className="link" onClick={() => setForm((prev) => ({ ...prev, ship_from: '' }))}>예약 판매 끄기</button>}
         </label>
       )}
-      {item && <NoticeFields item={item} notice={form.notice} hasHarvest={Boolean(form.harvest_date)} onChange={(notice) => setForm((prev) => ({ ...prev, notice }))} />}
+      <NoticeFields item={item} notice={form.notice} hasHarvest={Boolean(form.harvest_date)} onChange={(notice) => setForm((prev) => ({ ...prev, notice }))} />
       <AiDraft form={form} api={api} onDraft={applyDraft} />
       <label>한 줄 소개<input value={form.summary} onChange={set('summary')} maxLength={200} /></label>
       <label>상품 설명 <span className="muted">(선택) 빈 줄로 문단을 나눠요. 효능 표현은 쓰지 않아요</span>

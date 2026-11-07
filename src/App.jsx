@@ -1,10 +1,11 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
+import './console.css'
 import { Chat } from './Chat.jsx'
 import { B2bForm, QuestionForm } from './Inquiry.jsx'
 import { Related } from './Recommend.jsx'
 import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
-import { addToCart, getPolicy, preorderNote, thumbUrl, unitPrice } from './shop/shared.js'
+import { addToCart, getPolicy, post, preorderNote, thumbUrl, unitPrice } from './shop/shared.js'
 import { Guide } from './shop/Guide.jsx'
 import { CategoryRows, Faq, Hero, ProductSection, QuizDialog, SeasonCalendar, Story } from './shop/home/Home.jsx'
 import { ShopLayout } from './shop/ShopLayout.jsx'
@@ -25,6 +26,7 @@ const SignupPage = page(() => import('./account/Account.jsx'), 'SignupPage')
 const FindPasswordPage = page(() => import('./account/Account.jsx'), 'FindPasswordPage')
 const ResetPasswordPage = page(() => import('./account/Account.jsx'), 'ResetPasswordPage')
 const MyPage = page(() => import('./account/Account.jsx'), 'MyPage')
+const SocialSignupPage = page(() => import('./account/Account.jsx'), 'SocialSignupPage')
 const loading = <p className="muted">불러오는 중…</p>
 
 // 1단계 데이터 확인용 화면. 실제 디자인은 시안이 나오면 3단계에서 새로 만든다.
@@ -77,16 +79,48 @@ function Description({ text }) {
 
 // 7단계: (옵션 상품은 옵션 고르기 →) 수량 고르기 → 장바구니 담기 / 바로 구매 (가격은 주문할 때 서버가 다시 계산)
 // 옵션 상품은 옵션을 고르기 전에는 담거나 살 수 없다. 옵션마다 가격·재고가 다르다
+// 품절 상품·옵션: 이메일을 남기면 다시 들어올 때 메일로 한 번 알려 준다 (server/restock.js)
+function RestockForm({ productCode, optionId }) {
+  const [email, setEmail] = useState('')
+  const [agree, setAgree] = useState(false)
+  const [state, setState] = useState({ busy: false, done: '', error: '' })
+  const submit = async (e) => {
+    e.preventDefault()
+    setState({ busy: true, done: '', error: '' })
+    try {
+      const data = await post(`/products/${encodeURIComponent(productCode)}/restock`, { email, optionId, agree })
+      setState({ busy: false, done: data.message, error: '' })
+    } catch (error) {
+      setState({ busy: false, done: '', error: error.message })
+    }
+  }
+  if (state.done) return <p className="success restock-done">{state.done}</p>
+  return (
+    <form className="restock" onSubmit={submit}>
+      <p className="restock-title"><strong>재입고 알림</strong> <span className="muted">다시 들어오면 메일로 한 번 알려 드려요</span></p>
+      <div className="restock-row">
+        <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="알림 받을 이메일" autoComplete="email" maxLength={254} aria-label="알림 받을 이메일" />
+        <button type="submit" className="button" disabled={state.busy || !agree}>알림 받기</button>
+      </div>
+      <label className="restock-agree"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> 재입고 알림을 위해 이메일을 수집·이용하는 데 동의해요 (보낸 뒤 30일 안에 지워요)</label>
+      {state.error && <p className="error">{state.error}</p>}
+    </form>
+  )
+}
+
 function BuyBox({ product, option, onPick, onAsk }) {
   const [quantity, setQuantity] = useState(1)
   const [added, setAdded] = useState(false)
   const soldOut = (
-    <div className="actions">
-      <span className="button ghost">품절</span>
-      <button type="button" className="button ghost" onClick={onAsk}>입고 문의하기</button>
-    </div>
+    <>
+      <div className="actions">
+        <span className="button ghost">품절</span>
+        <button type="button" className="button ghost" onClick={onAsk}>입고 문의하기</button>
+      </div>
+      <RestockForm key={option?.id ?? 'all'} productCode={product.product_code} optionId={option?.id ?? null} />
+    </>
   )
-  if (product.sold_out) return soldOut
+  if (product.sold_out) return <div className="buy">{soldOut}</div>
   const pick = product.has_options && (
     <label className="qty">옵션
       <select value={option?.id ?? ''} onChange={(e) => { onPick(Number(e.target.value) || null); setQuantity(1); setAdded(false) }}>
@@ -114,12 +148,14 @@ function BuyBox({ product, option, onPick, onAsk }) {
   return (
     <div className="buy">
       {pick}
-      <label className="qty">수량
-        <select value={quantity} onChange={(e) => { setQuantity(Number(e.target.value)); setAdded(false) }}>
-          {Array.from({ length: Math.min(max, 20) }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
-        </select>
-      </label>
-      <span className="price">{won(price * quantity)}</span>
+      <div className="buy-row">
+        <label className="qty">수량
+          <select value={quantity} onChange={(e) => { setQuantity(Number(e.target.value)); setAdded(false) }}>
+            {Array.from({ length: Math.min(max, 20) }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+        <span className="buy-total"><small>총 금액</small><span className="price">{won(price * quantity)}</span></span>
+      </div>
       <div className="actions">
         <button type="button" className="button ghost" onClick={() => { addToCart(product.product_code, quantity, option?.id ?? null); setAdded(true) }}>장바구니 담기</button>
         <a className="button" href={buyUrl}>{product.preorder ? '예약 구매' : '바로 구매'}</a>
@@ -171,7 +207,10 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   return (
     <article className="detail">
       <button type="button" className="link" onClick={onBack}>← 목록</button>
+      {/* 사진은 왼쪽, 이름·가격·정보·구매 칸은 오른쪽에 한 덩어리로 (사진 옆이 비지 않게) */}
+      <div className="detail-top">
       <Gallery product={product} />
+      <div className="detail-info">
       <h2>{product.name}</h2>
       {product.has_options && !option
         ? <p className="price">{won(product.price)}부터 <span className="muted">/ {product.options.length > 0 ? `옵션 ${product.options.length}개 중 골라 주세요` : '판매 중인 옵션이 없어요'}</span></p>
@@ -206,91 +245,95 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         <dt>판매 농가</dt><dd>{seller.name} · {seller.region}</dd>
       </dl>
       <BuyBox product={product} option={option} onPick={setOptionId} onAsk={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })} />
-
-      <Description text={product.description} />
-      {product.notice_table && (
-        <section className="box notice-box">
-          <h3>상품정보 제공 고시 <span className="muted">{product.notice_table.title}</span></h3>
-          <table className="notice-table"><tbody>
-            {product.notice_table.rows.map((r) => <tr key={r.label}><th scope="row">{r.label}</th><td className={r.missing ? 'muted' : ''}>{r.value}</td></tr>)}
-          </tbody></table>
-        </section>
-      )}
-      {product.faq?.length > 0 && (
-        <section className="box faq-box">
-          <h3>자주 묻는 질문</h3>
-          {product.faq.map((f) => <details key={f.q}><summary>{f.q}</summary><p>{f.a}</p></details>)}
-        </section>
-      )}
-      <section className="box">
-        <h3>보관·섭취 안내</h3>
-        {item.pending && <p className="muted">새로 들어온 품목이라 담당자가 보관·섭취 정보를 확인하고 있어요. 궁금한 점은 아래 상품 Q&A로 물어봐 주세요.</p>}
-        {item.storage_method && <p>{item.storage_method}</p>}
-        {item.keep_period && <p>보관 기간 참고: {item.keep_period}</p>}
-        {/* 신선도는 날짜가 아니라 지금 상태로 판단한다 (팀 식품 기준표). 옛 데이터(며칠)도 그대로 보여 준다 */}
-        {fresh && item.stage1_state && (
-          <ul className="fresh-stages">
-            <li><strong>신선</strong> {item.stage1_state} → {item.stage1_uses.join(', ')}</li>
-            <li><strong>품질 저하</strong> {item.stage2_state} → {item.stage2_uses.join(', ')}</li>
-            <li><strong>섭취 부적합</strong> 아래 신호가 보이면 → 조리하지 말고 폐기</li>
-          </ul>
+      <div className="buy-aside">
+        <button type="button" onClick={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })}>상품 문의하기</button>
+        {product.b2b_available && (
+          <button type="button" onClick={() => { setShowB2b(true); setTimeout(() => document.getElementById('b2b-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50) }}>기업 구매 문의 <small>대량·납품</small></button>
         )}
-        {fresh && !item.stage1_state && item.fresh_days_stage1 && (
-          <p>받은 날부터 {item.fresh_days_stage1}일까지: {item.stage1_uses.join(', ')} → {item.fresh_days_stage2}일까지: {item.stage2_uses.join(', ')} → 그 뒤: {item.stage3_uses.join(', ')}</p>
-        )}
-        {item.opened_note && <p>{item.opened_note}</p>}
-        {item.allergens.length > 0 && <p className="warn">알레르기: {item.allergens.join(', ')}</p>}
-        {item.allergen_note && <p className="muted">{item.allergen_note}</p>}
-        {item.danger_signs.length > 0 && <p className="muted">이런 상태면 드시지 마세요: {item.danger_signs.join(' / ')}</p>}
-        {item.danger_note && <p className="muted">{item.danger_note}</p>}
-        {item.cafe_note && <p className="muted">카페·업소 메뉴 비율: {item.cafe_note}</p>}
-        {item.reviewed_by && item.source && <p className="note">출처: {item.source}</p>}
-      </section>
+      </div>
+      </div>
+      </div>
 
-      {item.recipes.length > 0 && (
+      <div className="detail-body">
+        <Description text={product.description} />
+        {product.notice_table && (
+          <section className="box notice-box">
+            <h3>상품정보 제공 고시 <span className="muted">{product.notice_table.title}</span></h3>
+            <table className="notice-table"><tbody>
+              {product.notice_table.rows.map((r) => <tr key={r.label}><th scope="row">{r.label}</th><td className={r.missing ? 'muted' : ''}>{r.value}</td></tr>)}
+            </tbody></table>
+          </section>
+        )}
+        {product.faq?.length > 0 && (
+          <section className="box faq-box">
+            <h3>자주 묻는 질문</h3>
+            {product.faq.map((f) => <details key={f.q}><summary>{f.q}</summary><p>{f.a}</p></details>)}
+          </section>
+        )}
         <section className="box">
-          <h3>이렇게 즐겨 보세요</h3>
+          <h3>보관·섭취 안내</h3>
+          {item.pending && <p className="muted">새로 들어온 품목이라 담당자가 보관·섭취 정보를 확인하고 있어요. 궁금한 점은 아래 상품 Q&A로 물어봐 주세요.</p>}
+          {item.storage_method && <p>{item.storage_method}</p>}
+          {item.keep_period && <p>보관 기간 참고: {item.keep_period}</p>}
+          {/* 신선도는 날짜가 아니라 지금 상태로 판단한다 (팀 식품 기준표). 옛 데이터(며칠)도 그대로 보여 준다 */}
+          {fresh && item.stage1_state && (
+            <ul className="fresh-stages">
+              <li><strong>신선</strong> {item.stage1_state} → {item.stage1_uses.join(', ')}</li>
+              <li><strong>품질 저하</strong> {item.stage2_state} → {item.stage2_uses.join(', ')}</li>
+              <li><strong>섭취 부적합</strong> 아래 신호가 보이면 → 조리하지 말고 폐기</li>
+            </ul>
+          )}
+          {fresh && !item.stage1_state && item.fresh_days_stage1 && (
+            <p>받은 날부터 {item.fresh_days_stage1}일까지: {item.stage1_uses.join(', ')} → {item.fresh_days_stage2}일까지: {item.stage2_uses.join(', ')} → 그 뒤: {item.stage3_uses.join(', ')}</p>
+          )}
+          {item.opened_note && <p>{item.opened_note}</p>}
+          {item.allergens.length > 0 && <p className="warn">알레르기: {item.allergens.join(', ')}</p>}
+          {item.allergen_note && <p className="muted">{item.allergen_note}</p>}
+          {item.danger_signs.length > 0 && <p className="muted">이런 상태면 드시지 마세요: {item.danger_signs.join(' / ')}</p>}
+          {item.danger_note && <p className="muted">{item.danger_note}</p>}
+          {item.cafe_note && <p className="muted">카페·업소 메뉴 비율: {item.cafe_note}</p>}
+          {item.reviewed_by && item.source && <p className="note">출처: {item.source}</p>}
+        </section>
+
+        {item.recipes.length > 0 && (
+          <section className="box">
+            <h3>이렇게 즐겨 보세요</h3>
+            <ul>
+              {item.recipes.map((r) => (
+                <li key={r.title}><strong>{r.title}</strong> — {r.ingredients} · {r.method}</li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <section className="box">
+          <h3>판매 농가 이야기</h3>
+          <p>{seller.story}</p>
+        </section>
+
+        {showB2b && <div id="b2b-form"><B2bForm product={product} onClose={() => setShowB2b(false)} /></div>}
+
+        <ReviewList code={product.product_code} />
+        <section className="box" ref={qnaRef}>
+          <h3>Q&A {product.questions.length}개</h3>
+          <QuestionForm
+            productCode={product.product_code}
+            onSent={(q) => {
+              setProduct((prev) => ({ ...prev, questions: [q, ...prev.questions] }))
+              setSentMessage('질문이 올라갔어요. 답변이 달리면 여기에 보여요.')
+            }}
+          />
+          {sentMessage && <p className="success">{sentMessage}</p>}
           <ul>
-            {item.recipes.map((r) => (
-              <li key={r.title}><strong>{r.title}</strong> — {r.ingredients} · {r.method}</li>
+            {product.questions.map((q) => (
+              <li key={q.id}>
+                <strong>Q.</strong> {q.question} <span className="muted">· {q.author}</span><br />
+                {q.answer ? <><strong>A.</strong> {q.answer}</> : <span className="muted">답변을 기다리는 중</span>}
+              </li>
             ))}
           </ul>
         </section>
-      )}
-
-      <section className="box">
-        <h3>판매 농가 이야기</h3>
-        <p>{seller.story}</p>
-      </section>
-
-      <div className="actions">
-        <button type="button" className="link" onClick={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })}>상품 문의하기</button>
-        {product.b2b_available && (
-          <button type="button" className="button ghost" onClick={() => setShowB2b(true)}>기업 구매 문의 (대량·납품)</button>
-        )}
       </div>
-      {showB2b && <B2bForm product={product} onClose={() => setShowB2b(false)} />}
-
-      <ReviewList code={product.product_code} />
-      <section className="box" ref={qnaRef}>
-        <h3>Q&A {product.questions.length}개</h3>
-        <QuestionForm
-          productCode={product.product_code}
-          onSent={(q) => {
-            setProduct((prev) => ({ ...prev, questions: [q, ...prev.questions] }))
-            setSentMessage('질문이 올라갔어요. 답변이 달리면 여기에 보여요.')
-          }}
-        />
-        {sentMessage && <p className="success">{sentMessage}</p>}
-        <ul>
-          {product.questions.map((q) => (
-            <li key={q.id}>
-              <strong>Q.</strong> {q.question} <span className="muted">· {q.author}</span><br />
-              {q.answer ? <><strong>A.</strong> {q.answer}</> : <span className="muted">답변을 기다리는 중</span>}
-            </li>
-          ))}
-        </ul>
-      </section>
       <Related code={product.product_code} onOpen={onOpen} />
     </article>
   )
@@ -299,23 +342,23 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
 function App() {
   if (window.location.pathname.startsWith('/seller')) {
     return (
-      <div className="app">
-        <header>
-          <h1>농가 판매 자사몰 · 판매자</h1>
-          <p className="notice">개발 중 · 농가 판매자 화면입니다. 내 농가 상품만 보여요. <a href="/">소비자 화면으로</a></p>
+      <div className="console">
+        <header className="console-bar">
+          <a className="brand-mark" href="/seller">YOONJU MARKET<small>판매자 센터</small></a>
+          <span className="bar-note">개발 중 · 내 농가 상품만 보여요 · <a href="/">쇼핑몰 보기</a></span>
         </header>
-        <Suspense fallback={loading}><Seller /></Suspense>
+        <main className="console-main"><Suspense fallback={loading}><Seller /></Suspense></main>
       </div>
     )
   }
   if (window.location.pathname.startsWith('/admin')) {
     return (
-      <div className="app">
-        <header>
-          <h1>농가 판매 자사몰 · 관리자</h1>
-          <p className="notice">개발 중 · 관리자 화면입니다. <a href="/">소비자 화면으로</a></p>
+      <div className="console">
+        <header className="console-bar">
+          <a className="brand-mark" href="/admin">YOONJU MARKET<small>관리자</small></a>
+          <span className="bar-note">개발 중 · <a href="/">쇼핑몰 보기</a></span>
         </header>
-        <Suspense fallback={loading}><Admin /></Suspense>
+        <main className="console-main"><Suspense fallback={loading}><Admin /></Suspense></main>
       </div>
     )
   }
@@ -341,6 +384,7 @@ function innerPage(path) {
   if (path === '/account/find') return <FindPasswordPage />
   if (path === '/account/reset') return <ResetPasswordPage />
   if (path === '/account') return <MyPage />
+  if (path === '/account/social') return <SocialSignupPage />
   return null
 }
 
@@ -413,6 +457,7 @@ function Storefront() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
   const pushed = useRef(0) // 이 화면에서 상품을 연 횟수 (뒤로 가기로 목록에 돌아갈 수 있는지)
+  const listScroll = useRef(0) // 상품을 열기 전 목록 스크롤 위치 (돌아올 때 그 자리로)
   const first = useRef(loc) // 처음 들어온 주소 (아래로 내려 줄 위치를 정할 때 한 번만 쓴다)
 
   useEffect(() => {
@@ -458,7 +503,18 @@ function Storefront() {
     return () => { stale = true }
   }, [loc])
 
+  // 상세에서 목록으로 돌아오면(뒤로 가기 포함) 보던 자리로 되돌린다
+  const hadCode = useRef(Boolean(loc.code))
+  useEffect(() => {
+    const was = hadCode.current
+    hadCode.current = Boolean(loc.code)
+    if (!was || loc.code) return undefined
+    const timer = setTimeout(() => window.scrollTo({ top: listScroll.current }), 60)
+    return () => clearTimeout(timer)
+  }, [loc.code])
+
   const open = (code, focusOn = null) => {
+    if (!loc.code) listScroll.current = window.scrollY
     window.history.pushState(null, '', `/p/${encodeURIComponent(code)}`)
     pushed.current += 1
     setLoc((prev) => ({ ...prev, code }))

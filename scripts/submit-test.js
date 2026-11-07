@@ -9,11 +9,12 @@ import pg from 'pg'
 import { hashPassword } from '../server/auth.js'
 import { SHOP } from '../server/policy.js'
 
-const db = new pg.Pool({ connectionString: process.env.DATABASE_URL, options: '-c search_path=farm', max: 2 })
+// 공용 DB는 계정당 연결 5개: 메인 서버(3)와 함께 돌 때는 DB_POOL_MAX=1 로 시험 쪽·시험 서버 연결을 줄인다
+const db = new pg.Pool({ connectionString: process.env.DATABASE_URL, options: '-c search_path=farm', max: Number(process.env.DB_POOL_MAX) || 2 })
 
 function startBackend() {
   return new Promise((resolve, reject) => {
-    const env = { ...process.env, BACKEND_PORT: '0', RAG_ENABLED: '0', NODE_ENV: 'development', DB_POOL_MAX: '2', REQUIRE_2FA: '0', ADMIN_ALLOWED_IPS: '', TOSS_CLIENT_KEY: '', TOSS_SECRET_KEY: '', OPENROUTER_API_KEY: '' }
+    const env = { ...process.env, BACKEND_PORT: '0', RAG_ENABLED: '0', NODE_ENV: 'development', DB_POOL_MAX: process.env.DB_POOL_MAX || '2', REQUIRE_2FA: '0', ADMIN_ALLOWED_IPS: '', TOSS_CLIENT_KEY: '', TOSS_SECRET_KEY: '', OPENROUTER_API_KEY: '' }
     const child = spawn(process.execPath, ['server/index.js'], { env, stdio: ['ignore', 'pipe', 'pipe'] })
     let logs = ''
     const onData = (chunk) => {

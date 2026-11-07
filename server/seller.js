@@ -38,6 +38,33 @@ function nextStatus(requested, current) {
   return 'pending'
 }
 
+// 판매자 첫 화면의 [오늘 할 일]: 내 농가 몫만 센다. 여러 농가 주문은 농가 배송(order_shipments) 기준이라 관리자 대시보드와 같다
+const TODAY = "(now() AT TIME ZONE 'Asia/Seoul')::date"
+sellerRouter.get('/summary', async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT
+       (SELECT count(*) FROM order_shipments sh JOIN orders o ON o.id = sh.order_id
+         WHERE sh.seller_code = $1 AND sh.status = 'paid' AND o.status IN ('paid', 'preparing', 'shipping')
+           AND (sh.ship_from IS NULL OR sh.ship_from <= ${TODAY}))::int AS to_prepare,
+       (SELECT count(*) FROM order_shipments sh JOIN orders o ON o.id = sh.order_id
+         WHERE sh.seller_code = $1 AND sh.status = 'preparing' AND o.status IN ('paid', 'preparing', 'shipping'))::int AS to_ship,
+       (SELECT count(*) FROM order_shipments sh JOIN orders o ON o.id = sh.order_id
+         WHERE sh.seller_code = $1 AND sh.status = 'paid' AND o.status IN ('paid', 'preparing', 'shipping') AND sh.ship_from > ${TODAY})::int AS preorders_waiting,
+       (SELECT count(*) FROM questions q JOIN products p ON p.product_code = q.product_code
+         WHERE p.seller_code = $1 AND q.answer IS NULL AND NOT q.hidden)::int AS questions_waiting,
+       (SELECT count(*) FROM order_returns r WHERE r.seller_code = $1 AND r.status = 'requested')::int AS returns_waiting,
+       (SELECT count(*) FROM products p WHERE p.seller_code = $1 AND p.status = 'active')::int AS selling,
+       (SELECT count(*) FROM products p WHERE p.seller_code = $1 AND p.status = 'pending')::int AS reviewing,
+       (SELECT count(*) FROM products p WHERE p.seller_code = $1 AND p.status = 'draft' AND p.review_note IS NOT NULL)::int AS rejected,
+       (SELECT count(*) FROM products p WHERE p.seller_code = $1 AND p.status = 'active' AND p.stock = 0)::int AS sold_out,
+       (SELECT count(*) FROM products p WHERE p.seller_code = $1 AND p.status = 'active' AND p.stock BETWEEN 1 AND 5)::int AS low_stock,
+       (SELECT count(*) FROM restock_requests r JOIN products p ON p.product_code = r.product_code
+         WHERE p.seller_code = $1 AND r.notified_at IS NULL)::int AS restock_waiting`,
+    [mine(req)],
+  )
+  res.json(rows[0])
+})
+
 sellerRouter.get('/me', async (req, res) => {
   const { rows } = await pool.query('SELECT seller_code, name, region, intro, story, status, reject_note FROM sellers WHERE seller_code = $1', [mine(req)])
   res.json({ loginId: req.seller.loginId, role: 'seller', seller: rows[0], mfa: Boolean(req.seller.mfa) })
@@ -70,7 +97,8 @@ sellerRouter.get('/options', async (req, res) => {
 
 sellerRouter.get('/products', async (req, res) => {
   const { rows } = await pool.query(`
-    SELECT p.*, (p.stock = 0) AS sold_out, i.name AS item_name, i.category, ${ALL_OPTIONS_SQL}
+    SELECT p.*, (p.stock = 0) AS sold_out, i.name AS item_name, i.category, ${ALL_OPTIONS_SQL},
+           (SELECT count(*) FROM restock_requests r WHERE r.product_code = p.product_code AND r.notified_at IS NULL)::int AS restock_waiting
     FROM products p JOIN items i ON i.item_code = p.item_code
     WHERE p.seller_code = $1
     ORDER BY (p.status = 'draft' AND p.review_note IS NOT NULL) DESC, p.updated_at DESC`, [mine(req)])

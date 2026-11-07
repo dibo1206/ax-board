@@ -150,7 +150,8 @@ try {
   const review = (await call(admin, 'GET', '/admin/items/review')).data
   const pending = review.filter((i) => i.status === 'pending')
   const blockers = pending.filter((i) => i.issues.some((x) => x.level === 'error'))
-  record('품목', '검수 기다리는 품목', `${pending.length}개 (${pending.map((i) => i.name).join(', ')})`, pending.length === 17)
+  // 예시 데이터(data/items.csv)에서 검수자 칸이 빈 품목은 18개. 관리자가 검수할수록 줄어든다
+  record('품목', '검수 기다리는 품목 (예시 데이터 18개 이하)', `${pending.length}개 (${pending.map((i) => i.name).join(', ')})`, pending.length <= 18)
   record('품목', '검수 버튼이 막히는 품목 (1차 검사 오류)', blockers.length ? blockers.map((i) => `${i.name}: ${i.issues.filter((x) => x.level === 'error').map((x) => `${x.field} ${x.problem}`).join(', ')}`).join(' / ') : '없음', blockers.length === 0)
   const warnCount = pending.reduce((n, i) => n + i.issues.filter((x) => x.level === 'warn').length, 0)
   record('품목', '검수 화면 확인 경고', `${warnCount}건 (기간·온도 숫자, 당도 범위 등 담당자가 볼 것)`, 'warn')

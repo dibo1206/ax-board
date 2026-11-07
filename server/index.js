@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import compression from 'compression'
 import express from 'express'
 import { accountRouter } from './account.js'
+import { oauthRouter } from './oauth.js'
 import { accessLogger, adminAccessLogRouter } from './accessLog.js'
 import { dashboardRouter } from './dashboard.js'
 import { adminRouter, UPLOAD_DIR } from './admin.js'
@@ -27,6 +28,7 @@ import { buildNotice } from './notice.js'
 import { ACTIVE_OPTIONS_SQL } from './options.js'
 import { adminOrderRouter, memberOrderRouter, publicOrderRouter, sellerOrderRouter, startOrderSweeper } from './orders.js'
 import { recommendRouter } from './recommend.js'
+import { restockRouter, sweepRestock } from './restock.js'
 import { adminReturnRouter, memberReturnRouter, publicReturnRouter, sellerReturnRouter } from './returns.js'
 import { isPreorder } from './preorder.js'
 import { adminReviewRouter, reviewRouter } from './reviews.js'
@@ -145,7 +147,10 @@ app.use((req, res, next) => {
       if (res.statusCode >= 400) return
       clearCache()
       // 상품·품목·Q&A를 바꾸는 곳은 관리자와 판매자 화면이다. 벡터 검색 자료도 맞춘다
-      if (/^\/api\/(admin|seller)/.test(req.originalUrl)) scheduleRagSync()
+      if (/^\/api\/(admin|seller)/.test(req.originalUrl)) {
+        scheduleRagSync()
+        sweepRestock().catch((e) => console.error(`[restock] 알림 실패 · ${e.message}`)) // 재고가 다시 생겼으면 알림
+      }
     })
   }
   next()
@@ -319,12 +324,14 @@ app.use('/api/seller', sellerRouter)
 app.use('/api', publicInquiryRouter)
 app.use('/api', chatRouter)
 app.use('/api', recommendRouter)
+app.use('/api', restockRouter)
 app.use('/api', publicOrderRouter)
 app.use('/api', publicReturnRouter)
 app.use('/api', reviewRouter)
 app.use('/api', shopGroupRouter)
 app.use('/api/account/orders', memberReturnRouter)
 app.use('/api/account/orders', memberOrderRouter)
+app.use('/api/account/oauth', oauthRouter)
 app.use('/api/account', accountRouter)
 // 올린 사진은 그림으로만 쓰이게: 사진 주소를 직접 열어도 스크립트가 돌지 않는다
 app.use('/uploads', express.static(fileURLToPath(UPLOAD_DIR), {

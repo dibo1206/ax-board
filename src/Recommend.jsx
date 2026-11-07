@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { netFetch } from './net.js'
-import { thumbUrl } from './shop/shared.js'
+import { addToCart, thumbUrl } from './shop/shared.js'
 
 // 6단계: 이번 주 추천 배너 · 질문형 추천 · 함께 보면 좋은 상품
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
@@ -12,7 +12,25 @@ async function get(path) {
   return data
 }
 
-function PickList({ items, onOpen }) {
+// 카드 아래 "장바구니 담기" (추천 목록에는 품절 상품이 없다). 누르면 1개 담고 잠깐 "담았어요". 옵션 상품은 옵션을 골라야 해서 상세로 보낸다
+function AddButton({ item, onOpen }) {
+  const [done, setDone] = useState(false)
+  useEffect(() => {
+    if (!done) return undefined
+    const timer = setTimeout(() => setDone(false), 1600)
+    return () => clearTimeout(timer)
+  }, [done])
+  if (item.has_options) {
+    return <button type="button" className="pick-add" aria-label={`${item.name} 옵션 고르기`} onClick={() => onOpen(item.product_code)}>옵션 고르기</button>
+  }
+  return (
+    <button type="button" className={`pick-add${done ? ' done' : ''}`} aria-label={`${item.name} 장바구니 담기`} onClick={() => { addToCart(item.product_code, 1); setDone(true) }}>
+      {done ? '✓ 담았어요' : '장바구니 담기'}
+    </button>
+  )
+}
+
+export function PickList({ items, onOpen, withCart = false }) {
   return (
     <ul className="picks">
       {items.map((x) => (
@@ -23,6 +41,7 @@ function PickList({ items, onOpen }) {
             <span>{won(x.price)}{x.has_options && '부터'}</span>
             <span className="reasons">{x.reasons.map((r) => <span key={r} className="badge">{r}</span>)}</span>
           </button>
+          {withCart && <AddButton item={x} onOpen={onOpen} />}
         </li>
       ))}
     </ul>
@@ -261,7 +280,7 @@ export function Related({ code, onOpen }) {
   return (
     <section className="box">
       <h3>함께 보면 좋은 상품</h3>
-      <PickList items={items} onOpen={onOpen} />
+      <PickList items={items} onOpen={onOpen} withCart />
     </section>
   )
 }

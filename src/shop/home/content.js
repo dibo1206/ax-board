@@ -42,16 +42,30 @@ export const SEASON = {
   note: '※ 제철 시기는 예시 데이터입니다. 실제 출하 시기 확정 후 교체합니다.',
 }
 
+// 이야기 배너 3장. 회사 소개(가공·유통·판매, 계약재배, HACCP, 상생)와 이 쇼핑몰이 실제로 하는 일(당도계 사진, 농가가 직접 올림)만 쓴다
+// links: href 가 # 로 시작하면 같은 화면의 그 칸으로, http 로 시작하면 새 창
 export const STORY = {
-  title: ['가까운 농가의 맛을', '그대로 전합니다'],
-  points: [
-    { title: '가까운 곳에서', text: '충남에서 자란 농산물을 가공·유통·판매해 소비자에게 정직하게 전하는 천안의 로컬푸드 기업입니다.' },
-    { title: '안전한 먹거리', text: '농가와 계약재배로 생산부터 유통까지 모든 과정을 관리합니다. 과일 농축액 베이스는 HACCP 인증 시설에서 만듭니다.' },
-    { title: '함께 사는 방식', text: '단순히 파는 것보다 지역 농가와의 상생을 먼저 생각하며, 지속가능한 농업 생태계를 함께 만듭니다.' },
-  ],
-  photos: [
-    { src: '/home/story-1.webp', alt: '흙을 두 손에 담은 모습', need: 'home/story-1.webp (산지·과수원 풍경 또는 작업 손)' },
-    { src: '/home/story-2.webp', alt: '하나씩 감싸 선별·포장한 사과', need: 'home/story-2.webp (선별·포장 디테일)' },
+  label: '윤주 이야기',
+  interval: 7000,
+  slides: [
+    {
+      title: ['충남에서 자란 것을', '천안에서 보냅니다'],
+      text: '윤주(주)농업회사법인은 천안의 로컬푸드 회사예요. 충남 농가에서 받은 농산물을 가공하고, 포장하고, 파는 일까지 저희가 직접 합니다.',
+      photo: { src: '/home/hero-5.webp', alt: '아침 안개가 낀 사과 과수원과 수확한 사과 상자', position: 'center 55%' },
+      links: [{ label: '제철 상품 보기', href: '#products' }, { label: '회사 홈페이지', href: 'https://yunjufarm.co.kr/' }],
+    },
+    {
+      title: ['키우는 과정부터', '확인하고 팝니다'],
+      text: '농가와 계약재배를 해서 생산부터 유통까지 함께 관리해요. 과일 농축액 베이스는 HACCP 인증 시설에서 만들고, 당도를 적은 상품에는 농가가 잰 당도계 사진을 같이 올립니다.',
+      photo: { src: '/home/story-2.webp', alt: '하나씩 감싸 선별·포장한 사과', position: 'center 50%' },
+      links: [{ label: '상품 둘러보기', href: '#products' }, { label: '자주 묻는 질문', href: '#faq' }],
+    },
+    {
+      title: ['농가가 내년에도', '농사지을 수 있게'],
+      text: '많이 파는 것보다 지역 농가와 오래 거래하는 걸 먼저 생각해요. 농가가 상품을 직접 올리고, 상품 페이지마다 그 농가의 이야기를 함께 싣습니다.',
+      photo: { src: '/home/story-1.webp', alt: '흙을 두 손에 담은 모습', position: 'center 45%' },
+      links: [{ label: '농가로 입점 신청', href: '/account/signup?type=seller' }, { label: '상품 둘러보기', href: '#products' }],
+    },
   ],
 }
 

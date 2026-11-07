@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { MAX_QTY, optionLabel, preorderNote, readCart, sameLine, won, writeCart } from './shared.js'
+import { PickList } from '../Recommend.jsx'
+import { get, getAccount, MAX_QTY, optionLabel, preorderNote, readCart, sameLine, won, writeCart } from './shared.js'
 import { useCartLines } from './useCartLines.js'
 
 // 농가가 여럿이면 농가마다 따로 보내서 배송비도 농가마다 보여 준다
@@ -15,14 +16,52 @@ export function Totals({ itemsAmount, fee, total, policy, farms = [] }) {
       ))}
       <dt className="sum">결제 예정 금액</dt><dd className="sum">{won(total)}</dd>
       {many && <dd className="muted full">농가마다 따로 보내서 배송비가 농가마다 붙어요. 상품은 따로 도착할 수 있어요.</dd>}
-      {!many && policy && fee > 0 && <dd className="muted full">{won(policy.shipping.freeOver - itemsAmount)} 더 담으면 무료 배송이에요</dd>}
+      {!many && policy && fee > 0 && (
+        <dd className="full free-ship">
+          <span className="muted">{won(policy.shipping.freeOver - itemsAmount)} 더 담으면 무료 배송이에요</span>
+          <span className="free-bar" role="progressbar" aria-label="무료 배송까지" aria-valuemin={0} aria-valuemax={policy.shipping.freeOver} aria-valuenow={itemsAmount}>
+            <span style={{ width: `${Math.min(100, Math.round((itemsAmount / policy.shipping.freeOver) * 100))}%` }} />
+          </span>
+          <span className="free-scale muted"><span>0원</span><span>{won(policy.shipping.freeOver)}</span></span>
+        </dd>
+      )}
+      {!many && policy && fee === 0 && itemsAmount > 0 && <dd className="full free-ship"><span className="free-done">무료 배송 조건을 채웠어요</span></dd>}
     </dl>
+  )
+}
+
+// 담은 상품과 어울리는 상품: 담은 상품(앞 3개)마다 "함께 보면 좋은 상품"을 받아 합치고, 이미 담은 건 뺀다
+function CartRelated({ lines, onOpen }) {
+  const [items, setItems] = useState([])
+  const key = lines.slice(0, 3).map((l) => l.productCode).join(',')
+  useEffect(() => {
+    let stale = false
+    const codes = key ? key.split(',') : []
+    Promise.all(codes.map((c) => get(`/products/${c}/related`).then((d) => d.items).catch(() => [])))
+      .then((lists) => {
+        if (stale) return
+        const inCart = new Set(readCart().map((l) => l.productCode))
+        const seen = new Set()
+        const merged = lists.flat().filter((x) => !inCart.has(x.product_code) && !seen.has(x.product_code) && seen.add(x.product_code))
+        setItems(merged.slice(0, 3))
+      })
+    return () => { stale = true }
+  }, [key])
+  if (!items.length) return null
+  return (
+    <section className="cart-related">
+      <h3>함께 보면 좋은 상품</h3>
+      <PickList items={items} onOpen={onOpen} withCart />
+    </section>
   )
 }
 
 export function Cart() {
   const [lines, setLines] = useState(readCart)
+  const [account, setAccount] = useState(undefined) // undefined: 확인 중, null: 비회원
   const cart = useCartLines(lines)
+
+  useEffect(() => { getAccount().then(setAccount) }, [])
 
   useEffect(() => {
     const update = () => setLines(readCart())
@@ -64,10 +103,14 @@ export function Cart() {
             ))}
           </ul>
           <Totals {...cart} />
+          {account === null && (
+            <p className="guest-note">회원가입 없이 바로 주문할 수 있어요. 비회원은 <a href="/order/lookup">주문 조회</a>에서 주문번호와 휴대폰 번호로 확인해요. <a href="/account/login?next=/cart">로그인</a>하면 주문 내역이 저장돼요.</p>
+          )}
           <div className="actions">
             <a className="button ghost" href="/">계속 쇼핑하기</a>
             {cart.ok.length > 0 ? <a className="button" href="/checkout">주문하기</a> : <span className="button ghost">주문할 수 있는 상품이 없어요</span>}
           </div>
+          <CartRelated lines={lines} onOpen={(code) => { window.location.href = `/p/${encodeURIComponent(code)}` }} />
         </>
       )}
     </section>
