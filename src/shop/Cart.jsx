@@ -4,8 +4,12 @@ import { get, getAccount, MAX_QTY, optionLabel, preorderNote, readCart, sameLine
 import { useCartLines } from './useCartLines.js'
 
 // 농가가 여럿이면 농가마다 따로 보내서 배송비도 농가마다 보여 준다
-export function Totals({ itemsAmount, fee, total, policy, farms = [] }) {
+// shopMore: 무료 배송 기준을 못 채웠으면 안내 밑에 초록 [계속 쇼핑하기]를 띄운다 (2026-11-07 피드백)
+export function Totals({ itemsAmount, fee, total, policy, farms = [], shopMore = false }) {
   const many = farms.length > 1
+  const keepShopping = shopMore && policy && fee > 0 && (
+    <dd className="full"><a className="free-more" href="/#products">계속 쇼핑하기 <span aria-hidden="true">→</span></a></dd>
+  )
   const more = (f) => (policy && f.fee > 0 ? ` · ${won(policy.shipping.freeOver - f.itemsAmount)} 더 담으면 무료` : '')
   return (
     <dl className="totals">
@@ -16,6 +20,7 @@ export function Totals({ itemsAmount, fee, total, policy, farms = [] }) {
       ))}
       <dt className="sum">결제 예정 금액</dt><dd className="sum">{won(total)}</dd>
       {many && <dd className="muted full">농가마다 따로 보내서 배송비가 농가마다 붙어요. 상품은 따로 도착할 수 있어요.</dd>}
+      {many && keepShopping}
       {!many && policy && fee > 0 && (
         <dd className="full free-ship">
           <span className="muted">{won(policy.shipping.freeOver - itemsAmount)} 더 담으면 무료 배송이에요</span>
@@ -25,6 +30,7 @@ export function Totals({ itemsAmount, fee, total, policy, farms = [] }) {
           <span className="free-scale muted"><span>0원</span><span>{won(policy.shipping.freeOver)}</span></span>
         </dd>
       )}
+      {!many && keepShopping}
       {!many && policy && fee === 0 && itemsAmount > 0 && <dd className="full free-ship"><span className="free-done">무료 배송 조건을 채웠어요</span></dd>}
     </dl>
   )
@@ -102,7 +108,7 @@ export function Cart() {
               </li>
             ))}
           </ul>
-          <Totals {...cart} />
+          <Totals {...cart} shopMore />
           {account === null && (
             <p className="guest-note">회원가입 없이 바로 주문할 수 있어요. 비회원은 <a href="/order/lookup">주문 조회</a>에서 주문번호와 휴대폰 번호로 확인해요. <a href="/account/login?next=/cart">로그인</a>하면 주문 내역이 저장돼요.</p>
           )}

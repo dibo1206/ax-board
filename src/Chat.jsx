@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { clearChat, loadChat, saveChat } from './chatStore.js'
 import { netFetch } from './net.js'
 
 // 5단계: 화면 오른쪽 아래 상담 창. 보고 있는 상품 코드를 함께 보내서 "이거 얼마예요?"에도 답한다
@@ -8,8 +9,9 @@ const SHOP_MENU = [['배송비', '배송비 얼마예요?'], ['주문 조회', '
 const HELLO = { role: 'assistant', content: '안녕하세요! 아래 버튼을 누르거나 가격·당도·보관법·레시피를 물어보세요. 상품 정보에 있는 내용으로 답해 드려요.' }
 
 export function Chat({ productCode, onOpenProduct }) {
-  const [open, setOpen] = useState(false)
-  const [messages, setMessages] = useState([HELLO])
+  const [start] = useState(() => loadChat(HELLO))
+  const [open, setOpen] = useState(start.open)
+  const [messages, setMessages] = useState(start.messages)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const endRef = useRef(null)
@@ -17,6 +19,9 @@ export function Chat({ productCode, onOpenProduct }) {
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' })
   }, [messages, open])
+
+  // 첫 인사말은 빼고, 실패한 답과 [AI에게 물어보기] 버튼 상태는 남기지 않는다
+  useEffect(() => saveChat(messages.slice(1), open), [messages, open])
 
   async function send(text, { ai = false } = {}) {
     const question = text.trim()
@@ -49,6 +54,7 @@ export function Chat({ productCode, onOpenProduct }) {
     <section className="chat" aria-label="상담하기">
       <header>
         <strong>상담하기</strong>
+        {messages.length > 1 && <button type="button" className="link" onClick={() => { setMessages([HELLO]); clearChat() }}>대화 지우기</button>}
         <button type="button" className="link" onClick={() => setOpen(false)} aria-label="상담 창 닫기">닫기</button>
       </header>
       <ol className="chat-log">

@@ -95,7 +95,7 @@ export function addToCart(productCode, quantity, optionId = null, name = '') {
   if (found) found.quantity = Math.min(MAX_QTY, found.quantity + quantity)
   else items.push({ productCode, optionId, quantity })
   writeCart(items)
-  window.dispatchEvent(new CustomEvent('cart-added', { detail: { name: name.replace(/\[예시\]\s*/g, ''), quantity } }))
+  window.dispatchEvent(new CustomEvent('cart-added', { detail: { productCode, name: name.replace(/\[예시\]\s*/g, ''), quantity } }))
 }
 
 export const cartCount = () => readCart().reduce((sum, i) => sum + i.quantity, 0)

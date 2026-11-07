@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { adminApi } from '../admin/api.js'
+import { clearChat } from '../chatStore.js'
 import { OrderDetail } from '../shop/Orders.jsx'
 import { Logo } from '../shop/ShopLayout.jsx'
 import { get, loadScript, ORDER_STATUS, post, send, when, won } from '../shop/shared.js'
-import { EmailField, NewPasswordFields, Req } from './fields.jsx'
+import { AgreeAll, EmailField, NewPasswordFields, Req } from './fields.jsx'
 import { emailProblem, formatPhone, passwordOk, phoneOk } from './rules.js'
 
 // 손님 회원: 로그인 · 가입 · 비밀번호 찾기 · 마이페이지(주문 내역 · 내 정보·배송지 · 비밀번호 · 탈퇴)
@@ -123,6 +124,7 @@ export function SocialSignupPage() {
         : <label>이메일<input type="email" value={form.email} onChange={set('email')} autoComplete="email" /></label>}
       <label>이름<input value={form.name} onChange={set('name')} maxLength={20} autoComplete="name" /></label>
       <label>휴대폰 <span className="muted">주문 조회에 써요</span><input value={form.phone} onChange={set('phone')} inputMode="tel" placeholder="010-1234-5678" autoComplete="tel" /></label>
+      <AgreeAll form={form} setForm={setForm} />
       <label className="check"><input type="checkbox" checked={form.agreeTerms} onChange={set('agreeTerms')} />[필수] <a href="/policy/terms" target="_blank" rel="noreferrer">이용약관</a>에 동의해요</label>
       <label className="check"><input type="checkbox" checked={form.agreePrivacy} onChange={set('agreePrivacy')} />[필수] <a href="/policy/privacy" target="_blank" rel="noreferrer">개인정보 수집·이용</a>에 동의해요 (간편 로그인 회원 번호·이메일·이름·휴대폰, 탈퇴 시 삭제)</label>
       <Errors list={errors} />
@@ -201,6 +203,7 @@ function SellerSignup() {
       <label>연락처<em className="req" title="필수">*</em><input value={form.phone} onChange={set('phone')} inputMode="tel" placeholder="010-1234-5678" autoComplete="tel" /></label>
       <label>사업자등록번호<em className="req" title="필수">*</em><input value={form.businessNo} onChange={set('businessNo')} inputMode="numeric" placeholder="000-00-00000" /></label>
       <EmailField id="seller-email" value={form.email} onChange={(v) => setForm((prev) => ({ ...prev, email: v }))} note="승인 결과를 받아요" />
+      <AgreeAll form={form} setForm={setForm} />
       <label className="check"><input type="checkbox" checked={form.agreeTerms} onChange={set('agreeTerms')} /><em className="req">[필수]</em> <a href="/policy/terms" target="_blank" rel="noreferrer">이용약관</a> 동의 (올린 상품 정보의 정확성은 판매자가 책임져요)</label>
       <label className="check"><input type="checkbox" checked={form.agreePrivacy} onChange={set('agreePrivacy')} /><em className="req">[필수]</em> <a href="/policy/privacy" target="_blank" rel="noreferrer">개인정보 수집·이용</a> 동의</label>
       <Errors list={errors} />
@@ -265,6 +268,7 @@ export function SignupPage() {
           className={phoneBad ? 'bad' : phoneOk(form.phone) ? 'good' : ''} aria-invalid={phoneBad} aria-describedby="su-phone-msg" />
         <p id="su-phone-msg" className={`field-msg${phoneBad ? ' no' : ''}`} aria-live="polite">{phoneBad ? '010으로 시작하는 휴대폰 번호 10~11자리를 적어 주세요.' : ''}</p>
       </div>
+      <AgreeAll form={form} setForm={setForm} />
       <label className={`check${show && !form.agreeTerms ? ' bad-check' : ''}`}><input type="checkbox" checked={form.agreeTerms} onChange={set('agreeTerms')} /><em className="req">[필수]</em> <a href="/policy/terms" target="_blank" rel="noreferrer">이용약관</a>에 동의해요</label>
       <label className={`check${show && !form.agreePrivacy ? ' bad-check' : ''}`}><input type="checkbox" checked={form.agreePrivacy} onChange={set('agreePrivacy')} /><em className="req">[필수]</em> <a href="/policy/privacy" target="_blank" rel="noreferrer">개인정보 수집·이용</a>에 동의해요 (이메일·이름·휴대폰, 탈퇴 시 삭제)</label>
       <Errors list={errors} />
@@ -373,14 +377,28 @@ function MyOrders() {
       </div>
     )
   }
-  if (!orders.length) return <p className="muted">아직 주문이 없어요. <a href="/">상품 보러 가기</a></p>
+  if (!orders.length) {
+    return (
+      <div className="my-empty">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5 12 4l8 3.5v9L12 20l-8-3.5zM4 7.5l8 3.5 8-3.5M12 11v9" /></svg>
+        <p>아직 주문이 없어요.</p>
+        <a href="/#products" className="my-go">상품 보러 가기</a>
+      </div>
+    )
+  }
   return (
-    <ul className="inbox">
+    <ul className="my-orders">
       {orders.map((o) => (
-        <li key={o.order_no} className="box">
-          <button type="button" className="link" onClick={() => view(o.order_no)}>{o.order_no}</button>
-          <span className="muted"> · {when(o.created_at)} · {ORDER_STATUS[o.status]}</span>
-          <p>{o.summary} — {won(o.total_amount)}</p>
+        <li key={o.order_no}>
+          <button type="button" className="my-order" onClick={() => view(o.order_no)} aria-label={`${o.summary}, ${won(o.total_amount)}, ${ORDER_STATUS[o.status]}. 누르면 주문 상세`}>
+            <span className="my-order-top">
+              <span className={`my-status st-${o.status}`}>{ORDER_STATUS[o.status]}</span>
+              <span>{when(o.created_at)}</span>
+              <span className="my-order-no">{o.order_no}</span>
+            </span>
+            <span className="my-order-sum">{o.summary}</span>
+            <span className="my-order-amt">{won(o.total_amount)} <span aria-hidden="true">›</span></span>
+          </button>
         </li>
       ))}
     </ul>
@@ -421,7 +439,7 @@ function Profile({ me, onSaved }) {
         <label>휴대폰<input value={form.phone} onChange={set('phone')} inputMode="tel" /></label>
       </div>
       <h3>기본 배송지 <span className="muted">주문서에 자동으로 채워져요</span></h3>
-      <div className="row">
+      <div className="row zip-row">
         <label>우편번호<input value={form.zipcode} onChange={set('zipcode')} inputMode="numeric" maxLength={5} /></label>
         <button type="button" className="button ghost" onClick={findAddress}>주소 검색</button>
       </div>
@@ -461,6 +479,7 @@ function Security({ hasPassword = true }) {
     if (!window.confirm('정말 탈퇴할까요? 계정 정보가 지워지고 되돌릴 수 없어요. (주문 기록은 법에 따라 5년 보관돼요)')) return
     try {
       await send('DELETE', '/account/me', hasPassword ? { password: leavePassword } : { confirm: leavePassword.trim() })
+      clearChat()
       window.dispatchEvent(new Event('account-change'))
       window.location.href = '/'
     } catch (e) {
@@ -527,6 +546,14 @@ function MyQuestions({ onSeen }) {
   )
 }
 
+// 마이페이지 탭: 키 · 이름 · 아이콘(선으로 그린 상자·말풍선·집·자물쇠)
+const MY_TABS = [
+  ['orders', '주문 내역', 'M4 7.5 12 4l8 3.5v9L12 20l-8-3.5zM4 7.5l8 3.5 8-3.5M12 11v9'],
+  ['questions', '내 문의', 'M5 5h14v10H9l-4 4z'],
+  ['profile', '내 정보·배송지', 'M4 11 12 4l8 7M6 9.5V20h12V9.5M10 20v-5h4v5'],
+  ['security', '로그인·탈퇴', 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3'],
+]
+
 export function MyPage() {
   const [me, setMe] = useState(undefined)
   const [tab, setTab] = useState(() => {
@@ -541,6 +568,7 @@ export function MyPage() {
 
   async function logout() {
     await post('/account/logout', {})
+    clearChat()
     window.dispatchEvent(new Event('account-change'))
     window.location.href = '/'
   }
@@ -548,24 +576,33 @@ export function MyPage() {
   if (me === undefined) return <p className="muted">불러오는 중…</p>
   if (me === null) return <LoginPage /> // 로그인하지 않았으면 로그인 화면을 그대로 (로그인하면 마이페이지로 돌아온다)
   const socialMessage = new URLSearchParams(window.location.search).get('social') // 간편 로그인 연결 결과
+  // 마이페이지 전용 모양 (2026-11-07 피드백: 제목이 탭 버튼과 겹치던 것 고치고 칸을 카드형으로)
   return (
-    <section>
-      <div className="admin-head">
-        <h2>{me.name}님의 마이페이지</h2>
-        <button type="button" className="link" onClick={logout}>로그아웃</button>
-      </div>
+    <section className="mypage">
+      <header className="my-hero">
+        <div>
+          <p className="my-hello">반가워요</p>
+          <h2>{me.name}님의 마이페이지</h2>
+          <p className="my-email">{me.email}</p>
+        </div>
+        <button type="button" className="my-logout" onClick={logout}>로그아웃</button>
+      </header>
       {socialMessage && <p className="success">{socialMessage}</p>}
-      <nav className="tabs">
-        {[['orders', '주문 내역'], ['questions', '내 문의'], ['profile', '내 정보·배송지'], ['security', '로그인·탈퇴']].map(([key, label]) => (
-          <button key={key} type="button" className={tab === key ? 'on' : ''} onClick={() => setTab(key)}>
-            {label}{key === 'questions' && me.unreadAnswers > 0 && <span className="new-dot" aria-label={`새 답변 ${me.unreadAnswers}개`}>{me.unreadAnswers}</span>}
+      <nav className="my-tabs" aria-label="마이페이지 메뉴">
+        {MY_TABS.map(([key, label, icon]) => (
+          <button key={key} type="button" className={tab === key ? 'on' : ''} aria-current={tab === key ? 'page' : undefined} onClick={() => setTab(key)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d={icon} /></svg>
+            <span>{label}</span>
+            {key === 'questions' && me.unreadAnswers > 0 && <span className="new-dot" aria-label={`새 답변 ${me.unreadAnswers}개`}>{me.unreadAnswers}</span>}
           </button>
         ))}
       </nav>
-      {tab === 'orders' && <MyOrders />}
-      {tab === 'questions' && <MyQuestions onSeen={markSeen} />}
-      {tab === 'profile' && <Profile me={me} onSaved={setMe} />}
-      {tab === 'security' && <Security hasPassword={me.hasPassword !== false} />}
+      <div className="my-panel">
+        {tab === 'orders' && <MyOrders />}
+        {tab === 'questions' && <MyQuestions onSeen={markSeen} />}
+        {tab === 'profile' && <Profile me={me} onSaved={setMe} />}
+        {tab === 'security' && <Security hasPassword={me.hasPassword !== false} />}
+      </div>
     </section>
   )
 }

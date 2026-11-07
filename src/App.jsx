@@ -432,23 +432,20 @@ function readLocation() {
     q: params.get('q') ?? '',
     cat: /^[a-z]{2,20}$/.test(params.get('cat') ?? '') ? params.get('cat') : 'all',
     sort: SORT_OPTIONS.some(([key]) => key === params.get('sort')) ? params.get('sort') : 'recommended',
-    brix: params.get('brix') === 'high' ? 'high' : '',
   }
 }
 
-function listUrl({ q, cat, sort, brix }) {
+function listUrl({ q, cat, sort }) {
   const params = new URLSearchParams()
   if (q) params.set('q', q)
   if (cat !== 'all') params.set('cat', cat)
   if (sort !== 'recommended') params.set('sort', sort)
-  if (brix) params.set('brix', brix)
   return `/${params.size ? `?${params}` : ''}`
 }
 
-function fetchCatalog({ q, cat, sort, brix }, page) {
+function fetchCatalog({ q, cat, sort }, page) {
   const params = new URLSearchParams({ q, sort, page, size: 12 })
   if (cat !== 'all') params.set('group', cat)
-  if (brix) params.set('brix', brix)
   return api(`/catalog?${params}`)
 }
 
@@ -457,7 +454,6 @@ const scrollToId = (id) => document.getElementById(id)?.scrollIntoView({ behavio
 function Storefront() {
   const [loc, setLoc] = useState(readLocation)
   const [focus, setFocus] = useState({ value: null, n: 0 })
-  const [typed, setTyped] = useState(loc.q)
   const [list, setList] = useState(null)
   const [groups, setGroups] = useState(null)
   const [policy, setPolicy] = useState(null)
@@ -472,7 +468,6 @@ function Storefront() {
     const onPop = () => {
       const next = readLocation()
       setLoc(next)
-      setTyped(next.q)
       if (!next.code && window.location.hash === '#products') setTimeout(() => scrollToId('products'), 150)
     }
     const onQuiz = () => setQuizOpen(true)
@@ -498,13 +493,6 @@ function Storefront() {
       return next
     })
   }, [])
-
-  // 검색어는 입력을 멈추고 0.3초 뒤에 찾는다 (글자마다 서버를 부르지 않게)
-  useEffect(() => {
-    if (typed === loc.q) return undefined
-    const timer = setTimeout(() => changeList({ q: typed.trim() }), 300)
-    return () => clearTimeout(timer)
-  }, [typed, loc.q, changeList])
 
   // 검색어를 빨리 바꾸면 앞선 응답이 늦게 와도 덮어쓰지 않게, 바뀐 뒤 도착한 옛 응답은 버린다
   useEffect(() => {
@@ -558,7 +546,7 @@ function Storefront() {
   }
 
   const pickGroup = (cat) => { changeList({ cat }); scrollToId('products') }
-  const pickSeason = (name) => { setTyped(name); changeList({ q: name, cat: 'all' }); scrollToId('products') }
+  const pickSeason = (name) => { changeList({ q: name, cat: 'all' }); scrollToId('products') }
   const openQuiz = () => setQuizOpen(true)
   const closeQuiz = () => {
     setQuizOpen(false)
@@ -576,7 +564,7 @@ function Storefront() {
         <>
           <Hero onRecommend={openQuiz} />
           <CategoryRows groups={groups} onPick={pickGroup} />
-          <ProductSection groups={groups} loc={loc} typed={typed} setTyped={setTyped} list={list} sorts={SORT_OPTIONS}
+          <ProductSection groups={groups} loc={loc} list={list} sorts={SORT_OPTIONS}
             onChange={changeList} onOpen={open} onMore={more} loadingMore={loadingMore} />
           <SeasonCalendar onPick={pickSeason} />
           <Story />
