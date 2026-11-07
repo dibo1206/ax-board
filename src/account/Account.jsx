@@ -118,7 +118,9 @@ export function SocialSignupPage() {
     <form className="box form narrow" onSubmit={submit}>
       <h2>{pending.providerName}로 가입하기{pending.mock && <small className="muted"> (시험 로그인)</small>}</h2>
       <p className="muted">처음 오셨어요. 주문 알림과 주문 조회에 쓸 정보를 확인하고 약관에 동의해 주세요.</p>
-      <label>이메일<input type="email" value={form.email} onChange={set('email')} autoComplete="email" /></label>
+      {pending.emailLocked
+        ? <label>이메일<input type="email" value={form.email} readOnly aria-describedby="oauth-email-note" /><small id="oauth-email-note" className="muted">{pending.providerName}에서 확인한 이메일이라 바꿀 수 없어요.</small></label>
+        : <label>이메일<input type="email" value={form.email} onChange={set('email')} autoComplete="email" /></label>}
       <label>이름<input value={form.name} onChange={set('name')} maxLength={20} autoComplete="name" /></label>
       <label>휴대폰 <span className="muted">주문 조회에 써요</span><input value={form.phone} onChange={set('phone')} inputMode="tel" placeholder="010-1234-5678" autoComplete="tel" /></label>
       <label className="check"><input type="checkbox" checked={form.agreeTerms} onChange={set('agreeTerms')} />[필수] <a href="/policy/terms" target="_blank" rel="noreferrer">이용약관</a>에 동의해요</label>

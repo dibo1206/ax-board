@@ -16,7 +16,7 @@ import { readCookie, setCookie, signToken, verifyToken } from './auth.js'
 import { lookupHash, sealText } from './crypto.js'
 import { pool } from './db.js'
 import { createLimiter } from './limit.js'
-import { publicUrl } from './mailer.js'
+import { publicUrl, queueMail } from './mailer.js'
 import { openCustomer } from './pii.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
 
@@ -44,11 +44,13 @@ const PROVIDERS = {
 }
 
 // 'live' 실제 연결 · 'mock' 개발용 시험 로그인 · null 쓰지 않음
+// 시험 로그인은 .env 에 OAUTH_MOCK=1 을 직접 적었을 때만 (운영이 아니어도 기본은 꺼짐).
+// 모든 사람이 같은 가짜 회원이 되므로, NODE_ENV 를 빠뜨린 공개 서버에서 켜지면 남의 계정에 들어가거나 연결할 수 있어서 (2026-11-07 보안 점검)
 export function oauthMode(provider) {
   const p = PROVIDERS[provider]
   if (!p) return null
   if (p.id() && (!p.needsSecret || p.secret())) return 'live'
-  return process.env.NODE_ENV === 'production' ? null : 'mock'
+  return process.env.NODE_ENV !== 'production' && process.env.OAUTH_MOCK === '1' ? 'mock' : null
 }
 
 const STATE_COOKIE = 'oauth_state'
@@ -153,8 +155,10 @@ oauthRouter.get('/:provider/callback', async (req, res) => {
     return res.redirect(302, saved.next)
   }
   // 처음 온 손님: 약관 동의·연락처를 받는 화면으로 (받은 정보는 15분짜리 서명 쿠키에만)
+  // verified: 카카오·네이버가 확인해 준 이메일이면 가입 때 그 이메일만 쓴다 (다른 이메일로 바꿔 남의 계정을 먼저 만들지 못하게)
   setCookie(res, PENDING_COOKIE, signToken({
-    kind: 'oauth_pending', provider, key, email: profile.email.slice(0, 254), name: profile.name.slice(0, 20), next: saved.next, exp: Date.now() + 15 * 60_000,
+    kind: 'oauth_pending', provider, key, email: profile.email.slice(0, 254), verified: Boolean(profile.emailVerified && profile.email),
+    name: profile.name.slice(0, 20), next: saved.next, exp: Date.now() + 15 * 60_000,
   }), 900)
   res.redirect(302, `/account/social?provider=${provider}`)
 })
@@ -172,7 +176,7 @@ function readPending(req) {
 oauthRouter.get('/pending', (req, res) => {
   const p = readPending(req)
   if (!p) return res.status(404).json({ error: '간편 가입 시간이 지났어요. 다시 시도해 주세요.' })
-  res.json({ provider: p.provider, providerName: PROVIDERS[p.provider]?.name, email: p.email, name: p.name, mock: oauthMode(p.provider) === 'mock' })
+  res.json({ provider: p.provider, providerName: PROVIDERS[p.provider]?.name, email: p.email, emailLocked: p.verified === true, name: p.name, mock: oauthMode(p.provider) === 'mock' })
 })
 
 const isEmail = (v) => /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(v)
@@ -182,7 +186,8 @@ const tooManySignups = createLimiter({ limit: 5, windowMs: 60 * 60_000 })
 oauthRouter.post('/complete', async (req, res) => {
   const p = readPending(req)
   if (!p) return res.status(400).json({ error: '간편 가입 시간이 지났어요. 다시 시도해 주세요.' })
-  const email = (typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '')
+  // 제공자가 확인한 이메일이 있으면 그것만 (화면에서 바꿔 보내도 무시). 없을 때만 손님이 적은 이메일
+  const email = p.verified ? p.email.trim().toLowerCase() : (typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '')
   const name = typeof req.body.name === 'string' ? req.body.name.trim() : ''
   const phone = (typeof req.body.phone === 'string' ? req.body.phone : '').replace(/[^0-9]/g, '')
   const errors = []
@@ -226,6 +231,11 @@ oauthRouter.post('/complete', async (req, res) => {
   setCookie(res, PENDING_COOKIE, '', 0)
   startSession(res, customer)
   console.log(`[oauth] 회원 가입 #${customer.id} (${p.provider})`)
+  // 가입 알림: 남이 내 이메일로 간편 가입했다면 주인이 알아챌 수 있게 (일반 가입과 같은 환영 메일 + 안내)
+  queueMail({
+    kind: 'welcome', to: email, subject: '가입을 환영해요',
+    body: `${name}님, ${PROVIDERS[p.provider].name} 간편 로그인으로 가입해 주셔서 고마워요.\n\n마이페이지에서 주문 내역과 배송지를 관리할 수 있어요.\n${publicUrl()}/account\n\n직접 가입하지 않았다면 [비밀번호 찾기]로 비밀번호를 정해 주세요. 그러면 연결된 간편 로그인이 모두 끊겨요.\n`,
+  })
   res.status(201).json({ next: p.next, me: { email, name: openCustomer(customer).name } })
 })
 

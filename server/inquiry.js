@@ -13,7 +13,9 @@ import { bannedMessage, findBanned } from './banned.js'
 
 const text = (v) => (typeof v === 'string' ? v.trim() : '')
 const isPhone = (v) => /^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(v)
-const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
+// 길이 상한이 없는 이메일 정규식은 아주 긴 입력에서 제곱으로 느려져 서버 전체가 멈춘다 → 길이를 먼저 자르고, 상한 있는 패턴 (account.js 와 같게)
+const MAX_CONTACT = 100
+const isEmail = (v) => v.length <= MAX_CONTACT && /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(v)
 
 // 같은 곳(IP)에서 10분에 5번까지만 글을 남길 수 있다
 const tooMany = createLimiter({ limit: 5, windowMs: 10 * 60_000 })
@@ -38,7 +40,8 @@ publicInquiryRouter.post('/products/:code/questions', async (req, res) => {
   if (isPrivate && !customer) errors.push('비밀글은 로그인한 뒤에 남길 수 있어요.')
   if (!author || author.length > 20) errors.push('이름(별명)을 20자 안으로 적어 주세요.')
   if (question.length < 5 || question.length > 500) errors.push('질문은 5~500자로 적어 주세요.')
-  if (contact && !isPhone(contact) && !isEmail(contact)) errors.push('연락처는 전화번호나 이메일 형식으로 적어 주세요.')
+  if (contact.length > MAX_CONTACT) errors.push(`연락처는 ${MAX_CONTACT}자 안으로 적어 주세요.`)
+  else if (contact && !isPhone(contact) && !isEmail(contact)) errors.push('연락처는 전화번호나 이메일 형식으로 적어 주세요.')
   if (contact && !req.body.privacyAgreed) errors.push('연락처를 남기려면 개인정보 수집에 동의해 주세요.')
   const abuse = findBanned(`${author} ${question}`, ['욕설', '광고'])
   if (abuse.length) errors.push(`쓸 수 없는 표현이 있어요: ${abuse.join(', ')}`)
@@ -106,7 +109,8 @@ publicInquiryRouter.post('/b2b-inquiries', async (req, res) => {
   const errors = []
   if (!body.company || body.company.length > 50) errors.push('회사·매장 이름을 50자 안으로 적어 주세요.')
   if (!body.contactName || body.contactName.length > 20) errors.push('담당자 이름을 적어 주세요.')
-  if (!isPhone(body.contact) && !isEmail(body.contact)) errors.push('연락처를 전화번호나 이메일 형식으로 적어 주세요.')
+  if (body.contact.length > MAX_CONTACT) errors.push(`연락처는 ${MAX_CONTACT}자 안으로 적어 주세요.`)
+  else if (!isPhone(body.contact) && !isEmail(body.contact)) errors.push('연락처를 전화번호나 이메일 형식으로 적어 주세요.')
   if (body.quantity && (!/^\d+$/.test(body.quantity) || Number(body.quantity) === 0)) errors.push('수량은 1 이상의 숫자로 적어 주세요.')
   if (body.message.length > 1000) errors.push('요청사항은 1000자 안으로 적어 주세요.')
   if (!req.body.privacyAgreed) errors.push('연락을 위한 개인정보 수집에 동의해 주세요.')

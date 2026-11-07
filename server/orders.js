@@ -265,6 +265,10 @@ export function publicOrder(order) {
   }
 }
 
+// 판매자 화면용 주문번호: 날짜와 끝 4자리만 (FM261104-······AB12). 손님·회사와 말할 때 맞춰 보기엔 충분하고,
+// 가린 6자리(32^6, 약 10억 가지)는 비회원 조회 횟수 제한 안에서 맞힐 수 없다
+export const maskOrderNo = (no) => (typeof no === 'string' && no.length > 13 ? `${no.slice(0, 9)}······${no.slice(-4)}` : '')
+
 // 관리자 화면용: 손님 화면 내용 + 돌려준 돈 기록 전부(누가 언제 얼마를, 결과 확인 중·실패 포함)와 반품 신청 번호·판매자 의견
 export function staffOrder(order) {
   return { ...publicOrder(order), refunds: order.refunds, returns: order.returns }
@@ -879,7 +883,7 @@ sellerOrderRouter.get('/', async (req, res) => {
   const seller = req.seller.sellerCode
   await ensureShipments()
   const { rows } = await pool.query(`
-    SELECT o.id, o.order_no, sh.status, o.status AS order_status, o.created_at, o.paid_at, sh.courier, sh.tracking_no, o.memo, o.is_test, o.confirmed_at,
+    SELECT o.id, sh.id AS ref, o.order_no, sh.status, o.status AS order_status, o.created_at, o.paid_at, sh.courier, sh.tracking_no, o.memo, o.is_test, o.confirmed_at,
            sh.items_amount, sh.shipping_fee, o.receiver_name, o.receiver_phone, o.zipcode, o.address1, o.address2,
            CASE WHEN sh.ship_from > ${KOREA_TODAY} THEN sh.ship_from END AS ship_from,
            (SELECT count(*) FROM order_shipments x WHERE x.order_id = o.id)::int AS farms,
@@ -892,8 +896,11 @@ sellerOrderRouter.get('/', async (req, res) => {
         [rows.map((r) => r.id), seller])).rows
     : []
   // 받는 분 정보는 내가 보내야 하는 동안(내 농가 배송이 아직 보내기 전)만 보여 준다
-  res.json(rows.map(openOrder).map(({ id, receiver_name, receiver_phone, zipcode, address1, address2, memo, ...o }) => ({
+  // 주문번호는 가려서 보여 준다: 주문번호 + 받는 분 번호(대개 주문자 번호와 같음)면 비회원 주문 조회로 다른 농가 몫까지 취소할 수 있어서.
+  // 판매자 처리(상태·취소)는 내 농가 배송 번호(ref)로 한다
+  res.json(rows.map(openOrder).map(({ id, order_no, receiver_name, receiver_phone, zipcode, address1, address2, memo, ...o }) => ({
     ...o,
+    order_label: maskOrderNo(order_no),
     tracking_url: trackingUrl(o.courier, o.tracking_no),
     items: items.filter((i) => i.order_id === id).map(({ order_id: _o, ...i }) => i),
     receiver: ['paid', 'preparing'].includes(o.status) ? { name: receiver_name, phone: receiver_phone, zipcode, address1, address2, memo } : null,
@@ -940,17 +947,31 @@ sellerOrderRouter.get('/settlement', async (req, res) => {
   res.json({ ...rows[0], ...fees.rows[0], ...refunds.rows[0], confirmDays: CONFIRM_DAYS })
 })
 
-sellerOrderRouter.patch('/:orderNo', async (req, res) => {
-  const done = await advance(req.params.orderNo, req.body, req.seller.loginId, req.seller.sellerCode)
+// 내 농가 배송 번호(ref) → 주문번호. 다른 농가 배송이면 null
+async function sellerOrderNo(ref, sellerCode) {
+  // 주문번호를 이미 아는 경우(시험 스크립트·예전 화면)는 그대로 받는다. 내 농가 주문인지는 advance·cancelFarm 이 따로 확인한다
+  if (/^FM\d{6}-[A-Z0-9]{10}$/.test(ref)) return ref
+  const id = Number(ref)
+  if (!Number.isInteger(id) || id < 1 || id > 2_147_483_647) return null
+  const { rows } = await pool.query('SELECT o.order_no FROM order_shipments sh JOIN orders o ON o.id = sh.order_id WHERE sh.id = $1 AND sh.seller_code = $2', [id, sellerCode])
+  return rows[0]?.order_no ?? null
+}
+
+sellerOrderRouter.patch('/:ref', async (req, res) => {
+  const orderNo = await sellerOrderNo(req.params.ref, req.seller.sellerCode)
+  if (!orderNo) return res.status(404).json({ error: '내 농가 주문에서 찾지 못했어요.' })
+  const done = await advance(orderNo, req.body, req.seller.loginId, req.seller.sellerCode)
   if (done.error) return res.status(done.status).json({ error: done.error })
   res.status(204).end()
 })
 
 // 내 농가 몫만 취소 (아직 보내지 않았을 때). 농가는 요청에서 받지 않고 로그인한 판매자 농가로만
-sellerOrderRouter.post('/:orderNo/cancel', async (req, res) => {
+sellerOrderRouter.post('/:ref/cancel', async (req, res) => {
   const reason = text(req.body.reason).slice(0, 100)
   if (reason.length < 2) return res.status(400).json({ error: '취소 사유를 적어 주세요. (손님에게 보여요)' })
-  const done = await cancelFarm(req.params.orderNo, req.seller.sellerCode, `판매자 취소: ${reason}`, `판매자 ${req.seller.loginId}`)
+  const orderNo = await sellerOrderNo(req.params.ref, req.seller.sellerCode)
+  if (!orderNo) return res.status(403).json({ error: '이 주문에는 내 농가 상품이 없어요.' })
+  const done = await cancelFarm(orderNo, req.seller.sellerCode, `판매자 취소: ${reason}`, `판매자 ${req.seller.loginId}`)
   if (done.status === 404) return res.status(403).json({ error: '이 주문에는 내 농가 상품이 없어요.' })
   sendRefundResult(res, done, () => res.status(204).end())
 })

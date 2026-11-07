@@ -10,6 +10,7 @@ import { writeFile } from 'node:fs/promises'
 import pg from 'pg'
 import { codeSets, itemRanges, noticeProblem } from '../server/admin.js'
 import { hashPassword } from '../server/auth.js'
+import { maskOrderNo } from '../server/orders.js'
 import { findBanned, loadBanned } from '../server/banned.js'
 import { SHIPPING } from '../server/policy.js'
 import { validateProduct } from '../server/validate.js'
@@ -217,7 +218,7 @@ try {
 
   // 농가 화면: 해남은 해남 상품만 보인다
   const haenamOrders = (await call(haenam, 'GET', '/seller/orders')).data
-  const mine = haenamOrders.find((o) => o.order_no === multi.data.orderNo)
+  const mine = haenamOrders.find((o) => o.order_label === maskOrderNo(multi.data.orderNo)) // 농가 화면에는 주문번호 전체 대신 가린 번호만 온다
   record('농가', '해남 농가 화면: 이 주문에서 해남 상품만 보임', `상품 ${mine?.items.map((i) => i.name.replace('[예시] ', '')).join(', ')}, 농가 수 ${mine?.farms}, 배송비 ${won(mine?.shipping_fee ?? 0)}`, mine && mine.items.length === 1 && mine.items[0].name === onion.name && mine.farms === 3)
 
   // 해남: 배송 준비 → 배송 중(송장) → 배송 완료. 다른 농가 배송은 그대로
@@ -277,7 +278,7 @@ try {
   record('예약', '대시보드: 예약 대기 주문은 따로, 남원 몫은 준비할 주문으로', `예약 대기 ${before.preorders_waiting}→${afterPre.preorders_waiting} (가장 빠른 출고 ${afterPre.next_ship_from}), 준비할 주문 ${before.to_prepare}→${afterPre.to_prepare}`,
     afterPre.preorders_waiting === before.preorders_waiting + 1 && afterPre.to_prepare === before.to_prepare + 1)
   const haenamList = (await call(haenam, 'GET', '/seller/orders')).data
-  const hRow = haenamList.find((o) => o.order_no === preTry.data?.orderNo)
+  const hRow = haenamList.find((o) => o.order_label === maskOrderNo(preTry.data?.orderNo))
   const adminRow = (await call(admin, 'GET', '/admin/orders')).data.find((o) => o.order_no === preTry.data?.orderNo)
   record('예약', '농가·관리자 주문 목록에 예약 출고일 표시', `해남 화면 ${hRow?.ship_from ?? '-'}, 관리자 목록 ${adminRow?.ship_from ?? '-'}`, hRow?.ship_from === preorder.ship_from && adminRow?.ship_from === preorder.ship_from)
 
