@@ -9,7 +9,12 @@ export async function cached(key, ttlMs, load) {
   if (hit && hit.expires > Date.now()) return hit.value
   const value = load()
   store.set(key, { value, expires: Date.now() + ttlMs })
-  if (store.size > MAX_KEYS) store.delete(store.keys().next().value) // 가장 오래된 것부터 버린다
+  if (store.size > MAX_KEYS) {
+    // 시간이 지난 것부터 지우고, 그래도 많으면 가장 오래된 것부터 버린다
+    const now = Date.now()
+    for (const [k, v] of store) if (v.expires <= now) store.delete(k)
+    if (store.size > MAX_KEYS) store.delete(store.keys().next().value)
+  }
   try {
     return await value
   } catch (error) {

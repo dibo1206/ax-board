@@ -170,10 +170,10 @@ function MyOrders({ onMessage, onError, initialFilter = 'all' }) {
   }, [onError])
 
   async function advance(o, status) {
-    const t = tracking[o.order_no] ?? {}
+    const t = tracking[o.ref] ?? {}
     try {
-      await sellerApi(`/orders/${o.order_no}`, { method: 'PATCH', body: { status, courier: t.courier, trackingNo: t.no } })
-      onMessage(`${o.order_no}: ${ORDER_STATUS[status]}`)
+      await sellerApi(`/orders/${o.ref}`, { method: 'PATCH', body: { status, courier: t.courier, trackingNo: t.no } })
+      onMessage(`${o.order_label}:${ORDER_STATUS[status]}`)
       load()
     } catch (e) {
       onError(e.message)
@@ -187,8 +187,8 @@ function MyOrders({ onMessage, onError, initialFilter = 'all' }) {
     if (!reason?.trim()) return
     if (!window.confirm(`내 상품 ${won(o.items_amount)} + 배송비 ${won(o.shipping_fee)}을 손님 결제에서 바로 취소해요.`)) return
     try {
-      await sellerApi(`/orders/${o.order_no}/cancel`, { method: 'POST', body: { reason } })
-      onMessage(`${o.order_no}: 내 농가 몫을 취소하고 결제를 돌려드렸어요`)
+      await sellerApi(`/orders/${o.ref}/cancel`, { method: 'POST', body: { reason } })
+      onMessage(`${o.order_label}:내 농가 몫을 취소하고 결제를 돌려드렸어요`)
     } catch (e) {
       onError(e.message)
     }
@@ -214,9 +214,10 @@ function MyOrders({ onMessage, onError, initialFilter = 'all' }) {
     {shown.length === 0 ? <p className="empty-state">{orders.length ? '이 조건에 맞는 주문이 없어요.' : '아직 내 상품 주문이 없어요.'}</p> : (
     <ul className="order-cards">
       {shown.map((o) => (
-        <li key={o.order_no} className={`order-card${['cancelled', 'delivered'].includes(o.status) ? ' is-dim' : ''}`}>
+        <li key={o.ref} className={`order-card${['cancelled', 'delivered'].includes(o.status) ? ' is-dim' : ''}`}>
           <div className="oc-head">
-            <span className="oc-no">{o.order_no}</span>
+            {/* 주문번호는 가려서 와요 (서버 maskOrderNo). 처리는 내 농가 배송 번호(ref)로 */}
+            <span className="oc-no">{o.order_label}</span>
             <span className="oc-when">{when(o.created_at)}</span>
             <ShipSteps status={o.status} />
             {o.ship_from && ['paid', 'preparing'].includes(o.status) && <Chip tone="blue">예약 · {shipDay(o.ship_from)}부터 출고</Chip>}
@@ -243,9 +244,9 @@ function MyOrders({ onMessage, onError, initialFilter = 'all' }) {
               {o.status === 'paid' && <button type="button" className="button" onClick={() => advance(o, 'preparing')}>배송 준비 시작</button>}
               {o.status === 'preparing' && (
                 <>
-                  <label>택배사<input value={tracking[o.order_no]?.courier ?? ''} onChange={setT(o.order_no, 'courier')} list="couriers" placeholder="골라 주세요" /></label>
+                  <label>택배사<input value={tracking[o.ref]?.courier ?? ''} onChange={setT(o.ref,'courier')} list="couriers" placeholder="골라 주세요" /></label>
                   <CourierList />
-                  <label>송장 번호<input value={tracking[o.order_no]?.no ?? ''} onChange={setT(o.order_no, 'no')} inputMode="numeric" /></label>
+                  <label>송장 번호<input value={tracking[o.ref]?.no ?? ''} onChange={setT(o.ref,'no')} inputMode="numeric" /></label>
                   <button type="button" className="button" onClick={() => advance(o, 'shipping')}>배송 시작</button>
                 </>
               )}
@@ -289,7 +290,7 @@ function MyReturns({ onMessage, onError }) {
     <ul className="inbox">
       {list.map((r) => (
         <li key={r.id} className={`box${['rejected', 'refunded'].includes(r.status) ? ' dim' : ''}`}>
-          <p><b>#{r.id}</b> · {r.order_no} · {RETURN_STATUS[r.status]} · 신청 {when(r.created_at)} · 받은 날 {when(r.delivered_at)}</p>
+          <p><b>#{r.id}</b> · {r.order_label} · {RETURN_STATUS[r.status]} · 신청 {when(r.created_at)} · 받은 날 {when(r.delivered_at)}</p>
           <p>{REASONS[r.reason_type]} · {r.reason}</p>
           <ul>{r.items.map((i) => <li key={`${i.name}:${i.option_name ?? ''}`}>{i.name} ({i.option_name ?? i.unit}) × {i.quantity}</li>)}</ul>
           {r.admin_note && <p className="muted">회사 메모: {r.admin_note}</p>}

@@ -221,6 +221,15 @@ accountRouter.post('/password-reset/confirm', async (req, res) => {
     'UPDATE customers SET password_hash = $2, session_version = session_version + 1 WHERE id = $1 RETURNING *',
     [customer.id, await hashPassword(req.body.password)],
   )
+  // 이메일로 주인임을 확인했으니, 연결된 간편 로그인은 모두 끊는다.
+  // 남이 내 이메일로 먼저 간편 가입해 둔 계정을 되찾았을 때 그 사람의 카카오·네이버로 계속 들어오지 못하게 (2026-11-07 보안 점검)
+  const { rowCount: unlinked } = await pool.query('DELETE FROM customer_identities WHERE customer_id = $1', [customer.id])
+  if (unlinked) {
+    queueMail({
+      kind: 'password_changed', to: customer.email, subject: '비밀번호를 새로 정했어요',
+      body: '비밀번호 찾기로 비밀번호를 새로 정해서, 연결돼 있던 간편 로그인(카카오·네이버)을 모두 끊었어요.\n계속 쓰려면 로그인한 뒤 마이페이지 [간편 로그인]에서 다시 연결해 주세요.\n',
+    })
+  }
   clearFails(`c:${customer.email}`)
   startSession(res, updated[0])
   res.json(me(openCustomer(updated[0])))

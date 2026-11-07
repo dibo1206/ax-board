@@ -40,8 +40,13 @@ const FILLER = /^(추천|추천해줘|추천해주세요|주세요|있어요|있
 // 단어 끝 조사는 뺀 말로도 찾는다 ('말랭이·못난이'처럼 '이'로 끝나는 이름이 있어 이·가는 빼지 않는다)
 const JOSA = /(을|를|은|는|도|요|으로|로|랑|하고|이랑)$/
 
+// 한 단어 길이와 찾을 말 개수에 상한을 둔다: 다른 말 규칙은 맞을 때마다 찾을 말을 2배로 늘려서,
+// 긴 단어 하나에 규칙어를 여러 개 이어 붙이면 수십만 개로 불어나 서버가 멈춘다 (2026-11-07 보안 점검)
+const MAX_WORD = 20
+const MAX_ALTS = 32
+
 export function searchWords(q) {
-  const words = String(q ?? '').toLowerCase().split(/\s+/).map((w) => w.replace(/[^\p{L}\p{N}]/gu, '')).filter(Boolean).slice(0, 5)
+  const words = String(q ?? '').toLowerCase().split(/\s+/).map((w) => w.replace(/[^\p{L}\p{N}]/gu, '').slice(0, MAX_WORD)).filter(Boolean).slice(0, 5)
   const useful = words.filter((w) => !FILLER.test(w))
   return useful.length ? useful : words
 }
@@ -52,6 +57,7 @@ export function expandWord(word) {
   if (word.length >= 3 && JOSA.test(word)) alts.add(word.replace(JOSA, ''))
   for (const [pattern, to] of SAME) {
     for (const w of [...alts]) {
+      if (alts.size >= MAX_ALTS) break
       if (w.search(pattern) >= 0) alts.add(w.replace(pattern, to))
     }
   }

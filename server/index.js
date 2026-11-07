@@ -72,7 +72,10 @@ app.use((req, res, next) => {
 // 글자로 된 응답(화면 파일·상품 목록 JSON)은 압축해서 보낸다 (사진은 이미 압축돼 있어 그대로)
 app.use(compression())
 // 손님 IP(글 남기기 횟수 제한용)는 앞단 프록시가 붙인 값만 믿는다. 개발: Vite 1단, 배포 시 프록시 수에 맞게 TRUST_PROXY_HOPS
-app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 1))
+// 배포 모드(--serve)에서 값을 안 적었으면 0: 앞에 nginx 가 없을 때 손님이 X-Forwarded-For 를 써서 IP를 속이고
+// 로그인 잠금·관리자 IP 제한·AI 하루 몫을 피하지 못하게 (nginx 뒤라면 .env 에 TRUST_PROXY_HOPS=1, docs/deploy.md)
+const hops = process.env.TRUST_PROXY_HOPS
+app.set('trust proxy', hops !== undefined && hops !== '' ? Number(hops) : SERVE ? 0 : 1)
 app.disable('x-powered-by')
 
 // 기본 보안 헤더: 파일 종류를 바꿔 해석하지 않기, 다른 사이트의 틀(iframe) 안에 넣지 않기
@@ -252,7 +255,8 @@ app.get('/api/catalog', async (req, res) => {
     const filter = where + searchWhere(words, all, mode)
     all.push(size, (page - 1) * size)
     // 같은 검색·정렬·페이지는 15초 동안 DB를 다시 읽지 않는다 (재고는 주문할 때 서버가 다시 확인)
-    return cached(`catalog:${JSON.stringify([words, all])}:${sort}:${group ? req.query.group : ''}:${highBrix}:${mode}`, 15_000, async () => {
+    // 기억 이름은 손님이 보낸 짧은 값으로만 만든다 (늘린 검색 조건 배열을 통째로 넣으면 이름 하나가 커진다)
+    return cached(`catalog:${JSON.stringify([words, req.query.category ?? '', size, page])}:${sort}:${group ? req.query.group : ''}:${highBrix}:${mode}`, 15_000, async () => {
       const { rows } = await pool.query(
         `SELECT x.*, count(*) OVER () AS total FROM (${PRODUCT_SELECT} ${filter}) x
          ORDER BY (x.stock = 0), ${SORTS[sort]} LIMIT $${all.length - 1} OFFSET $${all.length}`,

@@ -16,7 +16,7 @@ import { requireAdmin } from './auth.js'
 import { cached } from './cache.js'
 import { pool } from './db.js'
 import { createLimiter } from './limit.js'
-import { maskPersonal } from './privacy.js'
+import { findSensitive, maskPersonal } from './privacy.js'
 import { describeRecommendation, loadActive, readWish, recommend } from './recommend.js'
 import { RETURNS, SHIPPING, SHOP } from './policy.js'
 import { isPreorder, shipDateText } from './preorder.js'
@@ -977,30 +977,22 @@ function answerSize(message, catalog, ctx) {
   return ruleReply('rule:size', `판매 중인 ${name} 상품에는 ${amount} 상품이 없어요.${amounts.length ? ` 지금 있는 양은 ${amounts.join(', ')}이에요.` : ''}`, live.slice(0, 3), ctx)
 }
 
-// ---------- 2-4. 비슷한 질문 다시 쓰기: 담당자가 답한 Q&A, 최근 7일 AI 답 (글자 비교라 토큰 0) ----------
+// ---------- 2-4. 비슷한 질문 다시 쓰기: 담당자가 답한 Q&A·상품 FAQ (글자 비교라 토큰 0) ----------
+// 예전에는 최근 7일 AI 답(chat_logs)도 다시 썼지만, 누군가 질문에 지시문을 섞어 이상한 답을 받아 내면
+// 그 답이 비슷한 질문을 한 다른 손님에게 일주일 동안 나갈 수 있어서 뺐다 (2026-11-07 보안 점검)
 async function loadSimilarCandidates() {
-  const [logs, qna] = await Promise.all([
-    pool.query(
-      `SELECT question, answer, sources FROM chat_logs
-       WHERE created_at > now() - make_interval(days => $1) AND NOT blocked AND NOT handed_off
-         AND model NOT LIKE 'rule:%' AND model NOT LIKE 'similar:%' AND model NOT LIKE 'ai-tags:%' AND model <> 'limit'
-       ORDER BY created_at DESC LIMIT 500`,
-      [CACHE_DAYS],
-    ),
-    pool.query(
-      `(SELECT q.question, q.answer, q.product_code, p.name, p.item_code, 'staff' AS source FROM questions q JOIN products p ON p.product_code = q.product_code
-        WHERE q.answer IS NOT NULL AND NOT q.hidden AND NOT q.is_private AND p.status = 'active' ORDER BY q.answered_at DESC LIMIT 300)
-       UNION ALL
-       (SELECT f->>'q', f->>'a', p.product_code, p.name, p.item_code, 'faq' FROM products p, jsonb_array_elements(p.faq) f
-        WHERE p.status = 'active' LIMIT 500)`,
-    ),
-  ])
-  return { logs: logs.rows, qna: qna.rows }
+  const { rows } = await pool.query(
+    `(SELECT q.question, q.answer, q.product_code, p.name, p.item_code, 'staff' AS source FROM questions q JOIN products p ON p.product_code = q.product_code
+      WHERE q.answer IS NOT NULL AND NOT q.hidden AND NOT q.is_private AND p.status = 'active' ORDER BY q.answered_at DESC LIMIT 300)
+     UNION ALL
+     (SELECT f->>'q', f->>'a', p.product_code, p.name, p.item_code, 'faq' FROM products p, jsonb_array_elements(p.faq) f
+      WHERE p.status = 'active' LIMIT 500)`,
+  )
+  return { qna: rows }
 }
 
-async function answerSimilar(message, catalog, ctx, fallbackProduct) {
-  const { logs, qna } = await cached('chat:similar', 60_000, loadSimilarCandidates)
-  const itemKey = (text) => findItems(text, catalog.items).map((i) => i.item_code).sort().join(',')
+async function answerSimilar(message, catalog, ctx) {
+  const { qna } = await cached('chat:similar', 60_000, loadSimilarCandidates)
   const mine = ctx.items.map((i) => i.item_code)
   const base = { handoff: false, action: null, blocked: false }
   // 담당자 답이 가장 믿을 만하다. 같은 품목의 상품 Q&A만 본다
@@ -1016,12 +1008,7 @@ async function answerSimilar(message, catalog, ctx, fallbackProduct) {
       model: 'similar:qna',
     }
   }
-  // AI 답은 같은 품목을 물은 질문끼리만, 그리고 지금 자료(가격·당도)와 어긋나지 않을 때만 다시 쓴다
-  const key = itemKey(message) || [...mine].sort().join(',')
-  const past = mostSimilar(message, logs.filter((l) => itemKey(l.question) === key))
-  if (!past || findProblem(past.answer, catalog)) return null
-  const sources = toSourceChips(past.sources ?? [], catalog, ctx)
-  return { ...base, answer: past.answer, sources, productCode: sources[0]?.code ?? fallbackProduct, model: 'similar:log' }
+  return null
 }
 
 // ---------- 2-4-1. "수박도 팔아요?": 파는 품목이 아니면 지어내지 않고 지금 파는 품목을 알려 준다 ----------
@@ -1381,7 +1368,7 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
   if (useCache) {
     const saved = await readCache(key)
     if (saved) return { ...saved.reply, model: `cache:${saved.model}`, blocked: false }
-    const similar = await answerSimilar(message, catalog, ctx, fallbackProduct)
+    const similar = await answerSimilar(message, catalog, ctx)
     if (similar) return similar
   }
 
@@ -1449,6 +1436,9 @@ export const chatRouter = express.Router()
 chatRouter.post('/chat', async (req, res) => {
   const message = typeof req.body.message === 'string' ? req.body.message.trim() : ''
   if (message.length < 2 || message.length > 300) return res.status(400).json({ error: '질문은 2~300자로 적어 주세요.' })
+  // 주민등록번호·카드번호는 AI로 보내지도, 상담 기록에 남기지도 않고 바로 돌려보낸다 (2026-11-07 보안 점검)
+  const sensitive = findSensitive(message)
+  if (sensitive) return res.status(400).json({ error: `${sensitive}는 상담 창에 적지 말아 주세요. 결제 확인은 마이페이지 주문 내역에서 볼 수 있어요.` })
   if (tooMany(req)) return res.status(429).json({ error: '질문이 너무 많아요. 잠시 후 다시 시도해 주세요.' })
   const productCode = typeof req.body.productCode === 'string' ? req.body.productCode : null
   const allowAi = req.body.ai === true

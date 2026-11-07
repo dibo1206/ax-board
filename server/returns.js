@@ -10,7 +10,7 @@ import { sealText } from './crypto.js'
 import { pool } from './db.js'
 import { createLimiter } from './limit.js'
 import { adminEmail, publicUrl, queueMail } from './mailer.js'
-import { findMyOrder, inTransaction, loadOrder, publicOrder, runRefund, sendRefundResult, staffOrder } from './orders.js'
+import { findMyOrder, inTransaction, loadOrder, maskOrderNo, publicOrder, runRefund, sendRefundResult, staffOrder } from './orders.js'
 import { openOrder, openReturn } from './pii.js'
 import { RETURNS, SHIPPING, SHOP } from './policy.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
@@ -281,7 +281,8 @@ sellerReturnRouter.get('/', async (req, res) => {
      WHERE r.seller_code = $1 ORDER BY r.created_at DESC LIMIT 200`,
     [req.seller.sellerCode],
   )
-  res.json(rows.map(openReturn).map((r) => ({ ...r, items: r.items.map(({ item_id: _item, ...i }) => i) })))
+  // 판매자에게는 주문번호를 가려서 보여 준다 (주문번호 + 받는 분 번호로 비회원 주문 조회를 하지 못하게, orders.js maskOrderNo)
+  res.json(rows.map(openReturn).map(({ order_no: orderNo, ...r }) => ({ ...r, order_label: maskOrderNo(orderNo), items: r.items.map(({ item_id: _item, ...i }) => i) })))
 })
 
 sellerReturnRouter.patch('/:id', async (req, res) => {
