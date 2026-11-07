@@ -19,6 +19,7 @@ import { createLimiter } from './limit.js'
 import { maskPersonal } from './privacy.js'
 import { describeRecommendation, loadActive, readWish, recommend } from './recommend.js'
 import { RETURNS, SHIPPING, SHOP } from './policy.js'
+import { isPreorder, shipDateText } from './preorder.js'
 import { RAG_ANSWER_GAP, RAG_ANSWER_MIN, RAG_ASK_MIN, RAG_MATERIAL_MIN, RAG_OVERLAP_MIN, searchChunks } from './rag.js'
 import { coverage, mostSimilar, similarity } from './similar.js'
 import { findBanned } from './banned.js'
@@ -37,6 +38,20 @@ function pickOptions(p, message) {
   const hit = options.filter((o) => message.includes(o.name) || amounts(o.name).some(said))
   return hit.length ? hit : options
 }
+// "ㅅㅏ과 언제와"처럼 자모가 풀려 입력된 글자를 합친다 (초성+중성, 뒤에 글자·빈칸·끝이 오면 받침까지). "ㅋㅋ"처럼 모음이 없으면 그대로
+const CHO = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'
+const JUNG = 'ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ'
+const JONG = ['', 'ㄱ', 'ㄲ', 'ㄳ', 'ㄴ', 'ㄵ', 'ㄶ', 'ㄷ', 'ㄹ', 'ㄺ', 'ㄻ', 'ㄼ', 'ㄽ', 'ㄾ', 'ㄿ', 'ㅀ', 'ㅁ', 'ㅂ', 'ㅄ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ']
+export function composeJamo(text) {
+  return String(text).replace(/([ㄱ-ㅎ])([ㅏ-ㅣ])([ㄱ-ㅎ](?=[가-힣\s?!.,~]|$))?/g, (all, c, v, t) => {
+    const ci = CHO.indexOf(c)
+    const vi = JUNG.indexOf(v)
+    const ti = t ? JONG.indexOf(t) : 0
+    if (ci < 0 || vi < 0 || ti < 0) return all
+    return String.fromCharCode(0xac00 + (ci * 21 + vi) * 28 + ti)
+  })
+}
+
 const QNA_HINT = `상품 페이지 아래 Q&A에 질문을 남겨 주시면 담당자가 직접 답해 드려요. 급하면 고객센터 ${SHOP.phone}로 연락해 주세요.`
 
 // ---------- 1. 정해진 답으로 넘기는 질문 ----------
@@ -89,6 +104,36 @@ const ROUTES = [
     action: 'lookup',
   },
   {
+    // 받는 방법: 주문서는 국내 주소(우편번호 5자리)로 택배를 보내고, 배송비는 결제할 때 함께 낸다
+    // (편의점 수령·직접 수령·해외 배송·착불은 고를 수 없다 — 주문서에 그런 칸이 없다)
+    kind: 'delivery_way',
+    re: /편의점\s?(택배|수령|픽업|으로|에서|택배로)|(직접|방문)\s?(수령|픽업|가지러|찾으러|받으러)|해외\s?(배송|택배|로|주소|에)|외국\s?(으로|에|배송|주소|으로\s?보내)|국외|(일본|미국|중국|캐나다|호주|베트남|대만)\s?(으로|에|까지|로)?\s?(배송|보내|택배)|착불|선불/,
+    answer: (ctx) => {
+      const said = ctx.message ?? ''
+      const parts = []
+      if (/편의점|직접|방문/.test(said)) parts.push('주문서에 적은 주소로 농가가 택배를 보내요. 편의점 수령이나 직접 찾아가는 방법은 없어요. 받기 어려우면 회사·가족 주소로 받거나, 주문서 배송 메모에 요청 사항(경비실에 맡겨 주세요 등)을 적어 주세요.')
+      if (/해외|외국|국외|일본|미국|중국|캐나다|호주|베트남|대만/.test(said)) parts.push('주문서는 국내 주소(우편번호 5자리)만 받아서 해외로는 보낼 수 없어요.')
+      if (/착불|선불/.test(said)) parts.push(`배송비는 주문할 때 상품 금액과 함께 결제해요 (농가별 ${SHIPPING.fee.toLocaleString('ko-KR')}원, 그 농가 상품을 ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상 사면 무료). 착불로 받는 방법은 없어요.`)
+      return `${parts.join(' ')} 더 궁금하면 고객센터 ${SHOP.phone}로 연락해 주세요.`
+    },
+    handoff: false,
+    action: null,
+  },
+  {
+    // 선물 포장·냉장 배송은 회사가 정한 안내가 없다: 약속하지 않고 농가(상품 Q&A)·담당자에게 넘긴다
+    kind: 'packing',
+    re: /선물\s?포장|보자기|포장지|리본|쇼핑백|종이\s?가방|(포장|박스).{0,4}(따로|예쁘게)|냉장\s?(차|탑차|배송|택배)|냉장으로\s?(와|오|보내|배송)|아이스\s?(박스|팩)|보냉/,
+    answer: (ctx) => {
+      const said = ctx.message ?? ''
+      const parts = []
+      if (/포장|보자기|리본|쇼핑백|가방/.test(said)) parts.push('선물 포장(보자기·쇼핑백 등)은 아직 정해진 안내가 없어서 약속드릴 수 없어요. 선물세트 상품은 상품 페이지의 구성 설명을 확인해 주세요.')
+      if (/냉장|아이스|보냉/.test(said)) parts.push('택배는 농가가 직접 보내요. 냉장으로 보내는지(아이스박스·보냉 포장)는 농가·상품마다 달라서 정해진 안내가 없어요.')
+      return `${parts.join(' ')} ${QNA_HINT}`
+    },
+    handoff: true,
+    action: 'qna',
+  },
+  {
     kind: 'payment',
     re: /결제|결재|카드|무통장|계좌|네이버\s?페이|카카오\s?페이|토스(?!트)|현금\s?영수증|영수증/,
     answer: () => `결제는 주문서에서 토스페이먼츠 결제창으로 해요. 쓸 수 있는 결제 수단은 결제창에서 볼 수 있어요. 계좌 번호나 카드 번호는 상담창에 적지 말아 주세요. 영수증이나 다른 결제 문의는 고객센터 ${SHOP.phone}로 알려 주세요 (${SHOP.hours}).`,
@@ -126,7 +171,12 @@ const ROUTES = [
   {
     kind: 'shipping',
     re: /배송비|무료\s?배송|택배비|언제\s?(와|도착|받|출고|발송)|며칠.{0,4}(걸|와)|몇일|영업일|내일.{0,6}(오|와|도착|받)|오늘.{0,8}(출고|발송|도착)|당일\s?(발송|배송|출고)|주말.{0,6}(배송|출고)/,
-    answer: () => `배송비는 농가마다 따로 붙어요. 농가별로 ${SHIPPING.fee.toLocaleString('ko-KR')}원이고, 그 농가 상품을 ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상 사면 그 농가 배송비는 무료예요. 장바구니에서 농가별 배송비를 볼 수 있어요. ${SHIPPING.leadTime}. 도착 날짜는 택배사 사정에 따라 달라서 약속드리기 어려워요.`,
+    answer: (ctx) => {
+      const fee = `배송비는 농가마다 따로 붙어요. 농가별로 ${SHIPPING.fee.toLocaleString('ko-KR')}원이고, 그 농가 상품을 ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상 사면 그 농가 배송비는 무료예요. 장바구니에서 농가별 배송비를 볼 수 있어요.`
+      const when = `${SHIPPING.leadTime}. 예약 상품은 상품 페이지에 적힌 출고 시작일부터 보내요. 도착 날짜는 택배사 사정에 따라 달라서 약속드리기 어려워요.`
+      // "그럼 언제 받을 수 있어요?"에 배송비부터 말하지 않는다
+      return /배송비|무료\s?배송|택배비/.test(ctx.message ?? '') ? `${fee} ${when}` : `${when} ${fee}`
+    },
     handoff: false,
     action: null,
   },
@@ -186,7 +236,7 @@ const ONE_CHAR = {
 }
 const PROCESSED = /^(즙|주스|가루|칩|와인|분말)/ // 잼·청은 레시피(사과잼, 귤청)로도 묻는 말이라 넣지 않는다
 function findItems(text, items) {
-  let rest = text.replace(/배송|배달|배합|배치|배려/g, ' ').replace(/메실/g, '매실').replace(/황도/g, '복숭아')
+  let rest = text.replace(/택배|배송|배달|배합|배치|배려/g, ' ').replace(/메실/g, '매실').replace(/황도/g, '복숭아')
   if (!/랑|하고|비교|차이/.test(text)) rest = rest.replace(/부사|후지/g, '사과')
   const found = []
   for (const item of [...items].sort((a, b) => b.name.length - a.name.length)) {
@@ -203,8 +253,10 @@ function findItems(text, items) {
 function pickContext(catalog, { message, history, productCode }) {
   const pastQuestions = history.filter((h) => h.role === 'user').slice(-2).map((h) => h.content).join(' ')
   let items = findItems(message, catalog.items)
-  if (!items.length) items = findItems(pastQuestions, catalog.items) // "그거 얼마예요?" 같은 이어지는 질문
   const current = catalog.products.find((p) => p.product_code === productCode)
+  // "그거 얼마예요?" 같은 이어지는 질문. 상품 페이지에서 물으면 앞선 대화의 품목보다 지금 보는 상품이 먼저다
+  // (감귤 페이지에서 "더 싼 건 없어요?"에 앞서 물은 곶감을 답하지 않게)
+  if (!items.length && !current) items = findItems(pastQuestions, catalog.items)
   if (current && !items.some((i) => i.item_code === current.item_code)) {
     items.push(catalog.items.find((i) => i.item_code === current.item_code))
   }
@@ -307,9 +359,9 @@ const FACTS = [
       : `${p.label} 가격은 ${won(p.price)}이에요 (판매 단위: ${p.unit}).${p.sold_out ? ' 다만 지금은 품절이라 살 수 없어요.' : ''}`),
   },
   {
-    re: /팔아|파나|파니|파냐|파시|파세요|파는지|판매\s?(해|하|중)|살\s?수\s?있|주문\s?(돼|되|가능|할\s?수)|구매.{0,4}(가능|돼|되나)|구입|재고|품절|남았|재입고|다시\s?(들어|나와)|^\S+(\s[\d.]+\S*)?\s?(있어|있나|있냐|있음|있니)/,
+    re: /팔아|팔어|파나|파니|파냐|파시|파세요|파는지|판매\s?(해|하|중)|살\s?수\s?있|주문\s?(돼|되|가능|할\s?수)|구매.{0,4}(가능|돼|되나)|구입|재고|품절|남았|재입고|다시\s?(들어|나와)|^\S+(\s[\d.]+\S*)?\s?(있어|있나|있냐|있음|있니)/,
     id: 'stock',
-    explicit: /살\s?수\s?있|재고|품절|남았|팔아|파나/,
+    explicit: /살\s?수\s?있|재고|품절|남았|팔아|팔어|파나/,
     say: (p) => (p.sold_out
       ? `${p.label} 상품은 지금 품절이라 살 수 없어요. 다시 들어오는 날짜는 아직 안내된 정보가 없어요.`
       : p.picked.length
@@ -421,8 +473,14 @@ function narrow(products, message, catalog) {
     ...String(p.seller_name ?? '').replace(/\[예시\]/g, '').split(/\s+/)]
     .filter((w) => w.length >= 2 && !catalog.items.some((i) => i.name === w))
   const sameMeaning = (p) => SAME_MEANING.some(([re, names]) => re.test(said) && names.some((n) => p.name.includes(n)))
-  const narrowed = products.filter((p) => words(p).some((w) => said.includes(w)) || sameMeaning(p))
-  return narrowed.length ? narrowed : products
+  // 상품 이름을 통째로 말했으면 그 상품만 ("거창 부사 선물 5kg (특대과) 얼마예요?")
+  const plainName = (p) => p.name.replace(/\[예시\]\s*/g, '').replace(/\s+/g, '')
+  const exact = products.filter((p) => said.replace(/\s+/g, '').includes(plainName(p)))
+  if (exact.length) return exact
+  // 아니면 겹치는 낱말이 가장 많은 상품들 ("거창"·"5kg" 하나만 겹치는 상품까지 섞지 않게)
+  const score = (p) => new Set(words(p).filter((w) => said.includes(w))).size + (sameMeaning(p) ? 1 : 0)
+  const best = Math.max(0, ...products.map(score))
+  return best ? products.filter((p) => score(p) === best) : products
 }
 
 // 같은 품목 상품이 많으면(여러 농가) 하나씩 다 말하지 않고, 판매 중 상품 수·가격 범위·싼 순 3개를 말하고 좁혀 물어보게 한다.
@@ -702,7 +760,7 @@ function answerOddWords(message, catalog, ctx) {
 // ---------- 2-3-1. "사과랑 배 중에 뭐가 나아요?": 두 품목 이상을 비교·선택하는 질문 ----------
 // 건강·효능이나 누구에게 더 맞는지는 판단하지 않는다. 등록된 사실(가격·당도·품절 여부)만 품목별로 나란히 보여 주고,
 // 손님이 물은 기준이 가격·당도라서 사실로 고를 수 있을 때만 그 값을 말한다
-const ASKS_CHOICE = /비교|차이|다른\s?점|뭐가\s?달라|중(에서|에)?\s?(뭐|뭘|무엇|어느|어떤)|어느\s?(게|것|쪽|걸)|(뭐가|어떤\s?(게|걸)|뭘)\s?(더\s?)?(나아|낫|좋|살까|사야)/
+const ASKS_CHOICE = /비교|차이|다른\s?점|뭐가\s?달라|중(에서|에)?\s?(뭐|뭘|무엇|어느|어떤)|어느\s?(게|것|쪽|걸)|(뭐가|어떤\s?(게|걸)|뭘)\s?(더\s?)?(나아|낫|좋|살까|사야)|(뭐가|어떤\s?게|어느\s?게)\s?더\s?(달|싸|저렴|맛있|커|크)/
 const BY_PRICE = /싸|저렴|가격|값/
 const BY_BRIX = /더\s?달|달아|달콤|단\s?(게|거|것|쪽)|당도|브릭스|brix/i
 
@@ -724,10 +782,35 @@ function choiceFacts(p, item) {
 
 const nameList = (rows) => rows.map((x) => label(x.p)).join(', ')
 
+// "부사랑 홍로랑 뭐가 더 달아요?": 품목은 같고(사과) 상품 이름의 낱말(품종·산지)로 나누는 비교.
+// 질문 낱말에서 조사를 떼고, 그 낱말이 이름에 든 판매 상품이 있는 낱말이 둘 이상이면 낱말별로 나란히 보여 준다
+const CHOICE_JOSA = /(이랑|랑|하고|중에서|중에|과|와|은|는|이|가|을|를|도)$/
+function varietyGroups(message, catalog, ctx) {
+  const mentioned = findItems(message, catalog.items)
+  if (!ASKS_CHOICE.test(message) || dangerSign(message, catalog.items) || mentioned.length >= 2) return null
+  // 품목을 말했거나 상품 페이지에서 물으면 그 품목 안에서만 ("선물세트랑 가정용 차이"가 다른 품목까지 섞지 않게)
+  const within = mentioned.length ? mentioned[0].item_code : ctx.current?.item_code
+  const words = [...new Set(message.split(/[\s,?!.~]+/).map((w) => w.replace(CHOICE_JOSA, '')).filter((w) => w.length >= 2))]
+  const groups = []
+  for (const word of words) {
+    if (catalog.items.some((i) => i.name === word)) continue
+    const products = catalog.products
+      .filter((p) => (!within || p.item_code === within) && label(p).split(/[\s·()]+/).includes(word))
+      .sort((a, b) => Number(a.sold_out) - Number(b.sold_out))
+      .slice(0, 3)
+    if (products.length) groups.push({ name: word, products })
+  }
+  return groups.length >= 2 ? groups : null
+}
+
 function answerChoice(items, message, catalog, ctx) {
-  const groups = items.map((item) => ({ item, products: catalog.products.filter((p) => p.item_code === item.item_code).slice(0, 3) }))
-  const lines = groups.map(({ item, products }) => `${item.name}: ${products.length ? products.map((p) => choiceFacts(p, item)).join(' / ') : '지금 판매 중인 상품이 없어요'}`)
-  const all = groups.flatMap(({ item, products }) => products.map((p) => ({ p, item })))
+  return compareGroups(items.map((item) => ({ name: item.name, products: catalog.products.filter((p) => p.item_code === item.item_code).slice(0, 3) })), message, catalog, ctx)
+}
+
+function compareGroups(groups, message, catalog, ctx) {
+  const itemOf = (p) => catalog.items.find((i) => i.item_code === p.item_code)
+  const lines = groups.map(({ name, products }) => `${name}: ${products.length ? products.map((p) => choiceFacts(p, itemOf(p))).join(' / ') : '지금 판매 중인 상품이 없어요'}`)
+  const all = groups.flatMap(({ products }) => products.map((p) => ({ p, item: itemOf(p) })))
   const decided = []
   if (BY_PRICE.test(message)) {
     const buyable = all.filter((x) => !x.p.sold_out)
@@ -754,6 +837,71 @@ function answerChoice(items, message, catalog, ctx) {
     askAi: !decided.length && canAskAi,
     handoff: false, action: null, model: 'rule:choice', blocked: false,
   }
+}
+
+// ---------- 2-3-2. "더 싼 건 없어요?", "10kg도 있어요?": 같은 품목 안에서 가격·무게로 찾는다 ----------
+// 품목은 질문 → 지금 보는 상품 → 앞선 대화 순서로 정한다
+function itemCodesFor(message, catalog, ctx) {
+  const mentioned = findItems(message, catalog.items).map((i) => i.item_code)
+  if (mentioned.length) return { codes: mentioned, mentioned: true }
+  if (ctx.current) return { codes: [ctx.current.item_code], mentioned: false }
+  return { codes: ctx.items.slice(0, 1).map((i) => i.item_code), mentioned: false }
+}
+const ruleReply = (model, answer, shown, ctx) => ({
+  answer,
+  sources: shown.map((p) => ({ code: p.product_code, name: p.name })),
+  productCode: shown[0]?.product_code ?? ctx.current?.product_code ?? null,
+  handoff: false, action: null, model, blocked: false,
+})
+const fromPrice = (p) => `${won(p.price)}${p.options?.length ? '부터' : ''}`
+const listEnd = (text) => `${text}${/부터$/.test(text) ? '예요' : '이에요'}`
+
+const ASKS_CHEAPER = /더\s?(싼|싸|저렴)|싼\s?(거|건|게|것|걸)|저렴한\s?(거|건|게|것|걸)/
+function answerCheaper(message, catalog, ctx) {
+  if (!ASKS_CHEAPER.test(message) || choiceItems(message, catalog) || varietyGroups(message, catalog, ctx)) return null
+  const { codes, mentioned } = itemCodesFor(message, catalog, ctx)
+  if (!codes.length) return null
+  const name = catalog.items.find((i) => i.item_code === codes[0])?.name ?? '이 품목'
+  const live = catalog.products.filter((p) => codes.includes(p.item_code) && !p.sold_out).sort((a, b) => a.price - b.price)
+  if (!live.length) return ruleReply('rule:cheaper', `${name} 상품은 지금 모두 품절이에요.`, [], ctx)
+  const base = !mentioned && ctx.current && codes.includes(ctx.current.item_code) ? ctx.current : null
+  const unitNote = '무게·개수가 서로 달라서 판매 단위도 같이 확인해 주세요.'
+  if (base) {
+    const cheaper = live.filter((p) => p.product_code !== base.product_code && Number(p.price) < Number(base.price))
+    if (!cheaper.length) return ruleReply('rule:cheaper', `판매 중인 ${name} 상품 중에는 지금 보시는 ${label(base)}(${fromPrice(base)})이 가장 싸요.`, [base], ctx)
+    const shown = cheaper.slice(0, 3)
+    return ruleReply('rule:cheaper', `지금 보시는 ${label(base)}(${fromPrice(base)})보다 싼 ${name} 상품은 ${cheaper.length}개예요. 싼 순으로 ${listEnd(shown.map((p) => `${label(p)} ${fromPrice(p)}`).join(', '))}. ${unitNote}`, shown, ctx)
+  }
+  const shown = live.slice(0, 3)
+  return ruleReply('rule:cheaper', `판매 중인 ${name} 상품을 싼 순으로 보면 ${listEnd(shown.map((p) => `${label(p)} ${fromPrice(p)}`).join(', '))}. ${unitNote}`, shown, ctx)
+}
+
+const AMOUNT = /(\d+(?:\.\d+)?)\s*(kg|g|포|개입|병|ml|l)(?![a-z])/gi
+const SIZE_HAVE = /있(어|나|냐|음|니|을까|는지)|없(어|나|냐)|팔(아|어)|파나|나와요|되나요|돼요/
+function answerSize(message, catalog, ctx) {
+  const said = message.replace(/\s?(키로|킬로)/g, 'kg')
+  const asked = [...said.matchAll(AMOUNT)][0]
+  if (!asked || !SIZE_HAVE.test(said) || /얼마|가격|값/.test(said)) return null
+  const { codes } = itemCodesFor(said, catalog, ctx)
+  if (!codes.length) return null
+  const name = catalog.items.find((i) => i.item_code === codes[0])?.name ?? '이 품목'
+  const amount = `${asked[1]}${asked[2].toLowerCase()}`
+  const hasAmount = (text) => new RegExp(`(?<![\\d.])${asked[1].replace('.', '\\.')}\\s*${asked[2]}(?![a-z])`, 'i').test(text)
+  const products = catalog.products.filter((p) => codes.includes(p.item_code)).sort((a, b) => Number(a.sold_out) - Number(b.sold_out))
+  const hits = products.filter((p) => hasAmount(p.name) || (p.options ?? []).some((o) => hasAmount(o.name)))
+  if (hits.length) {
+    const priceOf = (p) => {
+      const option = (p.options ?? []).find((o) => hasAmount(o.name))
+      if (option) return `${option.name} ${won(option.price)}${option.stock > 0 ? '' : ' (품절)'}`
+      return `${won(p.price)}${p.sold_out ? ' (품절)' : ''}`
+    }
+    const shown = hits.slice(0, 3)
+    const buyable = hits.filter((p) => !p.sold_out)
+    return ruleReply('rule:size', `${name} ${amount} 상품은 ${hits.length}개 있어요: ${shown.map((p) => `${label(p)} ${priceOf(p)}`).join(', ')}.${buyable.length ? '' : ' 다만 지금은 모두 품절이에요.'}`, shown, ctx)
+  }
+  const live = products.filter((p) => !p.sold_out)
+  const amounts = [...new Set(live.flatMap((p) => [p.name, ...(p.options ?? []).map((o) => o.name)]).flatMap((t) => [...t.matchAll(AMOUNT)].map((m) => `${m[1]}${m[2].toLowerCase()}`)))].slice(0, 6)
+  return ruleReply('rule:size', `판매 중인 ${name} 상품에는 ${amount} 상품이 없어요.${amounts.length ? ` 지금 있는 양은 ${amounts.join(', ')}이에요.` : ''}`, live.slice(0, 3), ctx)
 }
 
 // ---------- 2-4. 비슷한 질문 다시 쓰기: 담당자가 답한 Q&A, 최근 7일 AI 답 (글자 비교라 토큰 0) ----------
@@ -804,7 +952,7 @@ async function answerSimilar(message, catalog, ctx, fallbackProduct) {
 }
 
 // ---------- 2-4-1. "수박도 팔아요?": 파는 품목이 아니면 지어내지 않고 지금 파는 품목을 알려 준다 ----------
-const ASKS_SELLING = /팔아|파나요|파시|파세요|파는지|판매\s?(해|하|중)/
+const ASKS_SELLING = /팔아|팔어|파나요|파시|파세요|파는지|판매\s?(해|하|중)/
 const ASKS_HAVE = /^[가-힣]{1,8}\s?(도|은|는|이|가)?\s?(언제\s?)?(있어요|있나요|있어|있나|있냐|있음|있습니까|나와요|나오나요)[?!.~ㅎㅋ\s]*$/
 const NOT_A_PRODUCT = /재고|쿠폰|포인트|적립|영수증|옵션|사이즈|규격|인증|선물|포장|상담|문의|번호|배송|택배|결제|카드|할인|후기|리뷰|품절|이거|그거|저거|뭐|무엇|아무|상품|과일|채소/
 function answerNotSold(message, catalog, ctx) {
@@ -1007,14 +1155,60 @@ async function writeCache(key, reply, model) {
   )
 }
 
+// ---------- 출고 날짜·예약 판매 ----------
+// "절임배추 언제 받아요?", "곶감 언제 보내요?", "예약 판매하는 거 있어요?": 상품의 출고 시작일(DB)로 답한다.
+// 품목을 말하지 않은 "언제 와요?"는 아래 배송 규칙(결제 후 1~3일 안내)으로 간다
+const ASKS_WHEN = /예약|언제\s?(와|오|도착|받|출고|발송|보내|나와|배송)|받을\s?수\s?있|출고\s?(일|날|언제|시작)|발송\s?(일|날|언제)|며칠.{0,4}(걸|와|만에)|도착\s?(일|날|언제)/
+const ASKS_PREORDER_LIST = /예약\s?(판매|상품|구매|주문)?.{0,6}(있|뭐|어떤|무슨|되|돼|가능)/
+function answerShipDate(message, catalog, ctx) {
+  // "주문했는데 언제 와요?"는 내 주문 이야기라 주문 조회 규칙이 답한다
+  if (!ASKS_WHEN.test(message) || /주문했|시켰|샀는데|결제했|주문한/.test(message)) return null
+  const label = (p) => p.name.replace(/\[예시\]\s*/g, '')
+  const eunNeun = (name) => {
+    const last = name.replace(/[)\]\s]+$/, '')
+    return /[가-힣]$/.test(last) ? `${name}${hasBatchim(last) ? '은' : '는'}` : `${name}은(는)`
+  }
+  const base = { handoff: false, action: null, model: 'rule:ship_date', blocked: false }
+  const mentioned = findItems(message, catalog.items).map((i) => i.item_code)
+  const earlier = ctx.items.map((i) => i.item_code) // 앞선 대화에 나온 품목 ("배즙 …" 다음의 "그럼 언제 받을 수 있어요?")
+  let products = mentioned.length ? catalog.products.filter((p) => mentioned.includes(p.item_code))
+    : ctx.current ? [ctx.current]
+    : catalog.products.filter((p) => earlier.includes(p.item_code))
+  if (!products.length) {
+    // 품목 없이 예약 판매를 물으면 지금 예약 판매 중인 상품 목록
+    if (!ASKS_PREORDER_LIST.test(message)) return null
+    const pre = catalog.products.filter((p) => isPreorder(p.ship_from) && !p.sold_out).sort((a, b) => String(a.ship_from).localeCompare(String(b.ship_from)))
+    if (!pre.length) return { ...base, answer: `지금 예약 판매하는 상품은 없어요. 모든 상품은 ${SHIPPING.leadTime}.`, sources: [], productCode: null }
+    return {
+      ...base,
+      answer: `지금 예약 판매하는 상품은 ${pre.length}개예요: ${pre.slice(0, 5).map((p) => `${label(p)} (${shipDateText(p.ship_from)}부터 출고)`).join(', ')}${pre.length > 5 ? ` 외 ${pre.length - 5}개` : ''}. 결제는 주문할 때 하고, 보내기 전에는 [주문 조회]에서 취소할 수 있어요.`,
+      sources: pre.slice(0, 5).map((p) => ({ code: p.product_code, name: p.name })),
+      productCode: pre[0].product_code,
+    }
+  }
+  products = narrow(products, message, catalog).filter((p) => !p.sold_out)
+  if (!products.length) return null // 모두 품절이면 파는지·재고 규칙이 답한다
+  const pre = products.filter((p) => isPreorder(p.ship_from)).sort((a, b) => String(a.ship_from).localeCompare(String(b.ship_from)))
+  const now = products.filter((p) => !isPreorder(p.ship_from))
+  const sentences = [
+    ...pre.slice(0, 3).map((p) => `${eunNeun(label(p))} 예약 상품이라 ${shipDateText(p.ship_from)}부터 주문 순서대로 보내요.`),
+    pre.length > 3 ? `예약 상품이 ${pre.length - 3}개 더 있어요.` : '',
+    now.length ? `${pre.length ? '나머지 ' : ''}${now.length === 1 ? eunNeun(label(now[0])) : `${catalog.items.find((i) => i.item_code === now[0].item_code)?.name ?? ''} 상품 ${now.length}개는${pre.length ? '' : ' 모두'}`} 결제 후 1~3일 안에 출고해요 (주말·공휴일 제외).` : '',
+    pre.length ? '같은 농가의 다른 상품을 함께 사면 예약 상품 날짜에 함께 보내요.' : '',
+    '도착 날짜는 택배사 사정에 따라 달라서 약속드리기 어려워요.',
+  ].filter(Boolean)
+  const shown = [...pre.slice(0, 3), ...now.slice(0, 2)]
+  return { ...base, answer: sentences.join(' '), sources: shown.map((p) => ({ code: p.product_code, name: p.name })), productCode: shown[0]?.product_code ?? null }
+}
+
 // useCache: 테스트 스크립트는 false (모델 성능을 매번 새로 재야 해서)
 // allowAi: 손님 화면은 [AI에게 물어보기]를 눌렀을 때만 true. false면 AI 대신 고를 수 있는 질문을 돌려준다
 export { loadCatalog, pickContext }
 
 export async function answerChat({ message: raw, history = [], productCode = null }, { useCache = true, allowAi = true } = {}) {
   // 연락처 같은 개인정보는 AI·기록 모두에 들어가기 전에 가린다
-  const { text: message, masked } = maskPersonal(raw)
-  const safeHistory = history.map((h) => ({ ...h, content: maskPersonal(h.content).text }))
+  const { text: message, masked } = maskPersonal(composeJamo(raw))
+  const safeHistory = history.map((h) => ({ ...h, content: maskPersonal(composeJamo(h.content)).text }))
   const result = await answerMasked({ message, history: safeHistory, productCode }, { useCache, allowAi })
   return { ...result, question: message, masked }
 }
@@ -1026,11 +1220,14 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
 
   // 가린 자리표(전화번호 가림 등)는 손님이 쓴 말이 아니라서 규칙이 읽지 않게 한다
   const said = message.replace(/\((주민등록번호|이메일|전화번호|주문번호) 가림\)/g, ' ')
+  // 상품의 출고 날짜를 묻는 말은 배송 규칙보다 먼저 (예약 상품은 결제 후 1~3일이 아니라서)
+  const shipDate = answerShipDate(said, catalog, ctx)
+  if (shipDate && !ROUTES.some((r) => r.handoff && r.re.test(said))) return shipDate
   const route = ROUTES.find((r) => r.re.test(said))
   if (route) {
     const b2bProduct = ctx.products.find((p) => p.b2b_available)
     return {
-      answer: route.answer(ctx),
+      answer: route.answer({ ...ctx, message: said }),
       sources: route.kind === 'health' ? toSourceChips(ctx.items.filter((i) => i.allergens.length).map((i) => i.item_code), catalog, ctx) : [],
       handoff: route.handoff,
       action: route.action,
@@ -1041,10 +1238,17 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
   }
   const odd = allowAi ? null : answerOddWords(message, catalog, ctx)
   if (odd) return odd
-  // 두 품목 비교·선택: 규칙 답에서 [AI에게 물어보기]를 누른 경우(allowAi)에만 아래 규칙을 건너뛰고 AI에게 간다
+  // 두 품목(또는 같은 품목의 두 품종) 비교·선택: 규칙 답에서 [AI에게 물어보기]를 누른 경우(allowAi)에만 아래 규칙을 건너뛰고 AI에게 간다
   const choosing = choiceItems(message, catalog)
   if (choosing && !allowAi) return answerChoice(choosing, message, catalog, ctx)
-  if (!choosing) {
+  const varieties = choosing ? null : varietyGroups(message, catalog, ctx)
+  if (varieties && !allowAi) return compareGroups(varieties, message, catalog, ctx)
+  if (!choosing && !varieties) {
+    const cheaper = answerCheaper(message, catalog, ctx)
+    if (cheaper) return cheaper
+    const size = answerSize(message, catalog, ctx)
+    if (size) return size
+
     if (WANTS_RECOMMEND.test(message) && !asksRecipeOfItem(message, catalog)) return answerRecommend(message, allowAi)
 
     const fact = answerFact(message, catalog, ctx)

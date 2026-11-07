@@ -4,6 +4,8 @@ import { readNotice } from './notice.js'
 
 export const FORBIDDEN = ['면역력', '다이어트', '치료', '예방', '해독', '항암', '혈압', '혈당']
 export const MAX_OPTIONS = 20 // 상품 하나의 판매 옵션 수
+export const MAX_PREORDER_DAYS = 180 // 예약 판매 출고 시작일은 오늘부터 이 날짜 안
+const addDays = (iso, days) => new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
 
 const isCode = (v) => /^[a-z0-9_]+$/.test(v)
 const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v))
@@ -30,6 +32,8 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
     variety: text(input.variety).slice(0, 30),
     brix_measured_at: text(input.brix_measured_at),
     harvest_date: text(input.harvest_date),
+    // 예약 판매: 이 날짜부터 보낸다 (오늘보다 뒤면 예약 상품). 비우면 결제 후 바로 보내는 상품
+    ship_from: text(input.ship_from),
     summary: text(input.summary),
     description: text(input.description),
     external_url: text(input.external_url),
@@ -88,7 +92,7 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
     if (!/^\d+(\.\d)?$/.test(p.brix)) errors.push('당도는 숫자만 적어 주세요. (예: 14.8)')
     else if (Number(p.brix) === 0) errors.push('당도를 모르면 0 대신 비워 두세요.')
   }
-  for (const [key, label] of [['brix_measured_at', '당도 잰 날'], ['harvest_date', '수확일']]) {
+  for (const [key, label] of [['brix_measured_at', '당도 잰 날'], ['harvest_date', '수확일'], ['ship_from', '출고 시작일']]) {
     if (p[key] && !isDate(p[key])) errors.push(`${label}는 2026-10-17 형식으로 적어 주세요.`)
   }
   // 거짓 표시 막기: 날짜끼리 맞는지 (오늘은 한국 날짜), 당도를 적으면 잰 날도
@@ -100,6 +104,8 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
   if (dated('harvest_date') && dated('brix_measured_at') && p.brix_measured_at < p.harvest_date) {
     errors.push('당도를 수확일보다 먼저 잰 것으로 되어 있어요. 날짜를 확인해 주세요.')
   }
+  // 예약은 반년 안까지만 (손님 돈을 너무 오래 묶지 않게) [가설: 기간은 회사가 정함]
+  if (dated('ship_from') && p.ship_from > addDays(today, MAX_PREORDER_DAYS)) errors.push(`출고 시작일은 오늘부터 ${MAX_PREORDER_DAYS}일 안으로 적어 주세요.`)
   const range = itemRanges?.get(p.item_code)
   if (range && /^\d+(\.\d)?$/.test(p.brix) && ((range.min != null && Number(p.brix) < range.min) || (range.max != null && Number(p.brix) > range.max))) {
     errors.push(`${range.name} 당도는 보통 ${range.min ?? '?'}~${range.max ?? '?'}Brix예요. 측정값이 맞으면 회사에 문의해 주세요.`)
@@ -127,6 +133,7 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
       variety: orNull(p.variety),
       brix_measured_at: orNull(p.brix_measured_at),
       harvest_date: orNull(p.harvest_date),
+      ship_from: orNull(p.ship_from),
       summary: orNull(p.summary),
       description: orNull(p.description),
       external_url: orNull(p.external_url),

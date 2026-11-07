@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MAX_QTY, optionLabel, readCart, sameLine, won, writeCart } from './shared.js'
+import { MAX_QTY, optionLabel, preorderNote, readCart, sameLine, won, writeCart } from './shared.js'
 import { useCartLines } from './useCartLines.js'
 
 // 농가가 여럿이면 농가마다 따로 보내서 배송비도 농가마다 보여 준다
@@ -50,6 +50,7 @@ export function Cart() {
                 <div>
                   <strong>{r.product ? optionLabel(r.product.name, r.option?.name) : r.productCode}</strong>
                   {r.product && (r.option || !r.product.has_options) && <p className="muted">{won(r.price)} / {r.option?.name ?? r.product.unit}</p>}
+                  {r.product?.preorder && <p className="muted"><span className="badge pending">예약</span> {preorderNote(r.product.ship_from)}</p>}
                   {r.problem && <p className="error">{r.problem} — 주문에서 빠져요</p>}
                 </div>
                 <div className="qty">

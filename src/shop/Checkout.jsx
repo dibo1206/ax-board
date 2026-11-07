@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Totals } from './Cart.jsx'
-import { getAccount, loadScript, MAX_QTY, optionLabel, post, readCart, savePending, won } from './shared.js'
+import { getAccount, loadScript, MAX_QTY, optionLabel, post, preorderNote, readCart, savePending, won } from './shared.js'
 import { useCartLines } from './useCartLines.js'
 
 // 주문서 → (주문 만들기: 서버가 금액 계산·재고 잡아 둠) → 결제 단계(토스 결제위젯)
@@ -146,7 +146,11 @@ export function Checkout() {
       <h2>주문서</h2>
       <section className="box">
         <h3>주문 상품</h3>
-        <ul>{cart.ok.map((r) => <li key={`${r.productCode}:${r.optionId ?? ''}`}>{optionLabel(r.product.name, r.option?.name)} × {r.quantity} — {won(r.subtotal)}</li>)}</ul>
+        <ul>{cart.ok.map((r) => (
+          <li key={`${r.productCode}:${r.optionId ?? ''}`}>{optionLabel(r.product.name, r.option?.name)} × {r.quantity} — {won(r.subtotal)}
+            {r.product.preorder && <> <span className="badge pending">예약</span> <span className="muted">{preorderNote(r.product.ship_from)}</span></>}</li>
+        ))}</ul>
+        {cart.ok.some((r) => r.product.preorder) && <p className="muted">예약 상품은 적힌 날부터 보내고, 같은 농가의 다른 상품도 그때 함께 보내요. 보내기 전에는 [주문 조회]에서 취소할 수 있어요.</p>}
         {cart.rows.length > cart.ok.length && <p className="warn">품절·재고 부족 상품은 빠졌어요.</p>}
         <Totals {...cart} />
       </section>

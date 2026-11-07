@@ -145,6 +145,9 @@
 .shop .ptag.brix-mid { background: #37833f; }
 .shop .ptag.ptag-season { background: #b88a12; }
 .shop .pcard-flag { position: absolute; right: 8px; top: 8px; z-index: 1; padding: 2px 7px; border-radius: 3px; background: #a32a22; color: #fff; font-size: 12px; font-weight: 500; }
+.shop .pcard-flag.preorder { background: #2f5d8a; }
+.shop .preorder-note { margin: 10px 0; padding: 10px 12px; background: #eef3f8; border-left: 3px solid #2f5d8a; font-size: 14px; line-height: 1.6; }
+.pre-line { white-space: pre-line; }
 .shop .pcard-seller { font-size: 13px; color: var(--muted); }
 .shop .pcard-name { font-size: 14px; font-weight: 400; line-height: 20px; color: var(--muted); }
 .shop .pcard:hover .pcard-name { text-decoration: underline; text-underline-offset: 4px; }

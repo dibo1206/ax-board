@@ -1,7 +1,7 @@
 // 예시 농가 10곳과 상품 100개를 시뮬레이션으로 만든다.
-//   npm run simulate-farms        data/*.csv 의 시뮬레이션 줄을 새로 만들고 docs/farm_simulation.md 를 쓴다
+//   npm run simulate-farms        가입 계획 data/sample_farms.json 과 docs/farm_simulation.md 를 쓴다 (그다음 npm run onboard-farms)
 //   npm run simulate-farms -- --check   파일을 바꾸지 않고 검사 결과만 본다
-// 같은 씨앗(SEED)이면 매번 같은 결과가 나온다. 만든 줄은 source 칸에 SIM 표시가 있어서 다시 돌리면 그 줄만 바뀐다.
+// 같은 씨앗(SEED)이면 매번 같은 결과가 나온다. 농가는 CSV로 넣지 않고 onboard-farms 가 가입 API로 들어온다.
 // 가격은 KAMIS 소매가격(data/market_prices.csv)에서 kg당 값을 잡고 등급·포장·무게 할인을 곱한다.
 // 재고는 출하량에서 판매 시작일부터 오늘까지 팔린 양(포아송)을 뺀다. 당도는 품종별 평균·편차로 뽑는다.
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -9,6 +9,7 @@ import { parseCsv } from './csv.js'
 
 const DATA = new URL('../data/', import.meta.url)
 const REPORT = new URL('../docs/farm_simulation.md', import.meta.url)
+const PLAN = new URL('../data/sample_farms.json', import.meta.url)
 const CHECK_ONLY = process.argv.includes('--check')
 const TODAY = '2026-11-06'
 const SEED = 'yoonju-farms-2026-11'
@@ -56,25 +57,25 @@ const MARKET = Object.fromEntries(readSheet('market_prices.csv').map((r) => [r.r
 // ---------- 농가 ----------
 // scale: 온라인으로 내놓는 양의 크기 (1 = 보통), story 는 농가 소개 화면에 나간다
 const FARMS = [
-  { code: 'farm_namwon', name: '남원 귤빛농원', region: '제주특별자치도 서귀포시 남원읍', short: '서귀포', tel: '0640000011', owner: '고귤순', scale: 1.4,
+  { code: 'farm_namwon', login: 'namwon_gyul', name: '남원 귤빛농원', region: '제주특별자치도 서귀포시 남원읍', short: '서귀포', tel: '0640000011', owner: '고귤순', scale: 1.4,
     intro: '서귀포 남원에서 노지 감귤과 겨울 브로콜리, 흙당근을 키우는 농원입니다.', story: '바닷바람이 드는 남향 밭에서 3대째 감귤을 키웁니다. 귤은 나무에서 충분히 익힌 뒤 따고, 크기별로 나눠 보냅니다.' },
-  { code: 'farm_jinyeong', name: '진영 단감마을', region: '경상남도 김해시 진영읍', short: '김해 진영', tel: '0550000012', owner: '배단호', scale: 1.1,
+  { code: 'farm_jinyeong', login: 'jinyeong_dangam', name: '진영 단감마을', region: '경상남도 김해시 진영읍', short: '김해 진영', tel: '0550000012', owner: '배단호', scale: 1.1,
     intro: '김해 진영에서 부유 단감을 키우는 농가입니다.', story: '단감 시배지로 알려진 진영에서 부유 단감을 키우고, 모양이 덜 예쁜 감은 감말랭이로 만듭니다.' },
-  { code: 'farm_sangju', name: '상주 곶감골', region: '경상북도 상주시 외남면', short: '상주', tel: '0540000013', owner: '서곶임', scale: 0.9,
+  { code: 'farm_sangju', login: 'sangju_gotgam', name: '상주 곶감골', region: '경상북도 상주시 외남면', short: '상주', tel: '0540000013', owner: '서곶임', scale: 0.9,
     intro: '상주에서 곶감과 사과를 만드는 농가입니다.', story: '가을에 딴 둥시감을 깎아 바람에 말려 곶감을 만듭니다. 곶감이 마르는 동안에는 사과와 사과즙을 냅니다.' },
-  { code: 'farm_nonsan', name: '논산 새벽딸기', region: '충청남도 논산시 광석면', short: '논산', tel: '0410000014', owner: '윤설향', scale: 0.7,
+  { code: 'farm_nonsan', login: 'nonsan_berry', name: '논산 새벽딸기', region: '충청남도 논산시 광석면', short: '논산', tel: '0410000014', owner: '윤설향', scale: 0.7,
     intro: '논산에서 하우스 딸기를 키우는 농가입니다.', story: '새벽에 딴 딸기를 그날 바로 포장해 보냅니다. 11월은 첫물이라 양이 적고, 12월부터 늘어납니다.' },
-  { code: 'farm_yeongdong', name: '영동 포도언덕', region: '충청북도 영동군 양강면', short: '영동', tel: '0430000015', owner: '남포도', scale: 0.8,
+  { code: 'farm_yeongdong', login: 'yeongdong_grape', name: '영동 포도언덕', region: '충청북도 영동군 양강면', short: '영동', tel: '0430000015', owner: '남포도', scale: 0.8,
     intro: '영동에서 샤인머스캣을 키우고 포도잼을 만드는 농가입니다.', story: '9~10월에 딴 샤인머스캣을 저온 창고에 두고 나눠 보냅니다. 알이 떨어진 포도는 잼으로 만듭니다.' },
-  { code: 'farm_haenam', name: '해남 땅끝들녘', region: '전라남도 해남군 산이면', short: '해남', tel: '0610000016', owner: '박해남', scale: 1.5,
+  { code: 'farm_haenam', login: 'haenam_deulnyeok', name: '해남 땅끝들녘', region: '전라남도 해남군 산이면', short: '해남', tel: '0610000016', owner: '박해남', scale: 1.5,
     intro: '해남에서 배추·무·고구마·대파를 키우고 김장철에 절임배추를 내는 농가입니다.', story: '황토밭에서 가을배추와 무, 고구마를 키웁니다. 김장철에는 배추를 직접 절여 날짜에 맞춰 보냅니다.' },
-  { code: 'farm_uiseong', name: '의성 마늘고추밭', region: '경상북도 의성군 단밀면', short: '의성', tel: '0540000017', owner: '권의성', scale: 1.0,
+  { code: 'farm_uiseong', login: 'uiseong_garlic', name: '의성 마늘고추밭', region: '경상북도 의성군 단밀면', short: '의성', tel: '0540000017', owner: '권의성', scale: 1.0,
     intro: '의성에서 한지형 마늘과 고추, 양파를 키우는 농가입니다.', story: '6월에 캔 마늘을 그늘에 매달아 말리고, 여름에 딴 고추는 햇볕과 건조기로 말려 고춧가루로 빻습니다.' },
-  { code: 'farm_jangheung', name: '장흥 숲속표고', region: '전라남도 장흥군 유치면', short: '장흥', tel: '0610000018', owner: '임표고', scale: 0.8,
+  { code: 'farm_jangheung', login: 'jangheung_pyogo', name: '장흥 숲속표고', region: '전라남도 장흥군 유치면', short: '장흥', tel: '0610000018', owner: '임표고', scale: 0.8,
     intro: '장흥 산자락에서 참나무 원목으로 표고버섯을 키우는 농가입니다.', story: '참나무 원목에 종균을 넣어 키운 표고를 따서 생표고로 보내고, 일부는 햇볕과 건조기로 말립니다.' },
-  { code: 'farm_goheung', name: '고흥 유자마을', region: '전라남도 고흥군 풍양면', short: '고흥', tel: '0610000019', owner: '조유자', scale: 0.9,
+  { code: 'farm_goheung', login: 'goheung_yuja', name: '고흥 유자마을', region: '전라남도 고흥군 풍양면', short: '고흥', tel: '0610000019', owner: '조유자', scale: 0.9,
     intro: '고흥에서 유자와 참다래를 키우는 농가입니다.', story: '11월에 딴 유자를 씻어 씨를 빼고 설탕에 재워 유자청을 만듭니다. 같은 때 참다래도 땁니다.' },
-  { code: 'farm_geochang', name: '거창 사과재', region: '경상남도 거창군 고제면', short: '거창', tel: '0550000020', owner: '신사과', scale: 1.2,
+  { code: 'farm_geochang', login: 'geochang_apple', name: '거창 사과재', region: '경상남도 거창군 고제면', short: '거창', tel: '0550000020', owner: '신사과', scale: 1.2,
     intro: '거창 고지대에서 사과를 키우고 사과즙을 짜는 농가입니다.', story: '해발이 높은 고제면 밭에서 일교차를 맞고 자란 사과를 키웁니다. 흠이 있는 사과는 즙으로 짭니다.' },
 ]
 
@@ -317,13 +318,6 @@ for (const { p, s } of results) {
 }
 if (results.length !== 100) problems.push(`상품이 ${results.length}개예요 (100개 목표)`)
 
-// ---------- CSV 줄 만들기 ----------
-const cell = (v) => {
-  const s = String(v ?? '')
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-}
-const line = (cols, row) => cols.map((c) => cell(row[c])).join(',')
-
 function noticeOf(p, farm) {
   const item = itemBy[p.item]
   const where = farm.short
@@ -335,44 +329,43 @@ function noticeOf(p, farm) {
   return { origin: `국내산 (${farm.region.split(' ').slice(0, 2).join(' ')})`, expiry: '받은 뒤 상태를 보며 되도록 빨리 드세요 (보관법은 상품 정보 참고)', composition: `${itemBy[p.item]?.name ?? p.item} ${p.unit}`, imported: false }
 }
 
-const PRODUCT_COLS = ['product_code', 'seller_code', 'item_code', 'name', 'price', 'unit', 'stock', 'weight_g', 'count_per_box', 'brix', 'brix_measured_at', 'harvest_date', 'summary', 'external_url', 'b2b_available', 'tags', 'source', 'image_url', 'notice', 'variety', 'brix_photo_url']
-const OPTION_COLS = ['product_code', 'name', 'price', 'stock', 'source']
-const SELLER_COLS = ['seller_code', 'name', 'region', 'intro', 'story', 'is_company', 'source', 'owner_name', 'phone']
-const QUESTION_COLS = ['product_code', 'author', 'question', 'answer', 'source']
+// 예약 상품의 출고 시작일 (상품 소개 글의 날짜와 같게)
+const SHIP_FROM = { salted_cabbage: '2026-11-20', citron_tea: '2026-11-20', semi_dried: '2026-12-05', gotgam: '2026-12-15' }
 
-const productRows = []
-const optionRows = []
+// ---------- 가입 계획 (npm run onboard-farms 가 이대로 가입·등록한다) ----------
+// 농가는 판매자 가입 화면과 같은 API로 가입하고, 관리자가 승인한 뒤, 농가가 직접 로그인해서 상품을 올린다.
+// 그래서 여기서는 CSV에 줄을 쓰지 않고 계획(JSON)만 만든다. 농가 코드는 가입할 때 서버가 만든다
+const products = []
 for (const { p, s } of results) {
   const farm = farmBy[p.farm]
   const code = `${p.farm.replace('farm_', '')}_${p.code}`
-  const kgUnit = !['apple_juice'].includes(p.item) && !p.unit.includes('포기') && !p.unit.includes('개 (')
-  let price = s.price
-  let stock = s.stock
-  if (p.opts) {
-    // 옵션: 무게마다 값을 따로 계산하고, 재고는 출하량을 나눠 갖는다 (상품 가격·재고는 load-data가 옵션에서 다시 계산)
-    const opts = p.opts.map(([name, qty], i) => ({ name, price: priceOf(p, qty), stock: Math.round(stock * (i === 0 ? 0.6 : 0.4)) }))
-    opts.forEach((o) => optionRows.push(line(OPTION_COLS, { product_code: code, ...o, source: SIM })))
-    price = Math.min(...opts.map((o) => o.price))
-    stock = opts.reduce((n, o) => n + o.stock, 0)
-  }
-  productRows.push(line(PRODUCT_COLS, {
-    product_code: code, seller_code: p.farm, item_code: p.item, name: `[예시] ${p.name}`, price, unit: p.unit, stock,
-    weight_g: kgUnit ? Math.round(p.qty * 1000) : '', count_per_box: p.item === 'apple_juice' ? p.qty : '',
-    brix: s.brix, brix_measured_at: s.measured, harvest_date: s.harvest,
+  // 옵션: 무게마다 값을 따로 계산하고, 재고는 출하량을 나눠 갖는다 (상품 가격·재고는 서버가 옵션에서 다시 계산)
+  const options = p.opts?.map(([name, qty], i) => ({ name, price: priceOf(p, qty), stock: Math.round(s.stock * (i === 0 ? 0.6 : 0.4)) })) ?? []
+  const shipFrom = p.mode === 'preorder' ? SHIP_FROM[p.ref] ?? '' : ''
+  if (p.mode === 'preorder' && !shipFrom) problems.push(`${code}: 예약 상품인데 출고 시작일이 없어요`)
+  products.push({
+    login: farm.login, product_code: code, item_code: p.item, name: `[예시] ${p.name}`,
+    price: options.length ? Math.min(...options.map((o) => o.price)) : s.price, unit: p.unit,
+    stock: options.length ? options.reduce((n, o) => n + o.stock, 0) : s.stock, options,
+    // weight_g 는 '1개 무게'라서 상자 무게를 넣지 않는다 (모르면 빈칸). 사과즙은 한 상자 포 수만 안다
+    weight_g: '', count_per_box: p.item === 'apple_juice' ? String(p.qty) : '',
+    brix: s.brix, brix_measured_at: s.measured, harvest_date: s.harvest, ship_from: shipFrom,
     summary: p.summary, external_url: rand() < 0.5 ? `https://example.com/product/${code.replace(/_/g, '-')}` : '',
-    b2b_available: p.pack === '업소용' || p.pack === '선물' || rand() < 0.4 ? '예' : '아니오',
-    tags: p.tags, source: SIM, image_url: '', notice: JSON.stringify(noticeOf(p, farm)), variety: p.variety, brix_photo_url: '',
-  }))
+    b2b_available: p.pack === '업소용' || p.pack === '선물' || rand() < 0.4,
+    tags: p.tags.split('|'), notice: noticeOf(p, farm), variety: p.variety,
+  })
 }
 
-const sellerRows = FARMS.map((f) => line(SELLER_COLS, {
-  seller_code: f.code, name: `[예시] ${f.name}`, region: f.region, intro: f.intro, story: `${f.story} [예시 문구]`,
-  is_company: '아니오', source: SIM, owner_name: `[예시] ${f.owner}`, phone: f.tel,
+// 가입 신청서: 모두 예시 값. 사업자등록번호는 일부러 999로 시작하는 가짜 번호, 이메일은 example.com
+const farms = FARMS.map((f, i) => ({
+  login: f.login, farmName: `[예시] ${f.name}`, region: f.region, ownerName: `[예시] ${f.owner}`, phone: f.tel,
+  businessNo: `99900${String(i + 11).padStart(5, '0')}`, email: `${f.login}@example.com`,
+  intro: f.intro, story: `${f.story} [예시 문구]`,
 }))
 
-// 상품 문의: 손님이 실제로 많이 묻는 배송·포장·수량 질문만 (보관·안전은 품목 검수 전이라 넣지 않는다). 일부는 답변 대기
+// 상품 문의: 손님이 실제로 많이 묻는 배송·포장·수량 질문만 (보관·안전은 품목 검수 전이라 넣지 않는다). 답이 빈 것은 답변 대기
 const QUESTIONS = [
-  ['haenam_salted_20kg', '김장을 11월 28일에 하는데 그날 맞춰 받을 수 있나요?', '네, 주문하신 뒤 상품 문의에 받을 날짜를 남겨 주시면 그 전날 출고해 드려요.'],
+  ['haenam_salted_20kg', '김장을 11월 28일에 하는데 그날 맞춰 받을 수 있나요?', '11월 20일부터 주문 순서대로 보내요. 받을 날짜가 정해져 있으면 이 문의에 남겨 주세요. 날짜에 맞춰 보내 드릴게요.'],
   ['haenam_salted_20kg', '20kg이면 배추 몇 포기 정도예요?', '보통 8~10포기 정도 들어가요. 배추 크기에 따라 조금씩 달라요.'],
   ['haenam_salted_10kg', '아파트 경비실에 맡겨 주셔도 되나요?', ''],
   ['namwon_mandarin_s_5kg', '소과는 한 알 크기가 어느 정도예요?', '탁구공보다 조금 큰 크기예요. 아이들이 한입에 먹기 좋아요.'],
@@ -380,8 +373,8 @@ const QUESTIONS = [
   ['namwon_mandarin_gift_3kg', '선물로 보낼 때 가격표 빼고 보내 주실 수 있나요?', '네, 선물세트에는 가격표를 넣지 않아요.'],
   ['jinyeong_persimmon_top_5kg', '5kg이면 몇 개 정도 들어 있나요?', '특과는 보통 16~20개 정도 들어가요.'],
   ['jinyeong_persimmon_ugly_5kg', '흠과는 어느 정도 흠이에요?', '껍질에 긁힌 자국이나 점이 있는 정도예요. 깎으면 과육은 같아요.'],
-  ['sangju_semi_dried_gift', '설 선물로 보내려면 언제까지 주문해야 하나요?', '설 연휴 2주 전까지 주문해 주시면 날짜에 맞춰 보내 드려요.'],
-  ['sangju_gotgam_gift', '지금 주문하면 언제 받아요?', '올해 곶감은 12월 중순부터 주문 순서대로 보내 드려요.'],
+  ['sangju_semi_dried_gift', '설 선물로 보내려면 언제까지 주문해야 하나요?', '반건시는 12월 5일부터 보내요. 설 연휴 2주 전까지 주문해 주시면 날짜에 맞춰 보내 드려요.'],
+  ['sangju_gotgam_gift', '지금 주문하면 언제 받아요?', '올해 곶감은 12월 15일부터 주문 순서대로 보내 드려요.'],
   ['sangju_apple_juice_50', '사과즙에 설탕이나 물을 넣나요?', '사과만 짜서 담았어요. 원재료는 상품 정보에 적어 두었어요.'],
   ['nonsan_seolhyang_1kg', '토요일에 받을 수 있게 보내 주실 수 있나요?', '딸기는 금요일에는 보내지 않아요. 목요일까지 출고분은 보통 다음 날 도착해요.'],
   ['nonsan_kingsberry_gift', '한 상자에 몇 알 들어가요?', ''],
@@ -398,16 +391,20 @@ const QUESTIONS = [
   ['geochang_fuji_ugly_10kg', '흠과는 몇 개쯤 들어가요?', ''],
   ['geochang_shinano_3kg', '시나노골드는 부사보다 신가요?', '부사보다 새콤한 맛이 조금 더 나고 향이 진해요.'],
 ]
-const questionRows = QUESTIONS.map(([code, question, answer], i) => {
+const questions = QUESTIONS.map(([code, question, answer], i) => {
   if (!codes.has(code)) problems.push(`문의의 상품 코드 ${code}가 없어요`)
-  return line(QUESTION_COLS, { product_code: code, author: `[예시] ${'김이박최정강조윤장임'[i % 10]}고객`, question, answer, source: SIM })
+  return { product_code: code, author: `[예시] ${'김이박최정강조윤장임'[i % 10]}고객`, question, answer }
 })
+const optionRows = products.flatMap((x) => x.options)
+const questionRows = questions
 
-// ---------- 파일 쓰기 (시뮬레이션 줄만 바꾼다) ----------
-function rewrite(file, rows) {
+// 예전 방식(CSV에 바로 넣던 시뮬레이션 줄)은 지운다. 농가는 이제 가입으로 들어온다
+function dropCsvRows(file) {
   const url = new URL(file, DATA)
-  const kept = readFileSync(url, 'utf8').split('\n').filter((l) => l && !l.includes(SIM))
-  writeFileSync(url, [...kept, ...rows].join('\n') + '\n')
+  const before = readFileSync(url, 'utf8').split('\n').filter(Boolean)
+  const kept = before.filter((l) => !l.includes(SIM))
+  if (kept.length !== before.length) writeFileSync(url, `${kept.join('\n')}\n`)
+  return before.length - kept.length
 }
 
 const byFarm = FARMS.map((f) => {
@@ -479,10 +476,9 @@ if (!CHECK_ONLY) {
     console.log('검사 문제가 있어서 파일을 바꾸지 않았어요')
     process.exit(1)
   }
-  rewrite('sellers.csv', sellerRows)
-  rewrite('products.csv', productRows)
-  rewrite('product_options.csv', optionRows)
-  rewrite('questions.csv', questionRows)
+  writeFileSync(PLAN, `${JSON.stringify({ seed: SEED, today: TODAY, source: SIM, farms, products, questions }, null, 2)}\n`)
+  const dropped = ['sellers.csv', 'products.csv', 'product_options.csv', 'questions.csv'].map((f) => `${f} ${dropCsvRows(f)}줄`).join(', ')
   writeFileSync(REPORT, report)
-  console.log('→ data/sellers.csv, products.csv, product_options.csv, questions.csv, docs/farm_simulation.md')
+  console.log(`→ data/sample_farms.json, docs/farm_simulation.md (예전 CSV 줄 지움: ${dropped})`)
+  console.log('다음: npm run onboard-farms (농가 가입 → 관리자 승인 → 상품 등록)')
 }

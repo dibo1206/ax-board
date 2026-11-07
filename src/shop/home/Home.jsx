@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Quiz } from '../../Recommend.jsx'
 import { RatingBadge } from '../Reviews.jsx'
-import { cheapestOption, thumbUrl, unitPrice, won } from '../shared.js'
+import { cheapestOption, shipDay, thumbUrl, unitPrice, won } from '../shared.js'
 import { FAQ, GROUP_PHOTOS, HERO, SEASON, STORY } from './content.js'
 
 // 첫 화면 (디자인 시안): 큰 제목 → 카테고리 → 이달의 상품 → 제철 달력 → 이야기 → 자주 묻는 질문
@@ -110,6 +110,7 @@ function ProductCard({ p, onOpen }) {
           {p.tags?.includes('season') && <span className="ptag ptag-season">제철</span>}
         </span>
         {p.sold_out && <span className="pcard-flag">품절</span>}
+        {p.preorder && !p.sold_out && <span className="pcard-flag preorder">예약 · {shipDay(p.ship_from)}부터</span>}
       </span>
       <span className="pcard-seller">{p.seller_name.replace(/\[예시\]\s*/g, '')}</span>
       <strong className="pcard-name">{p.name}</strong>

@@ -4,7 +4,7 @@ import { adminApi, sellerApi } from '../admin/api.js'
 import { QuestionRow } from '../admin/Inbox.jsx'
 import { ProductForm } from '../admin/ProductForm.jsx'
 import { CourierList } from '../shop/CourierList.jsx'
-import { ORDER_STATUS, RETURN_STATUS, when } from '../shop/shared.js'
+import { ORDER_STATUS, RETURN_STATUS, shipDay, when } from '../shop/shared.js'
 
 // 판매자(농가) 화면: 로그인 → [내 상품 | 상품 문의 | 주문 | 반품 | 농가 소개]. 모든 요청은 /api/seller (자기 농가 것만)
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
@@ -172,7 +172,8 @@ function MyOrders({ onMessage, onError }) {
     <ul className="inbox">
       {orders.map((o) => (
         <li key={o.order_no} className={`box${o.status === 'cancelled' ? ' dim' : ''}`}>
-          <p><b>{o.order_no}</b> · 내 배송 {ORDER_STATUS[o.status]}{o.confirmed_at && ' · 구매 확정'} · {when(o.created_at)}{o.is_test && ' · 테스트'}</p>
+          <p><b>{o.order_no}</b> · 내 배송 {ORDER_STATUS[o.status]}{o.confirmed_at && ' · 구매 확정'} · {when(o.created_at)}{o.is_test && ' · 테스트'}
+            {o.ship_from && ['paid', 'preparing'].includes(o.status) && <> · <span className="badge pending">예약 · {shipDay(o.ship_from)}부터 출고</span></>}</p>
           <ul>{o.items.map((i) => <li key={`${i.name}:${i.option_name ?? ''}`}>{i.name} ({i.option_name ?? i.unit}) × {i.quantity}</li>)}</ul>
           <p className="muted">내 상품 {won(o.items_amount)} + 배송비 {o.shipping_fee ? won(o.shipping_fee) : '무료'}
             {o.farms > 1 && ` · 다른 농가 ${o.farms - 1}곳 상품과 함께 주문됐어요 (내 상품만 따로 보내면 돼요)`}</p>

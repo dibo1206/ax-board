@@ -151,4 +151,14 @@ export const REFUND_KIND = { cancel: '농가별 취소', return: '반품 환불'
 // 오늘 한국 날짜 'YYYY-MM-DD' (반품 신청 마감일과 비교. 실제 기간 검사는 서버가 한다)
 export const todayKst = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
 
+// 예약 판매: 출고 시작일이 오늘(한국 날짜)보다 뒤면 예약 상품 (server/preorder.js 와 같은 규칙)
+export const isPreorder = (date) => Boolean(date && String(date).slice(0, 10) > todayKst())
+// "11월 20일"
+export const shipDay = (date) => {
+  if (!date) return ''
+  const [y, m, d] = String(date).slice(0, 10).split('-').map(Number)
+  return `${y === Number(todayKst().slice(0, 4)) ? '' : `${y}년 `}${m}월 ${d}일`
+}
+export const preorderNote = (date) => `${shipDay(date)}부터 주문 순서대로 보내요`
+
 export const when = (t) => (t ? new Date(t).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '')

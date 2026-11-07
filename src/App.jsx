@@ -4,7 +4,7 @@ import { Chat } from './Chat.jsx'
 import { B2bForm, QuestionForm } from './Inquiry.jsx'
 import { Related } from './Recommend.jsx'
 import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
-import { addToCart, getPolicy, thumbUrl, unitPrice } from './shop/shared.js'
+import { addToCart, getPolicy, preorderNote, thumbUrl, unitPrice } from './shop/shared.js'
 import { Guide } from './shop/Guide.jsx'
 import { CategoryRows, Faq, Hero, ProductSection, QuizDialog, SeasonCalendar, Story } from './shop/home/Home.jsx'
 import { ShopLayout } from './shop/ShopLayout.jsx'
@@ -122,7 +122,7 @@ function BuyBox({ product, option, onPick, onAsk }) {
       <span className="price">{won(price * quantity)}</span>
       <div className="actions">
         <button type="button" className="button ghost" onClick={() => { addToCart(product.product_code, quantity, option?.id ?? null); setAdded(true) }}>장바구니 담기</button>
-        <a className="button" href={buyUrl}>바로 구매</a>
+        <a className="button" href={buyUrl}>{product.preorder ? '예약 구매' : '바로 구매'}</a>
       </div>
       {added && <p className="success">장바구니에 담았어요. <a href="/cart">장바구니 보기</a></p>}
     </div>
@@ -183,6 +183,9 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
       <ShareButton name={product.name.replace(/\[예시\]\s*/g, '')} />
       <RatingBadge rating={product.rating} count={product.review_count} />
       {(product.sold_out || option?.stock === 0) && <p className="badge soldout">품절</p>}
+      {product.preorder && !product.sold_out && (
+        <p className="preorder-note"><span className="badge pending">예약 판매</span> {preorderNote(product.ship_from)}. 결제는 지금 하고, 상품은 그날부터 받아요. 보내기 전에는 [주문 조회]에서 취소할 수 있어요.</p>
+      )}
 
       <dl>
         {product.weight_g && <><dt>1개 무게</dt><dd>{product.weight_g}g</dd></>}
@@ -197,6 +200,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
           <><dt>당도</dt><dd className="muted">구매 후기에서 표시와 다르다는 의견이 많아 당도 표시를 잠시 내렸어요</dd></>
         )}
         {product.harvest_date && <><dt>수확일</dt><dd>{product.harvest_date.slice(0, 10)}{product.harvest_days != null && <span className="muted"> (수확 {product.harvest_days}일째)</span>}</dd></>}
+        {product.preorder && <><dt>출고 시작일</dt><dd>{product.ship_from.slice(0, 10)} <span className="muted">(예약 판매)</span></dd></>}
         {item.keep_period && <><dt>보관 참고</dt><dd>{item.keep_period}</dd></>}
         {product.info_answers >= 3 && <><dt>구매자 확인</dt><dd>표시와 맞았어요 {product.info_matched}/{product.info_answers}</dd></>}
         <dt>판매 농가</dt><dd>{seller.name} · {seller.region}</dd>

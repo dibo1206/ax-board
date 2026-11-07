@@ -72,6 +72,7 @@ function policyChunks() {
   const base = { item_code: null, product_code: null, trusted: true }
   const notes = [
     ['policy:shipping', `배송비는 농가마다 따로 붙어요. 농가별로 ${won(SHIPPING.fee)}이고, 그 농가 상품을 ${won(SHIPPING.freeOver)} 이상 사면 그 농가 배송비는 무료예요. ${SHIPPING.leadTime}.`],
+    ['policy:preorder', '예약 상품은 상품 페이지에 적힌 출고 시작일부터 주문 순서대로 보내요. 결제는 주문할 때 하고, 같은 농가의 다른 상품도 그날 함께 보내요. 보내기 전에는 [주문 조회]에서 취소할 수 있어요.'],
     ['policy:order', '상품을 장바구니에 담거나 [바로 구매]를 누르면 주문서로 이어져요. 회원이 아니어도 주문할 수 있고, 주문번호와 휴대폰 번호로 [주문 조회]에서 확인해요.'],
     ['policy:contact', `고객센터 전화는 ${SHOP.phone}이고, 운영 시간은 ${SHOP.hours}이에요. 회사 주소는 ${SHOP.address}예요. 메일은 ${SHOP.email}로 보낼 수 있어요.`],
     ['policy:bulk', '카페·행사용 대량 구매나 납품은 상품 페이지의 [기업 구매 문의]에 회사 이름, 연락처, 희망 수량을 남겨 주세요.'],
