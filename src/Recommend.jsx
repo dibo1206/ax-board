@@ -24,7 +24,7 @@ function AddButton({ item, onOpen }) {
     return <button type="button" className="pick-add" aria-label={`${item.name} 옵션 고르기`} onClick={() => onOpen(item.product_code)}>옵션 고르기</button>
   }
   return (
-    <button type="button" className={`pick-add${done ? ' done' : ''}`} aria-label={`${item.name} 장바구니 담기`} onClick={() => { addToCart(item.product_code, 1); setDone(true) }}>
+    <button type="button" className={`pick-add${done ? ' done' : ''}`} aria-label={`${item.name} 장바구니 담기`} onClick={() => { addToCart(item.product_code, 1, null, item.name); setDone(true) }}>
       {done ? '✓ 담았어요' : '장바구니 담기'}
     </button>
   )

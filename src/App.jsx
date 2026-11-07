@@ -110,7 +110,6 @@ function RestockForm({ productCode, optionId }) {
 
 function BuyBox({ product, option, onPick, onAsk }) {
   const [quantity, setQuantity] = useState(1)
-  const [added, setAdded] = useState(false)
   const soldOut = (
     <>
       <div className="actions">
@@ -123,7 +122,7 @@ function BuyBox({ product, option, onPick, onAsk }) {
   if (product.sold_out) return <div className="buy">{soldOut}</div>
   const pick = product.has_options && (
     <label className="qty">옵션
-      <select value={option?.id ?? ''} onChange={(e) => { onPick(Number(e.target.value) || null); setQuantity(1); setAdded(false) }}>
+      <select value={option?.id ?? ''} onChange={(e) => { onPick(Number(e.target.value) || null); setQuantity(1) }}>
         <option value="">옵션을 골라 주세요</option>
         {product.options.map((o) => <option key={o.id} value={o.id}>{o.name} — {won(o.price)}{o.stock === 0 ? ' (품절)' : ''}</option>)}
       </select>
@@ -150,17 +149,17 @@ function BuyBox({ product, option, onPick, onAsk }) {
       {pick}
       <div className="buy-row">
         <label className="qty">수량
-          <select value={quantity} onChange={(e) => { setQuantity(Number(e.target.value)); setAdded(false) }}>
+          <select value={quantity} onChange={(e) => setQuantity(Number(e.target.value))}>
             {Array.from({ length: Math.min(max, 20) }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
         <span className="buy-total"><small>총 금액</small><span className="price">{won(price * quantity)}</span></span>
       </div>
       <div className="actions">
-        <button type="button" className="button ghost" onClick={() => { addToCart(product.product_code, quantity, option?.id ?? null); setAdded(true) }}>장바구니 담기</button>
+        {/* 담으면 화면 아래 "장바구니에 담겼어요" 알림이 뜬다 (ShopLayout 의 CartToast) */}
+        <button type="button" className="button ghost" onClick={() => addToCart(product.product_code, quantity, option?.id ?? null, `${product.name}${option ? ` ${option.name}` : ''}`)}>장바구니 담기</button>
         <a className="button" href={buyUrl}>{product.preorder ? '예약 구매' : '바로 구매'}</a>
       </div>
-      {added && <p className="success">장바구니에 담았어요. <a href="/cart">장바구니 보기</a></p>}
     </div>
   )
 }

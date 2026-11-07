@@ -88,12 +88,14 @@ export function writeCart(items) {
 
 export const sameLine = (a, b) => a.productCode === b.productCode && a.optionId === b.optionId
 
-export function addToCart(productCode, quantity, optionId = null) {
+// name: 화면 아래 "장바구니에 담겼어요" 알림에 보여 줄 상품 이름 (ShopLayout 의 CartToast 가 받는다)
+export function addToCart(productCode, quantity, optionId = null, name = '') {
   const items = readCart()
   const found = items.find((i) => sameLine(i, { productCode, optionId }))
   if (found) found.quantity = Math.min(MAX_QTY, found.quantity + quantity)
   else items.push({ productCode, optionId, quantity })
   writeCart(items)
+  window.dispatchEvent(new CustomEvent('cart-added', { detail: { name: name.replace(/\[예시\]\s*/g, ''), quantity } }))
 }
 
 export const cartCount = () => readCart().reduce((sum, i) => sum + i.quantity, 0)

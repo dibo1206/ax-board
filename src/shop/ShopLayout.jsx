@@ -97,6 +97,42 @@ export function ShopLayout({ children }) {
           <p className="foot-copy">© Yunjufarm.</p>
         </div>
       </footer>
+      <CartToast />
+    </div>
+  )
+}
+
+// 어디서 장바구니에 담든(상세·첫 화면 상품 카드·추천) 화면 아래에 "장바구니에 담겼어요" 알림을 잠깐 띄운다.
+// addToCart 가 보내는 'cart-added' 신호를 받는다. 알림 칸은 늘 두고 글만 바꿔서 화면 낭독기도 읽어 준다
+const TOAST_MS = 3000
+
+function CartToast() {
+  const [toast, setToast] = useState(null)
+
+  useEffect(() => {
+    const show = (e) => setToast({ ...e.detail, at: Date.now() })
+    window.addEventListener('cart-added', show)
+    return () => window.removeEventListener('cart-added', show)
+  }, [])
+
+  useEffect(() => {
+    if (!toast) return undefined
+    const timer = setTimeout(() => setToast(null), TOAST_MS)
+    return () => clearTimeout(timer)
+  }, [toast])
+
+  return (
+    <div className="cart-toast-zone" role="status" aria-live="polite">
+      {toast && (
+        <div className="cart-toast" key={toast.at}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
+          <span className="cart-toast-text">
+            <b>장바구니에 담겼어요</b>
+            {toast.name && <span className="cart-toast-name">{toast.name}{toast.quantity > 1 ? ` · ${toast.quantity}개` : ''}</span>}
+          </span>
+          <a href="/cart">장바구니 보기</a>
+        </div>
+      )}
     </div>
   )
 }
