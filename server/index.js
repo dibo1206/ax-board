@@ -94,6 +94,34 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '100kb' }))
 
+// PostgreSQL 글자 칸에는 NUL 문자(\u0000)를 넣을 수 없어서, 주소나 보낸 내용에 섞여 오면 DB가 거절하고 500이 났다 (2026-11-07 보안 점검).
+// 들어올 때 400으로 막는다. 깊게 중첩된 JSON에도 재귀가 터지지 않게 스택으로 훑고, 사진(Buffer)은 보지 않는다
+function hasNul(value) {
+  const stack = [value]
+  while (stack.length) {
+    const v = stack.pop()
+    if (typeof v === 'string') {
+      if (v.includes('\u0000')) return true
+    } else if (v && typeof v === 'object' && !Buffer.isBuffer(v)) {
+      for (const [key, child] of Object.entries(v)) {
+        if (key.includes('\u0000')) return true
+        stack.push(child)
+      }
+    }
+  }
+  return false
+}
+app.use((req, res, next) => {
+  let url
+  try {
+    url = decodeURIComponent(req.originalUrl)
+  } catch {
+    return res.status(400).json({ error: '주소를 읽지 못했어요.' })
+  }
+  if (url.includes('\u0000') || hasNul(req.body)) return res.status(400).json({ error: '보낸 내용에 쓸 수 없는 글자가 있어요.' })
+  next()
+})
+
 // 다른 사이트가 손님 브라우저를 시켜 몰래 주문 취소·정보 변경 요청을 보내지 못하게(CSRF):
 // 무언가 바꾸는 요청은 브라우저가 붙이는 Origin 이 우리 주소일 때만 받는다 (쿠키 SameSite=Lax 와 함께 이중으로)
 const OWN_HOST = process.env.PUBLIC_URL ? new URL(process.env.PUBLIC_URL).host : null

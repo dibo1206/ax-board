@@ -13,10 +13,10 @@ const SHOP_NAME = 'YOONJU MARKET'
 const PRIVATE_PAGES = /^\/(admin|seller|account|cart|checkout|order)(\/|$)/
 const PUBLIC_PAGES = ['/', '/policy/terms', '/policy/privacy', '/policy/refund']
 const CODE = /^[A-Za-z0-9_-]{1,64}$/
-// 화면에서 불러도 되는 곳: 우리 서버, 토스페이먼츠(결제창), 구글·jsDelivr 글꼴. 나머지 스크립트·틀(iframe)은 막는다
+// 화면에서 불러도 되는 곳: 우리 서버, 토스페이먼츠(결제창), 다음 우편번호(주소 검색 창), 구글·jsDelivr 글꼴. 나머지 스크립트·틀(iframe)은 막는다
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' https://js.tosspayments.com https://*.tosspayments.com",
+  "script-src 'self' https://js.tosspayments.com https://*.tosspayments.com https://t1.daumcdn.net",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
   "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net",
   "img-src 'self' data: blob: https:",
@@ -88,12 +88,13 @@ function renderHead(html, { title, description, url, image, noindex, jsonLd }) {
     // </script> 로 빠져나가지 못하게 < 를 바꿔 둔다
     jsonLd && `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script>`,
   ].filter(Boolean)
+  // 바꿔 넣을 글은 함수로 넘긴다: 상품 이름·설명에 $& · $` 같은 기호가 있어도 원래 HTML 조각이 끼어들지 않게
   return html
-    .replace(/<title>[^<]*<\/title>/, `<title>${esc(title)}</title>`)
-    .replace(/<meta name="description"[^>]*>/, `<meta name="description" content="${esc(description)}" />`)
-    .replace(/<meta property="og:title"[^>]*>/, `<meta property="og:title" content="${esc(title)}" />`)
-    .replace(/<meta property="og:description"[^>]*>/, `<meta property="og:description" content="${esc(description)}" />`)
-    .replace('</head>', `    ${extra.join('\n    ')}\n  </head>`)
+    .replace(/<title>[^<]*<\/title>/, () => `<title>${esc(title)}</title>`)
+    .replace(/<meta name="description"[^>]*>/, () => `<meta name="description" content="${esc(description)}" />`)
+    .replace(/<meta property="og:title"[^>]*>/, () => `<meta property="og:title" content="${esc(title)}" />`)
+    .replace(/<meta property="og:description"[^>]*>/, () => `<meta property="og:description" content="${esc(description)}" />`)
+    .replace('</head>', () => `    ${extra.join('\n    ')}\n  </head>`)
 }
 
 async function pageHead(req, html) {
