@@ -18,10 +18,13 @@ const isEmail = (v) => /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(v)
 const isMobile = (v) => /^01[016789]\d{7,8}$/.test(v)
 const sha256 = (v) => createHash('sha256').update(v).digest('hex')
 
+// 비밀번호 규칙. 화면(src/account/rules.js 의 passwordRules)도 같은 규칙으로 적는 동안 바로 알려 준다
 export function checkPassword(password, email) {
   if (typeof password !== 'string' || password.length < 10 || password.length > 100) return '비밀번호는 10~100자로 정해 주세요.'
-  if (/^\d+$/.test(password) || /^(.)\1+$/.test(password)) return '숫자만 쓰거나 같은 글자만 반복한 비밀번호는 쓸 수 없어요.'
-  if (email && password.toLowerCase().includes(email.split('@')[0].toLowerCase())) return '이메일 아이디가 들어간 비밀번호는 쓸 수 없어요.'
+  if ([/[A-Za-z]/, /\d/, /[^A-Za-z0-9]/].filter((kind) => kind.test(password)).length < 2) return '비밀번호는 영문·숫자·특수문자 중 2가지 이상 섞어 주세요.'
+  if (/^(.)\1+$/.test(password)) return '같은 글자만 반복한 비밀번호는 쓸 수 없어요.'
+  const id = String(email ?? '').split('@')[0].toLowerCase()
+  if (id.length >= 3 && password.toLowerCase().includes(id)) return '이메일(아이디)이 들어간 비밀번호는 쓸 수 없어요.'
   return null
 }
 
@@ -105,7 +108,16 @@ accountRouter.post('/logout', (req, res) => {
   res.status(204).end()
 })
 
-accountRouter.get('/me', requireCustomer, (req, res) => res.json(me(req.customer)))
+// 내 정보 + 아직 보지 않은 새 답변 수 (화면 위 '마이페이지' 옆 숫자)
+accountRouter.get('/me', requireCustomer, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT count(*)::int AS n FROM questions
+     WHERE customer_id = $1 AND NOT hidden AND answered_at IS NOT NULL AND (answer_seen_at IS NULL OR answer_seen_at < answered_at)`,
+    [req.customer.id],
+  )
+  res.set('Cache-Control', 'private, no-store')
+  res.json({ ...me(req.customer), unreadAnswers: rows[0].n })
+})
 
 accountRouter.patch('/me', requireCustomer, async (req, res) => {
   const name = text(req.body.name ?? req.customer.name)
@@ -166,6 +178,7 @@ accountRouter.delete('/me', requireCustomer, async (req, res) => {
   )
   await pool.query('DELETE FROM password_resets WHERE customer_id = $1', [req.customer.id])
   await pool.query('DELETE FROM restock_requests WHERE customer_id = $1', [req.customer.id]) // 탈퇴하면 재입고 알림 신청도 지운다
+  await pool.query("UPDATE questions SET customer_id = NULL, author = '탈퇴 회원' WHERE customer_id = $1", [req.customer.id]) // 문의 글은 남기되 계정 연결과 이름은 지운다
   await pool.query('DELETE FROM customer_identities WHERE customer_id = $1', [req.customer.id]) // 간편 로그인 연결도 끊는다
   setCookie(res, COOKIE, '', 0)
   console.log(`[account] 회원 탈퇴 #${req.customer.id}`)
@@ -221,6 +234,23 @@ accountRouter.get('/orders', requireCustomer, async (req, res) => {
     FROM orders o WHERE o.customer_id = $1 AND o.status NOT IN ('pending', 'failed', 'expired')
     ORDER BY o.created_at DESC LIMIT 100`, [req.customer.id])
   res.json(rows)
+})
+
+// ---------- 내 문의 ----------
+accountRouter.get('/questions', requireCustomer, async (req, res) => {
+  const { rows } = await pool.query(`
+    SELECT q.id, q.product_code, p.name AS product_name, q.question, q.answer, q.is_private, q.created_at, q.answered_at,
+           (q.answered_at IS NOT NULL AND (q.answer_seen_at IS NULL OR q.answer_seen_at < q.answered_at)) AS is_new
+    FROM questions q JOIN products p ON p.product_code = q.product_code
+    WHERE q.customer_id = $1 AND NOT q.hidden ORDER BY q.created_at DESC LIMIT 100`, [req.customer.id])
+  res.set('Cache-Control', 'private, no-store')
+  res.json(rows)
+})
+
+// 답변을 봤다고 표시 (화면 위 '새 답변' 숫자가 사라진다)
+accountRouter.post('/questions/seen', requireCustomer, async (req, res) => {
+  await pool.query('UPDATE questions SET answer_seen_at = now() WHERE customer_id = $1 AND answered_at IS NOT NULL', [req.customer.id])
+  res.status(204).end()
 })
 
 export { requireCustomer }

@@ -381,7 +381,7 @@ async function buildMaterial(catalog, ctx, evidence = []) {
   if (ctx.products.length) {
     const { rows } = await pool.query(
       `SELECT product_code, question, answer FROM questions
-       WHERE product_code = ANY($1) AND answer IS NOT NULL AND NOT hidden ORDER BY answered_at DESC LIMIT 5`,
+       WHERE product_code = ANY($1) AND answer IS NOT NULL AND NOT hidden AND NOT is_private ORDER BY answered_at DESC LIMIT 5`,
       [ctx.products.map((p) => p.product_code)],
     )
     if (rows.length) parts.push(`[담당자가 답한 Q&A]\n${rows.map((q) => `- (${q.product_code}) Q: ${q.question} / A: ${q.answer}`).join('\n')}`)
@@ -989,7 +989,7 @@ async function loadSimilarCandidates() {
     ),
     pool.query(
       `(SELECT q.question, q.answer, q.product_code, p.name, p.item_code, 'staff' AS source FROM questions q JOIN products p ON p.product_code = q.product_code
-        WHERE q.answer IS NOT NULL AND NOT q.hidden AND p.status = 'active' ORDER BY q.answered_at DESC LIMIT 300)
+        WHERE q.answer IS NOT NULL AND NOT q.hidden AND NOT q.is_private AND p.status = 'active' ORDER BY q.answered_at DESC LIMIT 300)
        UNION ALL
        (SELECT f->>'q', f->>'a', p.product_code, p.name, p.item_code, 'faq' FROM products p, jsonb_array_elements(p.faq) f
         WHERE p.status = 'active' LIMIT 500)`,

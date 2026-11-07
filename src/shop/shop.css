@@ -769,3 +769,67 @@
   .shop { --hero-gap: 28px; }
   .shop .hero-text .eyebrow { margin-bottom: 12px; }
 }
+
+/* 헤더 (2026-11-07): 로고 | 가운데 크고 둥근 검색칸(돋보기 오른쪽) | 주문조회·마이페이지·장바구니, 그 아래 작은 줄에 로그인·회원가입 */
+.shop .site-head-inner { grid-template-columns: auto minmax(0, 620px) auto; justify-content: space-between; grid-template-areas: 'logo search tools' 'menu menu menu'; column-gap: 28px; }
+.shop .site-head-inner .site-tools { flex-direction: column; align-items: flex-end; justify-content: center; gap: 6px; justify-self: end; }
+.shop .tools-main { display: flex; align-items: center; gap: round(clamp(12px, 1.6vw, 22px), 1px); }
+.shop .tools-auth { display: flex; align-items: center; gap: 14px; margin: 0; color: var(--muted); font-size: 13px; }
+.shop .site-tools .tools-auth a:not(.icon-link), .shop .tools-auth .link-btn { color: var(--muted); font-size: 13px; }
+.shop .tools-auth .link-btn { padding: 0; border: 0; background: none; font: inherit; cursor: pointer; }
+.shop .tools-auth .link-btn:hover { color: var(--text); text-decoration: underline; text-underline-offset: 4px; }
+
+.shop .head-search { position: relative; grid-area: search; width: 100%; }
+.shop .head-search form { box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; height: 54px; padding: 0 6px 0 26px; border: 1.5px solid var(--line); border-radius: 999px; background: #fff; }
+.shop .head-search form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgb(47 69 53 / 0.12); }
+.shop .head-search input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 16px; }
+.shop .head-search input::-webkit-search-cancel-button { cursor: pointer; }
+.shop .head-search svg { width: 20px; height: 20px; flex: none; fill: none; stroke: var(--text); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.shop .head-search .hs-submit { display: grid; place-items: center; width: 42px; height: 42px; flex: none; padding: 0; border: 0; border-radius: 50%; background: var(--accent); cursor: pointer; }
+.shop .head-search .hs-submit:hover { filter: brightness(1.1); }
+.shop .head-search .hs-submit svg { stroke: #fff; }
+.shop .head-search-toggle { display: none; }
+.shop .head-search-list { position: absolute; top: calc(100% + 8px); right: 0; left: 0; z-index: 60; max-height: 70vh; overflow: auto; padding: 8px; border: 1px solid var(--border); border-radius: 16px; background: #fff; box-shadow: 0 12px 32px rgb(0 0 0 / 0.12); }
+.shop .head-search-list ul { margin: 0; padding: 0; list-style: none; }
+.shop .head-search-list p { margin: 6px 8px; font-size: 14px; line-height: 1.5; }
+.shop .head-search a.hs-item { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 10px; color: var(--text); font-size: 14px; text-decoration: none; }
+.shop .head-search a.hs-item:hover, .shop .head-search a.hs-item:focus-visible { background: #f4f1e8; }
+.shop .head-search-list img, .shop .head-search-list .hs-ph { width: 44px; height: 44px; flex: none; border-radius: 6px; background: #eee; object-fit: cover; }
+.shop .head-search-list b { display: block; font-weight: 500; line-height: 1.4; }
+.shop .head-search-list small { color: var(--muted); font-size: 13px; }
+.shop .head-search a.hs-all { display: block; margin-top: 4px; padding: 10px 8px; border-top: 1px solid var(--border); border-radius: 0; font-weight: 600; }
+
+.shop .new-dot { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 4px; padding: 0 5px; border-radius: 9px; background: #b3261e; color: #fff; font-size: 11px; font-weight: 700; line-height: 1; vertical-align: 2px; }
+.shop .qna-lock { display: inline-block; margin-right: 6px; padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font-size: 12px; vertical-align: 1px; }
+.shop .new-tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px; background: #b3261e; color: #fff; font-size: 12px; }
+.shop .my-questions { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+
+@media (max-width: 1100px) { .shop .site-head-inner { column-gap: 20px; } }
+@media (max-width: 900px) { .shop .head-search form { height: 46px; padding-left: 18px; } .shop .head-search .hs-submit { width: 36px; height: 36px; } }
+@media (max-width: 760px) {
+  .shop .site-head-inner { grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 12px; }
+  .shop .head-search { width: auto; }
+  .shop .head-search-toggle { display: grid; place-items: center; width: 42px; height: 42px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: #fff; cursor: pointer; }
+  .shop .head-search form { display: none; }
+  .shop .head-search.open form { position: fixed; top: 12px; right: 12px; left: 12px; z-index: 70; display: flex; width: auto; box-shadow: 0 8px 24px rgb(0 0 0 / 0.15); }
+  .shop .head-search.open .head-search-list { position: fixed; top: 70px; right: 12px; left: 12px; }
+  .shop .tools-auth { display: none; }
+}
+@media (max-width: 480px) { .shop .site-tools .order-link { display: none; } }
+
+/* 제철 달력: 1~12월 버튼 → 그 달 제철 품목 */
+.shop .season-pick-months { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 6px; margin-top: 22px; }
+.shop .season-pick-months button { height: 40px; padding: 0; border: 1px solid var(--border); border-radius: 999px; background: #fff; color: var(--text); font: inherit; font-size: 14px; cursor: pointer; }
+.shop .season-pick-months button:hover { border-color: var(--text); }
+.shop .season-pick-months button.now { box-shadow: inset 0 -3px 0 var(--gold); }
+.shop .season-pick-months button.on { border-color: var(--accent); background: var(--accent); color: #fff; font-weight: 600; }
+.shop .season-picked { margin-top: 20px; }
+.shop .season-picked h3 { margin: 0 0 10px; font-family: var(--display); font-size: 19px; }
+.shop .season-picked h3 span { margin-left: 4px; color: var(--muted); font-size: 15px; font-weight: 400; }
+.shop .season-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.shop .season-chips button { display: inline-flex; align-items: baseline; gap: 6px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 999px; background: #fff; color: var(--text); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+.shop .season-chips button:hover { border-color: var(--accent); color: var(--accent); }
+.shop .season-chips small { color: var(--muted); font-size: 12px; font-weight: 400; }
+.shop .season-chart .season-row { cursor: default; }
+.shop .season-months .pick { color: var(--accent); font-weight: 700; }
+@media (max-width: 640px) { .shop .season-pick-months { grid-template-columns: repeat(6, minmax(0, 1fr)); } }

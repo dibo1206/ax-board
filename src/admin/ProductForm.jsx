@@ -32,9 +32,9 @@ function OptionFields({ options, onChange }) {
       <legend>판매 옵션 (선택, {MAX_OPTIONS}개까지) — 같은 상품을 5kg·10kg 처럼 나눠 팔 때. 옵션이 있으면 가격·재고는 옵션마다 적어요</legend>
       {options.map((o, i) => (
         <div key={o.id ?? `new-${i}`} className={`row${o.status === 'stopped' ? ' dim' : ''}`}>
-          <label>옵션 이름*<input value={o.name} onChange={set(i, 'name')} maxLength={30} placeholder="예: 5kg 1박스" /></label>
-          <label>가격(원)*<input value={o.price} onChange={set(i, 'price')} inputMode="numeric" /></label>
-          <label>재고*<input value={o.stock} onChange={set(i, 'stock')} inputMode="numeric" placeholder="없으면 0" /></label>
+          <label>옵션 이름<em className="req" title="필수">*</em><input value={o.name} onChange={set(i, 'name')} maxLength={30} placeholder="예: 5kg 1박스" /></label>
+          <label>가격(원)<em className="req" title="필수">*</em><input value={o.price} onChange={set(i, 'price')} inputMode="numeric" /></label>
+          <label>재고<em className="req" title="필수">*</em><input value={o.stock} onChange={set(i, 'stock')} inputMode="numeric" placeholder="없으면 0" /></label>
           <span className="muted">{o.status === 'stopped' ? '판매 중지' : unitPrice(o.price, o.name) ?? ''}</span>
           {o.id && <button type="button" className="link" onClick={() => toggle(i)}>{o.status === 'stopped' ? '다시 판매' : '판매 중지'}</button>}
           {o.ordered
@@ -343,7 +343,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
           <input value={form.product_code} onChange={set('product_code')} placeholder="예: apple_gift_5kg" />
         </label>
       )}
-      <label>상품 이름*<input value={form.name} onChange={set('name')} placeholder="예: [예시] 사과 선물세트 5kg" /></label>
+      <label>상품 이름<em className="req" title="필수">*</em><input value={form.name} onChange={set('name')} placeholder="예: [예시] 사과 선물세트 5kg" /></label>
     </>
   )
 
@@ -351,9 +351,9 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
     <>
       {/* 옵션이 있으면 상품 가격·재고는 옵션에서 정해진다 (판매 중 옵션의 최저가·재고 합) */}
       <div className="row">
-        {!hasOptions && <label>가격(원)*<input value={form.price} onChange={set('price')} inputMode="numeric" /></label>}
-        <label>판매 단위*<input value={form.unit} onChange={set('unit')} placeholder={hasOptions ? '예: 1박스 (옵션 이름에 양을 적어요)' : '예: 5kg 1박스'} /></label>
-        {!hasOptions && <label>재고*<input value={form.stock} onChange={set('stock')} inputMode="numeric" placeholder="없으면 0" /></label>}
+        {!hasOptions && <label>가격(원)<em className="req" title="필수">*</em><input value={form.price} onChange={set('price')} inputMode="numeric" /></label>}
+        <label>판매 단위<em className="req" title="필수">*</em><input value={form.unit} onChange={set('unit')} placeholder={hasOptions ? '예: 1박스 (옵션 이름에 양을 적어요)' : '예: 5kg 1박스'} /></label>
+        {!hasOptions && <label>재고<em className="req" title="필수">*</em><input value={form.stock} onChange={set('stock')} inputMode="numeric" placeholder="없으면 0" /></label>}
       </div>
       {!hasOptions && unitPrice(form.price, form.unit) && <p className="muted">손님 화면에 {unitPrice(form.price, form.unit)} 로 함께 보여요 (가격을 바꾸면 가격 기준일도 오늘로)</p>}
       <OptionFields options={form.options} onChange={(options) => setForm((prev) => ({ ...prev, options }))} />

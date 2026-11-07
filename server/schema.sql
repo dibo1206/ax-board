@@ -519,3 +519,10 @@ CREATE TABLE IF NOT EXISTS customer_identities (
   UNIQUE (provider, provider_user_hash),
   UNIQUE (customer_id, provider)
 );
+
+-- 상품 문의 비밀글·회원 연결·답변 알림 (2026-11). 비밀글은 쓴 회원·판매 농가·관리자만 본다
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS is_private BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS customer_id INT REFERENCES customers(id) ON DELETE SET NULL;
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS answer_seen_at TIMESTAMPTZ;
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS answer_mailed_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS questions_customer_idx ON questions (customer_id) WHERE customer_id IS NOT NULL;

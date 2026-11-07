@@ -29,6 +29,7 @@ import { ACTIVE_OPTIONS_SQL } from './options.js'
 import { adminOrderRouter, memberOrderRouter, publicOrderRouter, sellerOrderRouter, startOrderSweeper } from './orders.js'
 import { recommendRouter } from './recommend.js'
 import { restockRouter, sweepRestock } from './restock.js'
+import { searchWhere, searchWords } from './search.js'
 import { adminReturnRouter, memberReturnRouter, publicReturnRouter, sellerReturnRouter } from './returns.js'
 import { isPreorder } from './preorder.js'
 import { adminReviewRouter, reviewRouter } from './reviews.js'
@@ -244,24 +245,29 @@ app.get('/api/catalog', async (req, res) => {
   if (group) where += ` AND ${group}`
   const highBrix = req.query.brix === 'high' // 높은 당도 이상만
   if (highBrix) where += ' AND p.brix >= std.high'
-  // 단어마다 상품 이름·품목·소개·농가·태그 중 하나에 들어 있어야 한다 (%·_는 글자 그대로 찾게)
-  for (const word of q.split(/\s+/).filter(Boolean).slice(0, 5)) {
-    params.push(`%${word.replace(/[\\%_]/g, (c) => `\\${c}`)}%`)
-    const n = `$${params.length}`
-    where += ` AND (p.name ILIKE ${n} OR i.name ILIKE ${n} OR p.summary ILIKE ${n} OR s.name ILIKE ${n}
-               OR EXISTS (SELECT 1 FROM tags t WHERE t.tag_code = ANY(p.tags) AND t.label ILIKE ${n}))`
+  // 검색어: 띄어쓰기 무시·다른 말·카테고리 말까지 (server/search.js). 단어가 모두 맞는 상품이 없으면 하나라도 맞는 상품을 보여 준다
+  const words = searchWords(q)
+  const run = (mode) => {
+    const all = [...params]
+    const filter = where + searchWhere(words, all, mode)
+    all.push(size, (page - 1) * size)
+    // 같은 검색·정렬·페이지는 15초 동안 DB를 다시 읽지 않는다 (재고는 주문할 때 서버가 다시 확인)
+    return cached(`catalog:${JSON.stringify([words, all])}:${sort}:${group ? req.query.group : ''}:${highBrix}:${mode}`, 15_000, async () => {
+      const { rows } = await pool.query(
+        `SELECT x.*, count(*) OVER () AS total FROM (${PRODUCT_SELECT} ${filter}) x
+         ORDER BY (x.stock = 0), ${SORTS[sort]} LIMIT $${all.length - 1} OFFSET $${all.length}`,
+        all,
+      )
+      const total = Number(rows[0]?.total ?? 0)
+      return { items: rows.map(({ total: _t, ...p }) => publicProduct(p)), total, page, pages: Math.max(1, Math.ceil(total / size)), sort }
+    })
   }
-  params.push(size, (page - 1) * size)
-  // 같은 검색·정렬·페이지는 15초 동안 DB를 다시 읽지 않는다 (재고는 주문할 때 서버가 다시 확인)
-  res.json(await cached(`catalog:${JSON.stringify(params)}:${sort}:${group ? req.query.group : ''}:${highBrix}`, 15_000, async () => {
-    const { rows } = await pool.query(
-      `SELECT x.*, count(*) OVER () AS total FROM (${PRODUCT_SELECT} ${where}) x
-       ORDER BY (x.stock = 0), ${SORTS[sort]} LIMIT $${params.length - 1} OFFSET $${params.length}`,
-      params,
-    )
-    const total = Number(rows[0]?.total ?? 0)
-    return { items: rows.map(({ total: _t, ...p }) => publicProduct(p)), total, page, pages: Math.max(1, Math.ceil(total / size)), sort }
-  }))
+  let result = await run('all')
+  if (result.total === 0 && words.length > 1) {
+    const loose = await run('any')
+    if (loose.total) result = { ...loose, loose: true }
+  }
+  res.json(result)
 })
 
 app.get('/api/products/:code', async (req, res) => {
@@ -279,7 +285,7 @@ async function loadProductDetail(code) {
     // 농가 표에는 대표자·연락처·사업자번호도 있다 → 공개 칸만
     pool.query('SELECT seller_code, name, region, intro, story, is_company FROM sellers WHERE seller_code = $1', [product.seller_code]),
     pool.query(
-      'SELECT id, author, question, answer, created_at, answered_at FROM questions WHERE product_code = $1 AND NOT hidden ORDER BY created_at DESC',
+      'SELECT id, author, question, answer, created_at, answered_at, is_private FROM questions WHERE product_code = $1 AND NOT hidden ORDER BY created_at DESC',
       [product.product_code],
     ),
   ])
@@ -288,7 +294,10 @@ async function loadProductDetail(code) {
     notice_table: buildNotice(product, publicItem(item.rows[0]), seller.rows[0]), // 상품정보 제공 고시 표
     item: publicItem(item.rows[0]), // 검수 전 품목은 보관·안전 정보를 빼고 보낸다
     seller: seller.rows[0],
-    questions: questions.rows.map((q) => ({ ...q, author: maskName(q.author) })),
+    // 비밀글은 글쓴이 첫 글자와 답변 여부만 (이 상세는 모두에게 같은 캐시). 내용은 쓴 회원만 /my-questions 로 받는다
+    questions: questions.rows.map((q) => (q.is_private
+      ? { id: q.id, author: maskName(q.author), is_private: true, question: null, answer: null, answered: Boolean(q.answer), created_at: q.created_at, answered_at: q.answered_at }
+      : { ...q, author: maskName(q.author) })),
   }
 }
 

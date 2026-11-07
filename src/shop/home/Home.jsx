@@ -4,7 +4,7 @@ import { RatingBadge } from '../Reviews.jsx'
 import { addToCart, cheapestOption, shipDay, thumbUrl, unitPrice, won } from '../shared.js'
 import { FAQ, GROUP_PHOTOS, HERO, SEASON, STORY } from './content.js'
 
-// 첫 화면 (디자인 시안): 큰 제목 → 카테고리 → 이달의 상품 → 제철 달력 → 이야기 → 자주 묻는 질문
+// 첫 화면 (디자인 시안): 큰 제목 → 카테고리 → 상품 → 제철 달력 → 이야기 → 자주 묻는 질문
 
 // 사진. src 가 없으면 빗금 자리표시에 어떤 사진이 필요한지 적는다
 export function Photo({ photo, className = '', eager = false }) {
@@ -160,13 +160,13 @@ function ProductCard({ p, onOpen }) {
   )
 }
 
-// 이달의 상품: 카테고리 탭(노란 밑줄) + 오른쪽 상품 검색 + 정렬 + 카드 + 더 보기
+// 상품: 카테고리 탭(노란 밑줄) + 오른쪽 상품 검색 + 정렬 + 카드 + 더 보기
 export function ProductSection({ groups, loc, typed, setTyped, list, sorts, onChange, onOpen, onMore, loadingMore }) {
   const tabs = [{ key: 'all', name: '전체' }, ...(groups ?? [])]
   return (
     <section id="products" className="wrap section" aria-labelledby="products-title">
       <div className="products-head">
-        <h2 id="products-title" className="display-sm">이달의 상품</h2>
+        <h2 id="products-title" className="display-sm">상품</h2>
         <form className="underline-search" role="search" onSubmit={(e) => { e.preventDefault(); onChange({ q: typed.trim() }) }}>
           <label htmlFor="product-search">상품 검색</label>
           <input id="product-search" type="search" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="사과, 농축액…" maxLength={50} />
@@ -190,7 +190,7 @@ export function ProductSection({ groups, loc, typed, setTyped, list, sorts, onCh
         </div>
       ) : (
         <>
-          {loc.q && <p className="muted result-count">'{loc.q}' 검색 결과 {list.total}개</p>}
+          {loc.q && <p className="muted result-count">{list.loose ? `'${loc.q}'와 딱 맞는 상품이 없어 비슷한 상품 ${list.total}개를 보여 드려요` : `'${loc.q}' 검색 결과 ${list.total}개`}</p>}
           <ul className="pgrid">
             {list.items.map((p) => <li key={p.product_code}><ProductCard p={p} onOpen={onOpen} /></li>)}
           </ul>
@@ -205,40 +205,75 @@ export function ProductSection({ groups, loc, typed, setTyped, list, sorts, onCh
   )
 }
 
-// 제철 달력: 품목마다 맛있는 달을 막대로. 이번 달은 노란 밑줄. 품목을 누르면 그 이름으로 상품을 찾는다
+// 제철 달력: 1~12월을 누르면 그 달에 맛있는 품목을 보여 준다 (처음엔 이번 달). 아래 막대는 그 품목들의 제철 기간.
+// 품목을 누르면 그 이름으로 상품을 찾는다
 export function SeasonCalendar({ onPick }) {
   const [now] = useState(() => new Date().getMonth() + 1) // 이번 달 (처음 그릴 때 한 번 정한다)
+  const [month, setMonth] = useState(now)
   const months = Array.from({ length: 12 }, (_, i) => i + 1)
-  const range = (m) => `${Math.min(...m)}~${Math.max(...m)}월`
+  const picked = SEASON.items.filter((item) => item.months.includes(month))
   return (
     <section id="season" className="section season-section" aria-labelledby="season-title">
       <div className="wrap season">
         <Photo photo={SEASON.photo} className="season-photo" />
         <div className="season-body">
           <h2 id="season-title" className="display-sm">제철 달력</h2>
-          <p className="lead">언제 가장 맛있는지 한눈에. 지금은 {now}월입니다.</p>
-          <div className="season-chart">
-            <div className="season-row season-months" aria-hidden="true">
-              <span />
-              {months.map((m) => <span key={m} className={m === now ? 'now' : ''}>{m}</span>)}
-            </div>
-            {SEASON.items.map((item) => (
-              <button key={item.name} type="button" className="season-row" onClick={() => onPick(item.name)}
-                aria-label={`${item.name} 제철 ${range(item.months)}${item.months.includes(now) ? ', 지금 제철' : ''}. 누르면 ${item.name} 상품 찾기`}
-                title={`${item.name} · ${range(item.months)}`}>
-                <span className="season-name">{item.name}</span>
-                {/* 이어진 달은 막대 하나로 그린다 (12월→1월로 넘어가는 품목은 두 막대) */}
-                {months.map((m) => item.months.includes(m) && !item.months.includes(m - 1) && (
-                  <span key={m} className="season-bar" style={{ gridColumn: `${m + 1} / span ${spanFrom(item.months, m)}` }} />
-                ))}
+          <p className="lead">달을 누르면 그때 맛있는 것을 알려 드려요. 지금은 {now}월이에요.</p>
+          <div className="season-pick-months" role="group" aria-label="달 고르기">
+            {months.map((m) => (
+              <button key={m} type="button" className={`${m === month ? 'on' : ''}${m === now ? ' now' : ''}`} aria-pressed={m === month} onClick={() => setMonth(m)}>
+                {m}월{m === now && <span className="sr-only"> (이번 달)</span>}
               </button>
             ))}
           </div>
+          <div className="season-picked" aria-live="polite">
+            <h3>{month}월 제철 <span>{picked.length}가지</span></h3>
+            {picked.length ? (
+              <ul className="season-chips">
+                {picked.map((item) => (
+                  <li key={item.name}>
+                    <button type="button" onClick={() => onPick(item.search ?? item.name)} aria-label={`${item.name}, 제철 ${seasonRange(item.months)}. 누르면 상품 찾기`}>
+                      {item.name}<small>{seasonRange(item.months)}</small>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="muted">이 달에 제철로 표시한 품목이 없어요.</p>}
+          </div>
+          {picked.length > 0 && (
+            <div className="season-chart" aria-hidden="true">
+              <div className="season-row season-months">
+                <span />
+                {months.map((m) => <span key={m} className={`${m === month ? 'pick' : ''}${m === now ? ' now' : ''}`}>{m}</span>)}
+              </div>
+              {picked.map((item) => (
+                <div key={item.name} className="season-row">
+                  <span className="season-name">{item.name}</span>
+                  {/* 이어진 달은 막대 하나로 그린다 (12월→1월로 넘어가는 품목은 두 막대) */}
+                  {months.map((m) => item.months.includes(m) && !item.months.includes(m - 1) && (
+                    <span key={m} className="season-bar" style={{ gridColumn: `${m + 1} / span ${spanFrom(item.months, m)}` }} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
           <p className="note">{SEASON.note}</p>
         </div>
       </div>
     </section>
   )
+}
+
+// [11, 12, 1, 2] → '11~2월', [3, 4, 5, 9, 10, 11] → '3~5월, 9~11월'
+function seasonRange(list) {
+  if (list.length >= 12) return '사계절'
+  const next = (m) => (m === 12 ? 1 : m + 1)
+  const prev = (m) => (m === 1 ? 12 : m - 1)
+  return [...list].sort((a, b) => a - b).filter((m) => !list.includes(prev(m))).map((start) => {
+    let end = start
+    while (list.includes(next(end))) end = next(end)
+    return end === start ? `${start}월` : `${start}~${end}월`
+  }).join(', ')
 }
 
 const spanFrom = (list, start) => {

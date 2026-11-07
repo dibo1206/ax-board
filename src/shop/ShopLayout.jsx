@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import './shop.css'
 import { BRAND } from './home/content.js'
-import { cartCount, getAccount, getPolicy } from './shared.js'
+import { cartCount, get, getAccount, getPolicy, post, thumbUrl, won } from './shared.js'
 
 // 손님 화면 공통 틀 (디자인 시안): 위쪽 YOONJU MARKET · 가운데 메뉴 · 오른쪽 검색·로그인·장바구니, 아래쪽 회사 정보·약관
 const MENU = [['상품', 'products'], ['제철 달력', 'season'], ['이야기', 'story'], ['문의·FAQ', 'faq']]
@@ -45,6 +46,12 @@ export function ShopLayout({ children }) {
     }
   }, [])
 
+  async function logout() {
+    await post('/account/logout', {}).catch(() => {})
+    window.dispatchEvent(new Event('account-change'))
+    window.location.href = '/'
+  }
+
   const shop = policy?.shop
   return (
     <div className="shop">
@@ -59,17 +66,28 @@ export function ShopLayout({ children }) {
             {MENU.map(([label, id]) => <a key={id} href={`/#${id}`} onClick={(e) => goSection(e, id)}>{label}</a>)}
             <a href="/#recommend" onClick={openQuiz}>추천받기</a>
           </nav>
-          <nav className="site-tools" aria-label="내 메뉴">
-            <a href="/#products" className="tool-search" aria-label="상품 검색" onClick={(e) => goSection(e, 'products')}>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-              <span>상품 검색</span>
-            </a>
-            {account ? <a href="/account">{account.name}님</a> : <a href="/account/login">로그인</a>}
-            <a href="/cart" className="icon-link cart-link" aria-label={`장바구니 ${count}개`}>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2.5l2.2 10.5h10.1L20 7H6.3" /><circle cx="9" cy="19" r="1.3" /><circle cx="17" cy="19" r="1.3" /></svg>
-              {count > 0 && <span className="count-box" aria-hidden="true">{count}</span>}
-            </a>
-          </nav>
+          <HeaderSearch />
+          <div className="site-tools">
+            <nav className="tools-main" aria-label="내 메뉴">
+              <a href="/order/lookup" className="order-link">주문조회</a>
+              {/* 마이페이지는 로그인하지 않아도 보인다 (누르면 로그인 화면). 새 답변이 있으면 숫자로 알린다 */}
+              <a href={account?.unreadAnswers ? '/account?tab=questions' : '/account'} className="my-link"
+                aria-label={account?.unreadAnswers ? `마이페이지, 새 답변 ${account.unreadAnswers}개` : '마이페이지'}>
+                마이페이지{account?.unreadAnswers > 0 && <span className="new-dot" aria-hidden="true">{account.unreadAnswers}</span>}
+              </a>
+              <a href="/cart" className="icon-link cart-link" aria-label={`장바구니 ${count}개`}>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2.5l2.2 10.5h10.1L20 7H6.3" /><circle cx="9" cy="19" r="1.3" /><circle cx="17" cy="19" r="1.3" /></svg>
+                {count > 0 && <span className="count-box" aria-hidden="true">{count}</span>}
+              </a>
+            </nav>
+            <p className="tools-auth">
+              {account ? (
+                <><span>{account.name}님</span><button type="button" className="link-btn" onClick={logout}>로그아웃</button></>
+              ) : (
+                <><a href="/account/login">로그인</a><a href="/account/signup">회원가입</a></>
+              )}
+            </p>
+          </div>
         </div>
       </header>
       <main id="main">{children}</main>
@@ -98,6 +116,117 @@ export function ShopLayout({ children }) {
         </div>
       </footer>
       <CartToast />
+    </div>
+  )
+}
+
+const SearchIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+
+// 첫 화면·상품 상세는 같은 화면(Storefront)이라 주소만 바꾸고 알린다. 다른 화면에서는 이동
+function goTo(url) {
+  if (onHome() || window.location.pathname.startsWith('/p/')) {
+    window.history.pushState(null, '', url)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    if (url.startsWith('/p/')) window.scrollTo(0, 0)
+  } else {
+    window.location.href = url
+  }
+}
+
+// 헤더 검색: 누르면 그 자리에서 바로 적는다. 적는 동안 맞는 상품을 아래에 6개까지 보여 주고, Enter 면 상품 목록 전체 결과로.
+// 휴대폰에서는 돋보기를 누르면 화면 위에 검색칸이 열린다. 위·아래 화살표로 결과를 고르고 Esc 로 닫는다
+function HeaderSearch() {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState(() => (onHome() ? new URLSearchParams(window.location.search).get('q') ?? '' : ''))
+  const [result, setResult] = useState(null)
+  const [show, setShow] = useState(false)
+  const box = useRef(null)
+  const input = useRef(null)
+  const q = text.trim()
+
+  useEffect(() => {
+    if (!q) return undefined
+    const timer = setTimeout(() => {
+      get(`/catalog?${new URLSearchParams({ q, size: 6 })}`).then((r) => setResult({ ...r, q })).catch(() => {})
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [q])
+
+  useEffect(() => {
+    if (!show && !open) return undefined
+    const close = (e) => {
+      if (box.current?.contains(e.target)) return
+      setShow(false)
+      setOpen(false)
+    }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [show, open])
+
+  function go(url) {
+    setShow(false)
+    setOpen(false)
+    goTo(url)
+  }
+
+  function onListKey(e) {
+    if (e.key === 'Escape') {
+      setShow(false)
+      input.current?.focus()
+      return
+    }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+    e.preventDefault()
+    const links = [...box.current.querySelectorAll('.head-search-list a')]
+    const next = links.indexOf(document.activeElement) + (e.key === 'ArrowDown' ? 1 : -1)
+    if (next < 0) input.current?.focus()
+    else links[Math.min(next, links.length - 1)]?.focus()
+  }
+
+  const ready = Boolean(q) && result?.q === q
+  const allUrl = `/?q=${encodeURIComponent(q)}#products`
+  return (
+    <div className={`head-search${open ? ' open' : ''}`} ref={box}>
+      <button type="button" className="head-search-toggle" aria-label="상품 검색 열기" aria-expanded={open}
+        onClick={() => { flushSync(() => setOpen(true)); input.current?.focus() }}>
+        <SearchIcon />
+      </button>
+      <form role="search" onSubmit={(e) => { e.preventDefault(); if (q) go(allUrl); else input.current?.focus() }}>
+        <label htmlFor="head-search-input" className="sr-only">상품 검색</label>
+        <input id="head-search-input" ref={input} type="search" value={text} placeholder="무엇을 찾으세요? (사과, 농축액, 김장 배추…)" maxLength={50} autoComplete="off"
+          aria-controls="head-search-list" aria-expanded={show && ready}
+          onChange={(e) => { setText(e.target.value); setShow(true) }} onFocus={() => setShow(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') { setShow(false); setOpen(false) }
+            if (e.key === 'ArrowDown' && ready) { e.preventDefault(); box.current?.querySelector('.head-search-list a')?.focus() }
+          }} />
+        <button type="submit" className="hs-submit" aria-label="검색"><SearchIcon /></button>
+      </form>
+      {show && ready && (
+        <div className="head-search-list" id="head-search-list" onKeyDown={onListKey}>
+          {result.total === 0 ? (
+            <p className="muted">'{q}'에 맞는 상품이 없어요. 다른 말로 찾거나 오른쪽 아래 상담하기에 물어보세요.</p>
+          ) : (
+            <>
+              {result.loose && <p className="muted">'{q}'와 딱 맞는 상품이 없어 비슷한 상품을 보여 드려요.</p>}
+              <ul>
+                {result.items.map((p) => {
+                  const url = `/p/${encodeURIComponent(p.product_code)}`
+                  return (
+                    <li key={p.product_code}>
+                      <a className="hs-item" href={url} onClick={(e) => { e.preventDefault(); go(url) }}>
+                        {p.image_url ? <img src={thumbUrl(p.image_url)} alt="" width="44" height="44" loading="lazy" /> : <span className="hs-ph" />}
+                        <span><b>{p.name}</b><small>{won(p.price)}{p.has_options ? '부터' : ''}{p.sold_out ? ' · 품절' : ''}</small></span>
+                      </a>
+                    </li>
+                  )
+                })}
+              </ul>
+              <a className="hs-item hs-all" href={allUrl} onClick={(e) => { e.preventDefault(); go(allUrl) }}>'{q}' 검색 결과 {result.total}개 모두 보기</a>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }

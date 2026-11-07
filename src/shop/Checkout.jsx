@@ -157,8 +157,8 @@ export function Checkout() {
       <section className="box form">
         <h3>주문하는 분</h3>
         <div className="row">
-          <label>이름*<input value={form.buyerName} onChange={set('buyerName')} maxLength={20} autoComplete="name" /></label>
-          <label>휴대폰*<input value={form.buyerPhone} onChange={set('buyerPhone')} placeholder="010-1234-5678" inputMode="tel" autoComplete="tel" /></label>
+          <label>이름<em className="req" title="필수">*</em><input value={form.buyerName} onChange={set('buyerName')} maxLength={20} autoComplete="name" /></label>
+          <label>휴대폰<em className="req" title="필수">*</em><input value={form.buyerPhone} onChange={set('buyerPhone')} placeholder="010-1234-5678" inputMode="tel" autoComplete="tel" /></label>
         </div>
         {account ? (
           <p className="muted">{account.email}로 주문 알림을 보내 드려요. 주문 내역은 마이페이지에서 볼 수 있어요.</p>
@@ -174,15 +174,15 @@ export function Checkout() {
         <label className="check"><input type="checkbox" checked={form.same} onChange={set('same')} />주문하는 분과 같아요</label>
         {!form.same && (
           <div className="row">
-            <label>이름*<input value={form.receiverName} onChange={set('receiverName')} maxLength={20} /></label>
-            <label>연락처*<input value={form.receiverPhone} onChange={set('receiverPhone')} inputMode="tel" /></label>
+            <label>이름<em className="req" title="필수">*</em><input value={form.receiverName} onChange={set('receiverName')} maxLength={20} /></label>
+            <label>연락처<em className="req" title="필수">*</em><input value={form.receiverPhone} onChange={set('receiverPhone')} inputMode="tel" /></label>
           </div>
         )}
         <div className="row">
-          <label>우편번호*<input value={form.zipcode} onChange={set('zipcode')} inputMode="numeric" maxLength={5} /></label>
+          <label>우편번호<em className="req" title="필수">*</em><input value={form.zipcode} onChange={set('zipcode')} inputMode="numeric" maxLength={5} /></label>
           <button type="button" className="button ghost" onClick={findAddress}>주소 검색</button>
         </div>
-        <label>주소*<input value={form.address1} onChange={set('address1')} maxLength={100} /></label>
+        <label>주소<em className="req" title="필수">*</em><input value={form.address1} onChange={set('address1')} maxLength={100} /></label>
         <label>상세 주소<input value={form.address2} onChange={set('address2')} maxLength={60} /></label>
         <label>배송 메모<input value={form.memo} onChange={set('memo')} maxLength={100} placeholder="예: 문 앞에 두세요" /></label>
         {account && <label className="check"><input type="checkbox" checked={form.saveAddress} onChange={set('saveAddress')} />이 주소를 기본 배송지로 저장</label>}

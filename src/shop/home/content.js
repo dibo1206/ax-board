@@ -33,13 +33,33 @@ export const GROUP_PHOTOS = {
 // 제철 달력: 품목마다 가장 맛있는 달 (예시 — 실제 출하 시기 확정 후 바꾸기)
 export const SEASON = {
   photo: { src: '/home/season.webp', alt: '나무 접시에 담은 성환 배', need: 'home/season.webp (세로형 정물 사진)' },
+  // 판매 중인 품목의 제철 달 (search: 상품을 찾을 때 쓸 말, 없으면 name)
   items: [
     { name: '사과', months: [9, 10, 11, 12] },
     { name: '배', months: [9, 10, 11] },
-    { name: '감귤', months: [11, 12] },
-    { name: '딸기', months: [12] },
+    { name: '단감', months: [10, 11] },
+    { name: '감귤', months: [11, 12, 1, 2] },
+    { name: '딸기', months: [12, 1, 2, 3, 4] },
+    { name: '곶감', months: [12, 1, 2] },
+    { name: '키위', months: [11, 12, 1, 2, 3] },
+    { name: '샤인머스캣', months: [8, 9, 10] },
+    { name: '복숭아', months: [7, 8] },
+    { name: '고구마', months: [9, 10, 11] },
+    { name: '감자', months: [6, 7, 8] },
+    { name: '가을무', search: '무', months: [10, 11, 12] },
+    { name: '배추', months: [10, 11, 12] },
+    { name: '절임배추', months: [11, 12] },
+    { name: '대파', months: [11, 12, 1, 2] },
+    { name: '마늘', months: [5, 6] },
+    { name: '양파', months: [5, 6] },
+    { name: '당근', months: [11, 12, 1, 2, 3] },
+    { name: '브로콜리', months: [11, 12, 1, 2, 3] },
+    { name: '표고버섯', months: [3, 4, 5, 9, 10, 11] },
+    { name: '햇고춧가루', search: '고춧가루', months: [8, 9, 10] },
+    { name: '유자', months: [11, 12] },
+    { name: '매실', months: [6] },
   ],
-  note: '※ 제철 시기는 예시 데이터입니다. 실제 출하 시기 확정 후 교체합니다.',
+  note: '※ 제철 시기는 일반적인 국내 출하 시기를 참고한 [예시]예요. 지역·해마다 다를 수 있어 실제 출하 시기가 정해지면 바꿔요.',
 }
 
 // 이야기 배너 3장. 회사 소개(가공·유통·판매, 계약재배, HACCP, 상생)와 이 쇼핑몰이 실제로 하는 일(당도계 사진, 농가가 직접 올림)만 쓴다

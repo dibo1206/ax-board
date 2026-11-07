@@ -1,8 +1,9 @@
 // 4단계: 상품 Q&A와 기업(B2B) 구매 문의
 // 손님용(로그인 없음)과 관리자용(로그인 필요) API를 나눈다. 연락처는 관리자 화면에서만 보인다.
 import express from 'express'
+import { currentCustomer } from './account.js'
 import { requireAdmin } from './auth.js'
-import { sealText } from './crypto.js'
+import { openText, sealText } from './crypto.js'
 import { pool } from './db.js'
 import { openB2b, openQuestion } from './pii.js'
 import { createLimiter } from './limit.js'
@@ -27,10 +28,14 @@ export function maskName(name) {
 export const publicInquiryRouter = express.Router()
 
 publicInquiryRouter.post('/products/:code/questions', async (req, res) => {
-  const author = text(req.body.author)
+  // 로그인한 회원이면 질문을 계정에 묶는다 (답변 알림·마이페이지 '내 문의'). 비밀글은 회원만: 답변을 본인만 볼 수 있어야 해서
+  const customer = await currentCustomer(req)
+  const isPrivate = req.body.isPrivate === true
+  const author = text(req.body.author) || (customer ? text(customer.name) : '')
   const question = text(req.body.question)
   const contact = text(req.body.contact)
   const errors = []
+  if (isPrivate && !customer) errors.push('비밀글은 로그인한 뒤에 남길 수 있어요.')
   if (!author || author.length > 20) errors.push('이름(별명)을 20자 안으로 적어 주세요.')
   if (question.length < 5 || question.length > 500) errors.push('질문은 5~500자로 적어 주세요.')
   if (contact && !isPhone(contact) && !isEmail(contact)) errors.push('연락처는 전화번호나 이메일 형식으로 적어 주세요.')
@@ -45,16 +50,49 @@ publicInquiryRouter.post('/products/:code/questions', async (req, res) => {
   const product = await pool.query("SELECT 1 FROM products WHERE product_code = $1 AND status = 'active'", [req.params.code])
   if (!product.rowCount) return res.status(404).json({ error: '상품을 찾지 못했어요.' })
   const { rows } = await pool.query(
-    `INSERT INTO questions (product_code, author, question, contact)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO questions (product_code, author, question, contact, customer_id, is_private)
+     VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (product_code, question) DO NOTHING
-     RETURNING id, author, question, answer, created_at`,
-    [req.params.code, author, question, sealText(contact || null)],
+     RETURNING id, author, question, answer, created_at, is_private`,
+    [req.params.code, author, question, sealText(contact || null), customer?.id ?? null, isPrivate],
   )
   if (!rows.length) return res.status(409).json({ error: '같은 질문이 이미 올라와 있어요.' })
-  queueMail({ kind: 'admin_new_question', to: adminEmail(), subject: `[상품 문의] ${req.params.code}`, body: `새 상품 문의가 올라왔어요.\n\n${question}\n\n답변하기: ${publicUrl()}/admin\n` })
-  res.status(201).json({ ...rows[0], author: maskName(rows[0].author) })
+  queueMail({ kind: 'admin_new_question', to: adminEmail(), subject: `[상품 문의] ${req.params.code}`, body: `새 상품 문의가 올라왔어요.${isPrivate ? ' (비밀글)' : ''}\n\n${question}\n\n답변하기: ${publicUrl()}/admin\n` })
+  res.status(201).json({ ...rows[0], author: maskName(rows[0].author), mine: Boolean(customer) })
 })
+
+// 내가 이 상품에 남긴 질문 (비밀글 내용 포함). 로그인하지 않았으면 빈 목록
+publicInquiryRouter.get('/products/:code/my-questions', async (req, res) => {
+  res.set('Cache-Control', 'private, no-store')
+  const customer = await currentCustomer(req)
+  if (!customer) return res.json([])
+  const { rows } = await pool.query(
+    `SELECT id, author, question, answer, created_at, answered_at, is_private FROM questions
+     WHERE product_code = $1 AND customer_id = $2 AND NOT hidden ORDER BY created_at DESC LIMIT 50`,
+    [req.params.code, customer.id],
+  )
+  res.json(rows.map((q) => ({ ...q, author: maskName(q.author), mine: true })))
+})
+
+// 첫 답변이 달리면 질문에 남긴 이메일로 한 번 알린다 (전화번호만 남겼으면 보내지 않음). 회원은 마이페이지·화면 위 숫자로도 본다
+// 메일에는 답변 내용을 넣지 않고 상품 주소만 (비밀글은 로그인해야 보인다)
+export async function notifyAnswer(id) {
+  const { rows } = await pool.query(
+    `UPDATE questions q SET answer_mailed_at = now() FROM products p
+     WHERE q.id = $1 AND p.product_code = q.product_code AND q.answer IS NOT NULL AND q.answer_mailed_at IS NULL AND q.contact IS NOT NULL
+     RETURNING q.product_code, q.contact, q.is_private, p.name`,
+    [id],
+  )
+  const row = rows[0]
+  const to = row ? openText(row.contact) : ''
+  if (!isEmail(to)) return
+  await queueMail({
+    kind: 'qna_answer',
+    to,
+    subject: '[YOONJU MARKET] 상품 문의에 답변이 달렸어요',
+    body: `${row.name} 상품에 남기신 문의에 답변이 달렸어요.\n${publicUrl()}/p/${encodeURIComponent(row.product_code)}\n${row.is_private ? '\n비밀글이라 로그인한 뒤에 볼 수 있어요.\n' : ''}`,
+  })
+}
 
 publicInquiryRouter.post('/b2b-inquiries', async (req, res) => {
   const body = {
@@ -141,6 +179,7 @@ adminInquiryRouter.patch('/questions/:id', async (req, res) => {
   )
   if (!rows.length) return res.status(404).json({ error: '질문을 찾지 못했어요.' })
   console.log(`[qna] ${req.admin.loginId} 질문 #${rows[0].id} ${hasAnswer ? '답변' : hidden ? '숨김' : '다시 보임'}`)
+  if (hasAnswer) notifyAnswer(rows[0].id).catch((e) => console.error(`[qna] 답변 알림 실패 · ${e.message}`))
   res.json(openQuestion(rows[0]))
 })
 

@@ -230,3 +230,29 @@ a.card { text-decoration: none; height: 100%; box-sizing: border-box; }
 .notice-table th, .notice-table td { padding: 8px 10px; border-top: 1px solid var(--border, #ddd); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
 .notice-table th { width: 38%; font-weight: 500; }
 .notice-fields { border: 1px solid var(--border, #ddd); padding: 12px; }
+
+/* 필수 칸 표시와 적는 동안 바로 알려 주는 입력 칸 (2026-11) */
+.req { margin-left: 2px; color: #d1242f; font-style: normal; font-weight: 700; }
+.req-note { margin: 0; font-size: 0.85rem; }
+.form .field { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; }
+.form input.bad, .form .email-row.bad { border-color: #d1242f !important; box-shadow: 0 0 0 3px rgb(209 36 47 / 0.12); }
+.form input.good, .form .email-row.good { border-color: #2e7d32 !important; }
+.form .email-row { display: flex; align-items: center; gap: 6px; padding: 0; border: 1px solid transparent; border-radius: 8px; }
+.form .email-row input { flex: 1 1 40%; min-width: 0; }
+.form .email-row select { flex: 0 1 auto; min-width: 0; }
+.form .email-row.bad input, .form .email-row.bad select { border-color: #d1242f; }
+.form .email-row.good input, .form .email-row.good select { border-color: #2e7d32; }
+.form .email-row.bad, .form .email-row.good { border-color: transparent !important; box-shadow: none; }
+.field-msg { min-height: 1.2em; margin: 0; font-size: 0.82rem; }
+.field-msg.no { color: #d1242f; }
+.field-msg.ok { color: #2e7d32; }
+.pw-rules { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 2px 0 0; padding: 0; list-style: none; font-size: 0.82rem; color: var(--muted, #6b6b6b); }
+.pw-rules li.ok { color: #2e7d32; }
+.pw-rules li.no { color: #d1242f; }
+.form label.bad-check { color: #d1242f; }
+/* 칸 이름·빨간 별표·도움말이 한 줄로 이어지게 (세로 flex 이면 글자 조각마다 줄이 갈라진다). 입력칸은 그 아래 전체 폭 */
+.form label:not(.check), .form .field > label { display: block; }
+.form label:not(.check) > input, .form label:not(.check) > select, .form label:not(.check) > textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; }
+.form .field > input { width: 100%; box-sizing: border-box; }
+.form label.check { display: block; line-height: 1.6; }
+.form label.check > input { margin: 0 6px 0 0; vertical-align: -2px; }

@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { adminApi } from '../admin/api.js'
 import { OrderDetail } from '../shop/Orders.jsx'
 import { Logo } from '../shop/ShopLayout.jsx'
 import { get, loadScript, ORDER_STATUS, post, send, when, won } from '../shop/shared.js'
+import { EmailField, NewPasswordFields, Req } from './fields.jsx'
+import { emailProblem, formatPhone, passwordOk, phoneOk } from './rules.js'
 
 // 손님 회원: 로그인 · 가입 · 비밀번호 찾기 · 마이페이지(주문 내역 · 내 정보·배송지 · 비밀번호 · 탈퇴)
 const POSTCODE_SDK = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js'
@@ -188,17 +190,17 @@ function SellerSignup() {
   return (
     <form onSubmit={submit} className="form">
       <p className="muted">회사가 농가 정보를 확인하고 승인하면 상품을 올릴 수 있어요. 승인 결과는 이메일로 알려 드려요.</p>
-      <label>아이디* <span className="muted">영문 소문자·숫자·밑줄 4~20자</span><input value={form.loginId} onChange={set('loginId')} maxLength={20} autoComplete="username" autoCapitalize="none" /></label>
-      <label>비밀번호* <span className="muted">10자 이상</span><input type="password" value={form.password} onChange={set('password')} autoComplete="new-password" /></label>
-      <label>비밀번호 확인*<input type="password" value={form.password2} onChange={set('password2')} autoComplete="new-password" /></label>
-      <label>농가·상호 이름*<input value={form.farmName} onChange={set('farmName')} maxLength={30} placeholder="예: 햇살과수원" /></label>
-      <label>지역*<input value={form.region} onChange={set('region')} maxLength={30} placeholder="예: 충남 천안" /></label>
-      <label>대표자 이름*<input value={form.ownerName} onChange={set('ownerName')} maxLength={20} /></label>
-      <label>연락처*<input value={form.phone} onChange={set('phone')} inputMode="tel" placeholder="010-1234-5678" autoComplete="tel" /></label>
-      <label>사업자등록번호*<input value={form.businessNo} onChange={set('businessNo')} inputMode="numeric" placeholder="000-00-00000" /></label>
-      <label>이메일* <span className="muted">승인 결과를 받아요</span><input type="email" value={form.email} onChange={set('email')} autoComplete="email" /></label>
-      <label className="check"><input type="checkbox" checked={form.agreeTerms} onChange={set('agreeTerms')} />[필수] <a href="/policy/terms" target="_blank" rel="noreferrer">이용약관</a> 동의 (올린 상품 정보의 정확성은 판매자가 책임져요)</label>
-      <label className="check"><input type="checkbox" checked={form.agreePrivacy} onChange={set('agreePrivacy')} />[필수] <a href="/policy/privacy" target="_blank" rel="noreferrer">개인정보 수집·이용</a> 동의</label>
+      <label>아이디<em className="req" title="필수">*</em> <span className="muted">영문 소문자·숫자·밑줄 4~20자</span><input value={form.loginId} onChange={set('loginId')} maxLength={20} autoComplete="username" autoCapitalize="none" /></label>
+      <NewPasswordFields idPrefix="seller" password={form.password} password2={form.password2} idOrEmail={form.loginId}
+        onPassword={(v) => setForm((prev) => ({ ...prev, password: v }))} onPassword2={(v) => setForm((prev) => ({ ...prev, password2: v }))} />
+      <label>농가·상호 이름<em className="req" title="필수">*</em><input value={form.farmName} onChange={set('farmName')} maxLength={30} placeholder="예: 햇살과수원" /></label>
+      <label>지역<em className="req" title="필수">*</em><input value={form.region} onChange={set('region')} maxLength={30} placeholder="예: 충남 천안" /></label>
+      <label>대표자 이름<em className="req" title="필수">*</em><input value={form.ownerName} onChange={set('ownerName')} maxLength={20} /></label>
+      <label>연락처<em className="req" title="필수">*</em><input value={form.phone} onChange={set('phone')} inputMode="tel" placeholder="010-1234-5678" autoComplete="tel" /></label>
+      <label>사업자등록번호<em className="req" title="필수">*</em><input value={form.businessNo} onChange={set('businessNo')} inputMode="numeric" placeholder="000-00-00000" /></label>
+      <EmailField id="seller-email" value={form.email} onChange={(v) => setForm((prev) => ({ ...prev, email: v }))} note="승인 결과를 받아요" />
+      <label className="check"><input type="checkbox" checked={form.agreeTerms} onChange={set('agreeTerms')} /><em className="req">[필수]</em> <a href="/policy/terms" target="_blank" rel="noreferrer">이용약관</a> 동의 (올린 상품 정보의 정확성은 판매자가 책임져요)</label>
+      <label className="check"><input type="checkbox" checked={form.agreePrivacy} onChange={set('agreePrivacy')} /><em className="req">[필수]</em> <a href="/policy/privacy" target="_blank" rel="noreferrer">개인정보 수집·이용</a> 동의</label>
       <Errors list={errors} />
       <button type="submit" className="button">판매자 가입 신청</button>
     </form>
@@ -209,13 +211,21 @@ export function SignupPage() {
   const [type, setType] = useState(() => (new URLSearchParams(window.location.search).get('type') === 'seller' ? 'seller' : 'buyer'))
   const [form, setForm] = useState({ email: '', password: '', password2: '', name: '', phone: '', agreeTerms: false, agreePrivacy: false })
   const [errors, setErrors] = useState([])
+  const [show, setShow] = useState(false) // 가입하기를 눌렀는데 빈 칸이 있으면 빈 칸도 빨갛게
   const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
+  const put = (key) => (value) => setForm((prev) => ({ ...prev, [key]: value }))
+  const ready = !emailProblem(form.email) && passwordOk(form.password, form.password2, form.email) && form.name.trim() && phoneOk(form.phone) && form.agreeTerms && form.agreePrivacy
 
   async function submit(event) {
     event.preventDefault()
-    if (form.password !== form.password2) return setErrors(['비밀번호 확인이 맞지 않아요.'])
+    if (!ready) {
+      setShow(true)
+      setErrors(['빨갛게 표시된 칸을 확인해 주세요.'])
+      setTimeout(() => document.querySelector('.signup-form [aria-invalid="true"], .signup-form .bad input, .signup-form input.bad')?.focus(), 0)
+      return
+    }
     try {
-      await post('/account/signup', form)
+      await post('/account/signup', { ...form, phone: form.phone.replace(/\D/g, '') })
       window.dispatchEvent(new Event('account-change'))
       goNext()
     } catch (e) {
@@ -230,18 +240,31 @@ export function SignupPage() {
     </nav>
   )
   if (type === 'seller') return <div className="box narrow"><h2>회원가입</h2>{picker}<SellerSignup /></div>
+  const nameBad = show && !form.name.trim()
+  const phoneTyped = form.phone.length > 0
+  const digits = form.phone.replace(/\D/g, '')
+  const phoneBad = (phoneTyped && ((digits.length >= 2 && !digits.startsWith('01')) || (digits.length >= 10 && !phoneOk(form.phone)))) || (show && !phoneOk(form.phone))
   return (
-    <form className="box form narrow" onSubmit={submit}>
+    <form className="box form narrow signup-form" onSubmit={submit} noValidate>
       <h2>회원가입</h2>
       <SocialButtons label="가입하기" />
       {picker}
-      <label>이메일*<input type="email" value={form.email} onChange={set('email')} autoComplete="email" /></label>
-      <label>비밀번호* <span className="muted">10자 이상</span><input type="password" value={form.password} onChange={set('password')} autoComplete="new-password" /></label>
-      <label>비밀번호 확인*<input type="password" value={form.password2} onChange={set('password2')} autoComplete="new-password" /></label>
-      <label>이름*<input value={form.name} onChange={set('name')} maxLength={20} autoComplete="name" /></label>
-      <label>휴대폰*<input value={form.phone} onChange={set('phone')} inputMode="tel" placeholder="010-1234-5678" autoComplete="tel" /></label>
-      <label className="check"><input type="checkbox" checked={form.agreeTerms} onChange={set('agreeTerms')} />[필수] <a href="/policy/terms" target="_blank" rel="noreferrer">이용약관</a>에 동의해요</label>
-      <label className="check"><input type="checkbox" checked={form.agreePrivacy} onChange={set('agreePrivacy')} />[필수] <a href="/policy/privacy" target="_blank" rel="noreferrer">개인정보 수집·이용</a>에 동의해요 (이메일·이름·휴대폰, 탈퇴 시 삭제)</label>
+      <p className="muted req-note"><Req /> 표시는 꼭 적어야 하는 칸이에요.</p>
+      <EmailField id="su-email" value={form.email} onChange={put('email')} show={show} />
+      <NewPasswordFields idPrefix="su" password={form.password} password2={form.password2} onPassword={put('password')} onPassword2={put('password2')} idOrEmail={form.email} show={show} />
+      <div className="field">
+        <label htmlFor="su-name">이름<Req /></label>
+        <input id="su-name" value={form.name} onChange={set('name')} maxLength={20} autoComplete="name" className={nameBad ? 'bad' : ''} aria-invalid={nameBad} />
+        {nameBad && <p className="field-msg no">이름을 적어 주세요.</p>}
+      </div>
+      <div className="field">
+        <label htmlFor="su-phone">휴대폰<Req /></label>
+        <input id="su-phone" value={form.phone} onChange={(e) => put('phone')(formatPhone(e.target.value))} inputMode="tel" placeholder="010-1234-5678" autoComplete="tel"
+          className={phoneBad ? 'bad' : phoneOk(form.phone) ? 'good' : ''} aria-invalid={phoneBad} aria-describedby="su-phone-msg" />
+        <p id="su-phone-msg" className={`field-msg${phoneBad ? ' no' : ''}`} aria-live="polite">{phoneBad ? '010으로 시작하는 휴대폰 번호 10~11자리를 적어 주세요.' : ''}</p>
+      </div>
+      <label className={`check${show && !form.agreeTerms ? ' bad-check' : ''}`}><input type="checkbox" checked={form.agreeTerms} onChange={set('agreeTerms')} /><em className="req">[필수]</em> <a href="/policy/terms" target="_blank" rel="noreferrer">이용약관</a>에 동의해요</label>
+      <label className={`check${show && !form.agreePrivacy ? ' bad-check' : ''}`}><input type="checkbox" checked={form.agreePrivacy} onChange={set('agreePrivacy')} /><em className="req">[필수]</em> <a href="/policy/privacy" target="_blank" rel="noreferrer">개인정보 수집·이용</a>에 동의해요 (이메일·이름·휴대폰, 탈퇴 시 삭제)</label>
       <Errors list={errors} />
       <button type="submit" className="button">가입하기</button>
     </form>
@@ -294,8 +317,7 @@ export function ResetPasswordPage() {
   return (
     <form className="box form narrow" onSubmit={submit}>
       <h2>새 비밀번호 정하기</h2>
-      <label>새 비밀번호 <span className="muted">10자 이상</span><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" /></label>
-      <label>새 비밀번호 확인<input type="password" value={password2} onChange={(e) => setPassword2(e.target.value)} autoComplete="new-password" /></label>
+      <NewPasswordFields idPrefix="reset" label="새 비밀번호" password={password} password2={password2} onPassword={setPassword} onPassword2={setPassword2} />
       <Errors list={errors} />
       <button type="submit" className="button">바꾸기</button>
     </form>
@@ -413,16 +435,19 @@ function Profile({ me, onSaved }) {
 function Security({ hasPassword = true }) {
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
+  const [next2, setNext2] = useState('')
   const [leavePassword, setLeavePassword] = useState('')
   const [message, setMessage] = useState('')
   const [errors, setErrors] = useState([])
 
   async function change(event) {
     event.preventDefault()
+    if (next !== next2) return setErrors(['새 비밀번호 확인이 맞지 않아요.'])
     try {
       await post('/account/password', { current, next })
       setCurrent('')
       setNext('')
+      setNext2('')
       setErrors([])
       setMessage('비밀번호를 바꿨어요. 다른 기기의 로그인은 모두 끊겼어요.')
     } catch (e) {
@@ -448,7 +473,7 @@ function Security({ hasPassword = true }) {
       <form className="box form" onSubmit={change}>
         <h3>비밀번호 바꾸기</h3>
         <label>지금 비밀번호<input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" /></label>
-        <label>새 비밀번호 <span className="muted">10자 이상</span><input type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" /></label>
+        <NewPasswordFields idPrefix="change" label="새 비밀번호" password={next} password2={next2} onPassword={setNext} onPassword2={setNext2} />
         <button type="submit" className="button">바꾸기</button>
         {message && <p className="success">{message}</p>}
       </form>
@@ -465,13 +490,52 @@ function Security({ hasPassword = true }) {
   )
 }
 
-export function MyPage() {
-  const [me, setMe] = useState(undefined)
-  const [tab, setTab] = useState(() => (new URLSearchParams(window.location.search).get('social') ? 'security' : 'orders'))
+// 내가 남긴 상품 문의와 답변. 열면 새 답변을 봤다고 표시해서 화면 위 숫자가 사라진다
+function MyQuestions({ onSeen }) {
+  const [list, setList] = useState(null)
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    get('/account/me').then(setMe).catch(() => { window.location.href = '/account/login?next=/account' })
+    get('/account/questions').then((rows) => {
+      setList(rows)
+      if (rows.some((q) => q.is_new)) {
+        post('/account/questions/seen', {}).then(() => { onSeen(); window.dispatchEvent(new Event('account-change')) }).catch(() => {})
+      }
+    }).catch((e) => setError(e.message))
+  }, [onSeen])
+
+  if (error) return <p className="error">{error}</p>
+  if (!list) return <p className="muted">불러오는 중…</p>
+  if (!list.length) return <p className="muted">아직 남긴 문의가 없어요. 상품 화면 아래 Q&A에서 물어볼 수 있어요.</p>
+  return (
+    <ul className="my-questions">
+      {list.map((q) => (
+        <li key={q.id} className="box">
+          <p className="muted">
+            <a href={`/p/${encodeURIComponent(q.product_code)}`}>{q.product_name}</a> · {when(q.created_at)}
+            {q.is_private && <span className="qna-lock">비밀글</span>}{q.is_new && <span className="new-tag">새 답변</span>}
+          </p>
+          <p><strong>Q.</strong> {q.question}</p>
+          {q.answer
+            ? <p><strong>A.</strong> {q.answer} <span className="muted">({when(q.answered_at)})</span></p>
+            : <p className="muted">답변을 기다리는 중이에요. 답변이 달리면 화면 위 마이페이지 옆에 숫자로 알려 드려요.</p>}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+export function MyPage() {
+  const [me, setMe] = useState(undefined)
+  const [tab, setTab] = useState(() => {
+    const query = new URLSearchParams(window.location.search)
+    return query.get('social') ? 'security' : query.get('tab') === 'questions' ? 'questions' : 'orders'
+  })
+
+  useEffect(() => {
+    get('/account/me').then(setMe).catch(() => setMe(null)) // 로그인하지 않았으면 로그인 안내를 보여 준다
   }, [])
+  const markSeen = useCallback(() => setMe((prev) => ({ ...prev, unreadAnswers: 0 })), [])
 
   async function logout() {
     await post('/account/logout', {})
@@ -479,7 +543,8 @@ export function MyPage() {
     window.location.href = '/'
   }
 
-  if (!me) return <p className="muted">불러오는 중…</p>
+  if (me === undefined) return <p className="muted">불러오는 중…</p>
+  if (me === null) return <LoginPage /> // 로그인하지 않았으면 로그인 화면을 그대로 (로그인하면 마이페이지로 돌아온다)
   const socialMessage = new URLSearchParams(window.location.search).get('social') // 간편 로그인 연결 결과
   return (
     <section>
@@ -489,11 +554,14 @@ export function MyPage() {
       </div>
       {socialMessage && <p className="success">{socialMessage}</p>}
       <nav className="tabs">
-        {[['orders', '주문 내역'], ['profile', '내 정보·배송지'], ['security', '로그인·탈퇴']].map(([key, label]) => (
-          <button key={key} type="button" className={tab === key ? 'on' : ''} onClick={() => setTab(key)}>{label}</button>
+        {[['orders', '주문 내역'], ['questions', '내 문의'], ['profile', '내 정보·배송지'], ['security', '로그인·탈퇴']].map(([key, label]) => (
+          <button key={key} type="button" className={tab === key ? 'on' : ''} onClick={() => setTab(key)}>
+            {label}{key === 'questions' && me.unreadAnswers > 0 && <span className="new-dot" aria-label={`새 답변 ${me.unreadAnswers}개`}>{me.unreadAnswers}</span>}
+          </button>
         ))}
       </nav>
       {tab === 'orders' && <MyOrders />}
+      {tab === 'questions' && <MyQuestions onSeen={markSeen} />}
       {tab === 'profile' && <Profile me={me} onSaved={setMe} />}
       {tab === 'security' && <Security hasPassword={me.hasPassword !== false} />}
     </section>
