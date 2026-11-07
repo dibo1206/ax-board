@@ -60,8 +60,9 @@ export function ShopLayout({ children }) {
             <a href="/#recommend" onClick={openQuiz}>추천받기</a>
           </nav>
           <nav className="site-tools" aria-label="내 메뉴">
-            <a href="/#products" className="icon-link tool-search" aria-label="검색" onClick={(e) => goSection(e, 'products')}>
+            <a href="/#products" className="tool-search" aria-label="상품 검색" onClick={(e) => goSection(e, 'products')}>
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+              <span>상품 검색</span>
             </a>
             {account ? <a href="/account">{account.name}님</a> : <a href="/account/login">로그인</a>}
             <a href="/cart" className="icon-link cart-link" aria-label={`장바구니 ${count}개`}>

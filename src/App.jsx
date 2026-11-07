@@ -114,12 +114,14 @@ function BuyBox({ product, option, onPick, onAsk }) {
   return (
     <div className="buy">
       {pick}
-      <label className="qty">수량
-        <select value={quantity} onChange={(e) => { setQuantity(Number(e.target.value)); setAdded(false) }}>
-          {Array.from({ length: Math.min(max, 20) }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
-        </select>
-      </label>
-      <span className="price">{won(price * quantity)}</span>
+      <div className="buy-row">
+        <label className="qty">수량
+          <select value={quantity} onChange={(e) => { setQuantity(Number(e.target.value)); setAdded(false) }}>
+            {Array.from({ length: Math.min(max, 20) }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+        <span className="buy-total"><small>총 금액</small><span className="price">{won(price * quantity)}</span></span>
+      </div>
       <div className="actions">
         <button type="button" className="button ghost" onClick={() => { addToCart(product.product_code, quantity, option?.id ?? null); setAdded(true) }}>장바구니 담기</button>
         <a className="button" href={buyUrl}>{product.preorder ? '예약 구매' : '바로 구매'}</a>
@@ -206,91 +208,93 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         <dt>판매 농가</dt><dd>{seller.name} · {seller.region}</dd>
       </dl>
       <BuyBox product={product} option={option} onPick={setOptionId} onAsk={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })} />
-
-      <Description text={product.description} />
-      {product.notice_table && (
-        <section className="box notice-box">
-          <h3>상품정보 제공 고시 <span className="muted">{product.notice_table.title}</span></h3>
-          <table className="notice-table"><tbody>
-            {product.notice_table.rows.map((r) => <tr key={r.label}><th scope="row">{r.label}</th><td className={r.missing ? 'muted' : ''}>{r.value}</td></tr>)}
-          </tbody></table>
-        </section>
-      )}
-      {product.faq?.length > 0 && (
-        <section className="box faq-box">
-          <h3>자주 묻는 질문</h3>
-          {product.faq.map((f) => <details key={f.q}><summary>{f.q}</summary><p>{f.a}</p></details>)}
-        </section>
-      )}
-      <section className="box">
-        <h3>보관·섭취 안내</h3>
-        {item.pending && <p className="muted">새로 들어온 품목이라 담당자가 보관·섭취 정보를 확인하고 있어요. 궁금한 점은 아래 상품 Q&A로 물어봐 주세요.</p>}
-        {item.storage_method && <p>{item.storage_method}</p>}
-        {item.keep_period && <p>보관 기간 참고: {item.keep_period}</p>}
-        {/* 신선도는 날짜가 아니라 지금 상태로 판단한다 (팀 식품 기준표). 옛 데이터(며칠)도 그대로 보여 준다 */}
-        {fresh && item.stage1_state && (
-          <ul className="fresh-stages">
-            <li><strong>신선</strong> {item.stage1_state} → {item.stage1_uses.join(', ')}</li>
-            <li><strong>품질 저하</strong> {item.stage2_state} → {item.stage2_uses.join(', ')}</li>
-            <li><strong>섭취 부적합</strong> 아래 신호가 보이면 → 조리하지 말고 폐기</li>
-          </ul>
+      <div className="buy-aside">
+        <button type="button" onClick={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })}>상품 문의하기</button>
+        {product.b2b_available && (
+          <button type="button" onClick={() => { setShowB2b(true); setTimeout(() => document.getElementById('b2b-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50) }}>기업 구매 문의 <small>대량·납품</small></button>
         )}
-        {fresh && !item.stage1_state && item.fresh_days_stage1 && (
-          <p>받은 날부터 {item.fresh_days_stage1}일까지: {item.stage1_uses.join(', ')} → {item.fresh_days_stage2}일까지: {item.stage2_uses.join(', ')} → 그 뒤: {item.stage3_uses.join(', ')}</p>
-        )}
-        {item.opened_note && <p>{item.opened_note}</p>}
-        {item.allergens.length > 0 && <p className="warn">알레르기: {item.allergens.join(', ')}</p>}
-        {item.allergen_note && <p className="muted">{item.allergen_note}</p>}
-        {item.danger_signs.length > 0 && <p className="muted">이런 상태면 드시지 마세요: {item.danger_signs.join(' / ')}</p>}
-        {item.danger_note && <p className="muted">{item.danger_note}</p>}
-        {item.cafe_note && <p className="muted">카페·업소 메뉴 비율: {item.cafe_note}</p>}
-        {item.reviewed_by && item.source && <p className="note">출처: {item.source}</p>}
-      </section>
+      </div>
 
-      {item.recipes.length > 0 && (
+      <div className="detail-body">
+        <Description text={product.description} />
+        {product.notice_table && (
+          <section className="box notice-box">
+            <h3>상품정보 제공 고시 <span className="muted">{product.notice_table.title}</span></h3>
+            <table className="notice-table"><tbody>
+              {product.notice_table.rows.map((r) => <tr key={r.label}><th scope="row">{r.label}</th><td className={r.missing ? 'muted' : ''}>{r.value}</td></tr>)}
+            </tbody></table>
+          </section>
+        )}
+        {product.faq?.length > 0 && (
+          <section className="box faq-box">
+            <h3>자주 묻는 질문</h3>
+            {product.faq.map((f) => <details key={f.q}><summary>{f.q}</summary><p>{f.a}</p></details>)}
+          </section>
+        )}
         <section className="box">
-          <h3>이렇게 즐겨 보세요</h3>
+          <h3>보관·섭취 안내</h3>
+          {item.pending && <p className="muted">새로 들어온 품목이라 담당자가 보관·섭취 정보를 확인하고 있어요. 궁금한 점은 아래 상품 Q&A로 물어봐 주세요.</p>}
+          {item.storage_method && <p>{item.storage_method}</p>}
+          {item.keep_period && <p>보관 기간 참고: {item.keep_period}</p>}
+          {/* 신선도는 날짜가 아니라 지금 상태로 판단한다 (팀 식품 기준표). 옛 데이터(며칠)도 그대로 보여 준다 */}
+          {fresh && item.stage1_state && (
+            <ul className="fresh-stages">
+              <li><strong>신선</strong> {item.stage1_state} → {item.stage1_uses.join(', ')}</li>
+              <li><strong>품질 저하</strong> {item.stage2_state} → {item.stage2_uses.join(', ')}</li>
+              <li><strong>섭취 부적합</strong> 아래 신호가 보이면 → 조리하지 말고 폐기</li>
+            </ul>
+          )}
+          {fresh && !item.stage1_state && item.fresh_days_stage1 && (
+            <p>받은 날부터 {item.fresh_days_stage1}일까지: {item.stage1_uses.join(', ')} → {item.fresh_days_stage2}일까지: {item.stage2_uses.join(', ')} → 그 뒤: {item.stage3_uses.join(', ')}</p>
+          )}
+          {item.opened_note && <p>{item.opened_note}</p>}
+          {item.allergens.length > 0 && <p className="warn">알레르기: {item.allergens.join(', ')}</p>}
+          {item.allergen_note && <p className="muted">{item.allergen_note}</p>}
+          {item.danger_signs.length > 0 && <p className="muted">이런 상태면 드시지 마세요: {item.danger_signs.join(' / ')}</p>}
+          {item.danger_note && <p className="muted">{item.danger_note}</p>}
+          {item.cafe_note && <p className="muted">카페·업소 메뉴 비율: {item.cafe_note}</p>}
+          {item.reviewed_by && item.source && <p className="note">출처: {item.source}</p>}
+        </section>
+
+        {item.recipes.length > 0 && (
+          <section className="box">
+            <h3>이렇게 즐겨 보세요</h3>
+            <ul>
+              {item.recipes.map((r) => (
+                <li key={r.title}><strong>{r.title}</strong> — {r.ingredients} · {r.method}</li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <section className="box">
+          <h3>판매 농가 이야기</h3>
+          <p>{seller.story}</p>
+        </section>
+
+        {showB2b && <div id="b2b-form"><B2bForm product={product} onClose={() => setShowB2b(false)} /></div>}
+
+        <ReviewList code={product.product_code} />
+        <section className="box" ref={qnaRef}>
+          <h3>Q&A {product.questions.length}개</h3>
+          <QuestionForm
+            productCode={product.product_code}
+            onSent={(q) => {
+              setProduct((prev) => ({ ...prev, questions: [q, ...prev.questions] }))
+              setSentMessage('질문이 올라갔어요. 답변이 달리면 여기에 보여요.')
+            }}
+          />
+          {sentMessage && <p className="success">{sentMessage}</p>}
           <ul>
-            {item.recipes.map((r) => (
-              <li key={r.title}><strong>{r.title}</strong> — {r.ingredients} · {r.method}</li>
+            {product.questions.map((q) => (
+              <li key={q.id}>
+                <strong>Q.</strong> {q.question} <span className="muted">· {q.author}</span><br />
+                {q.answer ? <><strong>A.</strong> {q.answer}</> : <span className="muted">답변을 기다리는 중</span>}
+              </li>
             ))}
           </ul>
         </section>
-      )}
-
-      <section className="box">
-        <h3>판매 농가 이야기</h3>
-        <p>{seller.story}</p>
-      </section>
-
-      <div className="actions">
-        <button type="button" className="link" onClick={() => qnaRef.current?.scrollIntoView({ behavior: 'smooth' })}>상품 문의하기</button>
-        {product.b2b_available && (
-          <button type="button" className="button ghost" onClick={() => setShowB2b(true)}>기업 구매 문의 (대량·납품)</button>
-        )}
       </div>
-      {showB2b && <B2bForm product={product} onClose={() => setShowB2b(false)} />}
-
-      <ReviewList code={product.product_code} />
-      <section className="box" ref={qnaRef}>
-        <h3>Q&A {product.questions.length}개</h3>
-        <QuestionForm
-          productCode={product.product_code}
-          onSent={(q) => {
-            setProduct((prev) => ({ ...prev, questions: [q, ...prev.questions] }))
-            setSentMessage('질문이 올라갔어요. 답변이 달리면 여기에 보여요.')
-          }}
-        />
-        {sentMessage && <p className="success">{sentMessage}</p>}
-        <ul>
-          {product.questions.map((q) => (
-            <li key={q.id}>
-              <strong>Q.</strong> {q.question} <span className="muted">· {q.author}</span><br />
-              {q.answer ? <><strong>A.</strong> {q.answer}</> : <span className="muted">답변을 기다리는 중</span>}
-            </li>
-          ))}
-        </ul>
-      </section>
       <Related code={product.product_code} onOpen={onOpen} />
     </article>
   )
@@ -413,6 +417,7 @@ function Storefront() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
   const pushed = useRef(0) // 이 화면에서 상품을 연 횟수 (뒤로 가기로 목록에 돌아갈 수 있는지)
+  const listScroll = useRef(0) // 상품을 열기 전 목록 스크롤 위치 (돌아올 때 그 자리로)
   const first = useRef(loc) // 처음 들어온 주소 (아래로 내려 줄 위치를 정할 때 한 번만 쓴다)
 
   useEffect(() => {
@@ -458,7 +463,18 @@ function Storefront() {
     return () => { stale = true }
   }, [loc])
 
+  // 상세에서 목록으로 돌아오면(뒤로 가기 포함) 보던 자리로 되돌린다
+  const hadCode = useRef(Boolean(loc.code))
+  useEffect(() => {
+    const was = hadCode.current
+    hadCode.current = Boolean(loc.code)
+    if (!was || loc.code) return undefined
+    const timer = setTimeout(() => window.scrollTo({ top: listScroll.current }), 60)
+    return () => clearTimeout(timer)
+  }, [loc.code])
+
   const open = (code, focusOn = null) => {
+    if (!loc.code) listScroll.current = window.scrollY
     window.history.pushState(null, '', `/p/${encodeURIComponent(code)}`)
     pushed.current += 1
     setLoc((prev) => ({ ...prev, code }))
