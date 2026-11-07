@@ -10,7 +10,7 @@ import { Chip, CountBadge, FilterChips, ProductStatus, ShipSteps, StatTile, Stoc
 // 판매자(농가) 화면: 로그인 → [내 상품 | 상품 문의 | 주문 | 반품 | 농가 소개]. 모든 요청은 /api/seller (자기 농가 것만)
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
 
-function MyProducts({ onMessage, onError }) {
+function MyProducts({ onMessage, onError, initialFilter }) {
   const [products, setProducts] = useState(null)
   const [options, setOptions] = useState(null)
   const [editing, setEditing] = useState(null)
@@ -49,7 +49,7 @@ function MyProducts({ onMessage, onError }) {
       />
     )
   }
-  return <ProductCards products={products} onEdit={(p) => { setEditing(p); onMessage('') }} onNew={() => { setEditing('new'); onMessage('') }} onSoldOut={soldOut} />
+  return <ProductCards products={products} initialFilter={initialFilter} onEdit={(p) => { setEditing(p); onMessage('') }} onNew={() => { setEditing('new'); onMessage('') }} onSoldOut={soldOut} />
 }
 
 const PRODUCT_FILTERS = [
@@ -61,8 +61,8 @@ const PRODUCT_FILTERS = [
   ['draft', '임시 저장', (p) => p.status === 'draft' && !p.review_note],
 ]
 
-function ProductCards({ products, onEdit, onNew, onSoldOut }) {
-  const [filter, setFilter] = useState('all')
+function ProductCards({ products, initialFilter = 'all', onEdit, onNew, onSoldOut }) {
+  const [filter, setFilter] = useState(initialFilter)
   const [q, setQ] = useState('')
   const test = PRODUCT_FILTERS.find(([key]) => key === filter)?.[2] ?? (() => true)
   const shown = products.filter(test).filter((p) => !q.trim() || `${p.name} ${p.item_name}`.includes(q.trim()))
@@ -158,10 +158,11 @@ function Settlement() {
   )
 }
 
-function MyOrders({ onMessage, onError }) {
+// 주문 탭은 '전체'로 열린다. 첫 화면의 숫자(배송 준비할 주문 등)를 누르면 그 목록(initialFilter)으로 바로 연다
+function MyOrders({ onMessage, onError, initialFilter = 'all' }) {
   const [orders, setOrders] = useState(null)
   const [tracking, setTracking] = useState({})
-  const [filter, setFilter] = useState('todo')
+  const [filter, setFilter] = useState(initialFilter)
 
   const load = () => sellerApi('/orders').then(setOrders).catch((e) => onError(e.message))
   useEffect(() => {
@@ -196,12 +197,12 @@ function MyOrders({ onMessage, onError }) {
 
   if (!orders) return <p className="muted">불러오는 중…</p>
   const ORDER_FILTERS = [
+    ['all', '전체', () => true],
     ['todo', '할 일', (o) => ['paid', 'preparing'].includes(o.status) && !(o.status === 'paid' && o.ship_from)],
     ['preorder', '예약 대기', (o) => o.status === 'paid' && o.ship_from],
     ['shipping', '배송 중', (o) => o.status === 'shipping'],
     ['done', '배송 완료', (o) => o.status === 'delivered'],
     ['cancelled', '취소', (o) => o.status === 'cancelled'],
-    ['all', '전체', () => true],
   ]
   const test = ORDER_FILTERS.find(([key]) => key === filter)?.[2] ?? (() => true)
   const shown = orders.filter(test)
@@ -333,9 +334,30 @@ function Profile({ seller, onSaved, onError }) {
   )
 }
 
+// 글씨 크게: 판매자 화면 전체를 크게 보이게 하고, 이 브라우저에 기억해 둔다
+const BIG_TEXT_KEY = 'seller-big-text'
+function readBigText() {
+  try {
+    return localStorage.getItem(BIG_TEXT_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 export default function Seller() {
   const [me, setMe] = useState(undefined)
   const [tab, setTab] = useState('home')
+  const [filter, setFilter] = useState(null) // 첫 화면 숫자를 눌러 들어갈 때 열 목록 (탭을 직접 누르면 '전체')
+  const [bigText, setBigText] = useState(readBigText)
+  function toggleBigText() {
+    const next = !bigText
+    setBigText(next)
+    try {
+      localStorage.setItem(BIG_TEXT_KEY, next ? '1' : '0')
+    } catch {
+      // 저장이 막혀도 이번 화면에서는 크게 보인다
+    }
+  }
   const [summary, setSummary] = useState(null)
   const loadSummary = () => sellerApi('/summary').then(setSummary).catch(() => {})
   const [message, setMessage] = useState('')
@@ -387,16 +409,17 @@ export default function Seller() {
     )
   }
 
-  const go = (next) => { setTab(next); setMessage(''); setError(''); loadSummary() }
+  const go = (next, list = null) => { setTab(next); setFilter(list); setMessage(''); setError(''); loadSummary() }
   const t = summary ?? {}
   const TABS = [['home', '오늘 할 일', 0], ['products', '내 상품', t.rejected], ['orders', '주문', (t.to_prepare ?? 0) + (t.to_ship ?? 0)], ['questions', '상품 문의', t.questions_waiting], ['returns', '반품', t.returns_waiting], ['profile', '농가 소개', 0]]
   return (
-    <section>
+    <section className={bigText ? 'seller-big' : undefined}>
       <div className="admin-head">
         <nav className="tabs">
           {TABS.map(([key, label, n]) => <button key={key} type="button" className={tab === key ? 'on' : ''} onClick={() => go(key)}>{label}<CountBadge n={n} /></button>)}
         </nav>
         <div className="account">
+          <button type="button" className="text-size" aria-pressed={bigText} onClick={toggleBigText}>{bigText ? '글씨 보통으로' : '가 글씨 크게'}</button>
           <span className="muted">{me.seller.name} · {me.loginId}</span>
           {!me.mfa && <Chip tone="amber" title="회사 담당자에게 2단계 인증 등록을 요청하세요">2단계 인증 미등록</Chip>}
           <button type="button" className="link" onClick={logout}>로그아웃</button>
@@ -408,26 +431,26 @@ export default function Seller() {
         <>
           <h3 className="section-title">오늘 할 일 <span className="muted">숫자를 누르면 그 화면으로 가요</span></h3>
           <div className="stat-grid">
-            <StatTile label="배송 준비할 주문" value={t.to_prepare ?? '–'} hint="결제가 끝난 내 배송" tone="red" onClick={() => go('orders')} />
-            <StatTile label="송장 넣을 주문" value={t.to_ship ?? '–'} hint="배송 준비 중" tone="amber" onClick={() => go('orders')} />
+            <StatTile label="배송 준비할 주문" value={t.to_prepare ?? '–'} hint="결제가 끝난 내 배송" tone="red" onClick={() => go('orders', 'todo')} />
+            <StatTile label="송장 넣을 주문" value={t.to_ship ?? '–'} hint="배송 준비 중" tone="amber" onClick={() => go('orders', 'todo')} />
             <StatTile label="답변 기다리는 문의" value={t.questions_waiting ?? '–'} tone="amber" onClick={() => go('questions')} />
             <StatTile label="반품 신청" value={t.returns_waiting ?? '–'} hint="의견을 남겨 주세요" tone="red" onClick={() => go('returns')} />
-            <StatTile label="반려된 상품" value={t.rejected ?? '–'} hint="사유를 보고 고쳐 주세요" tone="red" onClick={() => go('products')} />
-            <StatTile label="예약 대기 주문" value={t.preorders_waiting ?? '–'} hint="출고 시작일에 보내요" tone="blue" onClick={() => go('orders')} />
+            <StatTile label="반려된 상품" value={t.rejected ?? '–'} hint="사유를 보고 고쳐 주세요" tone="red" onClick={() => go('products', 'rejected')} />
+            <StatTile label="예약 대기 주문" value={t.preorders_waiting ?? '–'} hint="출고 시작일에 보내요" tone="blue" onClick={() => go('orders', 'preorder')} />
           </div>
           <h3 className="section-title">내 상품</h3>
           <div className="stat-grid">
-            <StatTile label="판매 중" value={t.selling ?? '–'} tone="green" onClick={() => go('products')} />
-            <StatTile label="회사 검토 대기" value={t.reviewing ?? '–'} tone="amber" onClick={() => go('products')} />
-            <StatTile label="품절" value={t.sold_out ?? '–'} tone="red" onClick={() => go('products')} />
+            <StatTile label="판매 중" value={t.selling ?? '–'} tone="green" onClick={() => go('products', 'selling')} />
+            <StatTile label="회사 검토 대기" value={t.reviewing ?? '–'} tone="amber" onClick={() => go('products', 'review')} />
+            <StatTile label="품절" value={t.sold_out ?? '–'} tone="red" onClick={() => go('products', 'soldout')} />
             <StatTile label="재고 5개 이하" value={t.low_stock ?? '–'} tone="amber" onClick={() => go('products')} />
             <StatTile label="재입고 알림 기다리는 손님" value={t.restock_waiting ?? '–'} hint="재고를 채우면 메일이 가요" tone="blue" onClick={() => go('products')} />
           </div>
         </>
       )}
-      {tab === 'products' && <MyProducts onMessage={setMessage} onError={setError} />}
+      {tab === 'products' && <MyProducts key={filter ?? 'all'} initialFilter={filter ?? 'all'} onMessage={setMessage} onError={setError} />}
       {tab === 'questions' && <MyQuestions onMessage={setMessage} onError={setError} />}
-      {tab === 'orders' && <MyOrders onMessage={setMessage} onError={setError} />}
+      {tab === 'orders' && <MyOrders key={filter ?? 'all'} initialFilter={filter ?? 'all'} onMessage={setMessage} onError={setError} />}
       {tab === 'returns' && <MyReturns onMessage={setMessage} onError={setError} />}
       {tab === 'profile' && (
         <Profile

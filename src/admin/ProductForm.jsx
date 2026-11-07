@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { thumbUrl, todayKst, unitPrice } from '../shop/shared.js'
 import { AiDraft } from './AiDraft.jsx'
 import { adminApi } from './api.js'
@@ -139,8 +139,20 @@ function ItemPreview({ item }) {
   )
 }
 
+// 판매자 상품 등록은 한 화면에 칸이 너무 많아서 단계로 나눈다 (관리자는 지금처럼 한 화면)
+// [키, 단계 이름, 그 단계에서 할 일 안내]
+const STEPS = [
+  ['item', '품목·이름', '무엇을 파는지 골라요. 품목을 고르면 보관법·레시피 같은 기준 정보가 자동으로 붙어요.'],
+  ['price', '가격·재고', '얼마에 몇 개 팔지 적어요. 5kg·10kg처럼 나눠 팔면 [+ 옵션 추가]를 눌러요.'],
+  ['harvest', '수확·당도', '언제 땄는지, 얼마나 단지 적어요. 모르는 칸은 비워 두고 넘어가도 돼요.'],
+  ['photos', '사진', '손님이 처음 보는 사진이에요. 대표 사진은 꼭 1장 올려 주세요.'],
+  ['intro', '소개', '상품을 소개해요. [AI로 채우기]를 누르면 초안을 써 줘요.'],
+  ['notice', '고시·확인', '법으로 보여 줘야 하는 정보를 적고, 마지막으로 확인한 뒤 판매를 요청해요.'],
+]
+const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
+
 // mode: 'admin'(회사 관리자) 또는 'seller'(농가 판매자). 판매자는 농가를 고르지 않고, 새 상품은 검토 요청으로 올린다
-const SAVED = { draft: '임시 저장했어요 (소비자 화면에는 안 보여요)', pending: '검토를 요청했어요. 회사 관리자가 승인하면 판매돼요', active: '저장했어요' }
+const SAVED ={ draft: '임시 저장했어요 (소비자 화면에는 안 보여요)', pending: '검토를 요청했어요. 회사 관리자가 승인하면 판매돼요', active: '저장했어요' }
 
 export function ProductForm({ product, options, onCancel, onSaved, api = adminApi, mode = 'admin' }) {
   const isNew = !product
@@ -164,6 +176,8 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
   // 목록에 없는 품목 요청 (관리자 검수 후 정보가 손님에게 보인다)
   const [extraItems, setExtraItems] = useState([])
   const [request, setRequest] = useState(null) // null: 닫힘, { name, category, error }
+  const [step, setStep] = useState(0) // 판매자 단계 (0부터)
+  const top = useRef(null)
   const items = [...options.items, ...extraItems.filter((x) => !options.items.some((i) => i.item_code === x.item_code))]
 
   const item = items.find((i) => i.item_code === form.item_code)
@@ -240,8 +254,37 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
 
   const groups = [...new Set(options.tags.map((t) => t.tag_group))]
 
-  return (
-    <div className="box form">
+  // 단계마다 꼭 적어야 하는 칸 (서버도 저장할 때 다시 검사한다). 다음 단계로 넘어갈 때만 본다
+  function stepProblems(key) {
+    const problems = []
+    if (key === 'item') {
+      if (!form.item_code) problems.push('품목을 골라 주세요.')
+      if (!form.name.trim()) problems.push('상품 이름을 적어 주세요.')
+    }
+    if (key === 'price') {
+      if (hasOptions) {
+        if (form.options.some((o) => o.status !== 'stopped' && (!o.name.trim() || o.price === '' || o.stock === ''))) problems.push('옵션마다 이름·가격·재고를 적어 주세요. (재고가 없으면 0)')
+      } else {
+        if (form.price === '') problems.push('가격을 적어 주세요.')
+        if (form.stock === '') problems.push('재고를 적어 주세요. (없으면 0)')
+      }
+      if (!form.unit.trim()) problems.push('판매 단위를 적어 주세요. (예: 5kg 1박스)')
+    }
+    return problems
+  }
+  function goStep(next) {
+    setStep(next)
+    setErrors([])
+    top.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+  function nextStep() {
+    const problems = stepProblems(STEPS[step][0])
+    if (problems.length) return setErrors(problems)
+    goStep(step + 1)
+  }
+
+  const header = (
+    <>
       <h3>{isNew ? '새 상품 등록' : `상품 수정 · ${seller ? product.name : product.product_code}`}</h3>
       {product?.status === 'pending' && <p className="warn">검토 대기 중인 상품이에요. {seller ? '회사 관리자가 승인하면 판매돼요.' : '확인 후 [저장하고 판매]를 누르면 승인돼요.'}</p>}
       {product?.review_note && <p className="warn">반려 사유: {product.review_note}</p>}
@@ -251,7 +294,11 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
           <ul>{changes.map((c, i) => <li key={i}>{c.changed_at.slice(0, 16).replace('T', ' ')} · {c.changed_by} · {c.field}: {c.old_value ?? '없음'} → {c.new_value ?? '없음'}</li>)}</ul>
         </details>
       )}
+    </>
+  )
 
+  const itemBlock = (
+    <>
       <label>품목*
         <select value={form.item_code} onChange={set('item_code')}>
           <option value="">골라 주세요</option>
@@ -297,6 +344,11 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
         </label>
       )}
       <label>상품 이름*<input value={form.name} onChange={set('name')} placeholder="예: [예시] 사과 선물세트 5kg" /></label>
+    </>
+  )
+
+  const priceBlock = (
+    <>
       {/* 옵션이 있으면 상품 가격·재고는 옵션에서 정해진다 (판매 중 옵션의 최저가·재고 합) */}
       <div className="row">
         {!hasOptions && <label>가격(원)*<input value={form.price} onChange={set('price')} inputMode="numeric" /></label>}
@@ -309,6 +361,12 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
         <label>1개 무게(g)<input value={form.weight_g} onChange={set('weight_g')} inputMode="numeric" /></label>
         <label>박스당 개수<input value={form.count_per_box} onChange={set('count_per_box')} inputMode="numeric" /></label>
       </div>
+    </>
+  )
+
+  const harvestBlock = (
+    <>
+      {seller && !item && <p className="muted">1단계에서 품목을 고르면 이 품목에 맞는 칸(당도·수확일)이 나와요.</p>}
       {item?.show_brix && (
         <div className="row">
           <label>당도(Brix) <span className="muted">모르면 비워 두기</span><input value={form.brix} onChange={set('brix')} inputMode="decimal" /></label>
@@ -321,6 +379,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
         <label>당도계 사진 {seller && <span className="muted">(당도를 적으면 꼭 올려 주세요 · 당도를 바꾸면 다시 올려야 해요)</span>}
           {brixPhotoUrl && !brixPhoto && <span className="muted"> · <a href={brixPhotoUrl} target="_blank" rel="noreferrer">올린 사진 보기</a></span>}
           <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setBrixPhoto(e.target.files?.[0] ?? null)} />
+          {brixPhoto && <span className="muted">고른 사진: {brixPhoto.name}</span>}
         </label>
       )}
       {item?.brix_min != null && item?.brix_max != null && <p className="muted">{item.name} 보통 당도: {item.brix_min}~{item.brix_max}Brix</p>}
@@ -333,7 +392,13 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
           {form.ship_from && <button type="button" className="link" onClick={() => setForm((prev) => ({ ...prev, ship_from: '' }))}>예약 판매 끄기</button>}
         </label>
       )}
-      <NoticeFields item={item} notice={form.notice} hasHarvest={Boolean(form.harvest_date)} onChange={(notice) => setForm((prev) => ({ ...prev, notice }))} />
+    </>
+  )
+
+  const noticeBlock = <NoticeFields item={item} notice={form.notice} hasHarvest={Boolean(form.harvest_date)} onChange={(notice) => setForm((prev) => ({ ...prev, notice }))} />
+
+  const introBlock = (
+    <>
       <AiDraft form={form} api={api} onDraft={applyDraft} />
       <label>한 줄 소개<input value={form.summary} onChange={set('summary')} maxLength={200} /></label>
       <label>상품 설명 <span className="muted">(선택) 빈 줄로 문단을 나눠요. 효능 표현은 쓰지 않아요</span>
@@ -377,12 +442,19 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
           </div>
         ))}
       </fieldset>
+    </>
+  )
 
+  // 단계를 오가면 파일 칸이 비어 보이므로 고른 사진 이름을 따로 보여 준다 (고른 사진은 그대로 남아 있다)
+  const photosBlock = (
+    <>
       <label>대표 사진 (jpg·png·webp, 2MB 이하 · 자동으로 줄이고 위치 정보를 지워요)
         <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setImage(e.target.files?.[0] ?? null)} />
+        {image && <span className="muted">고른 사진: {image.name}</span>}
       </label>
       <label>상세 사진 추가 (여러 장, 모두 합쳐 8장까지)
         <input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={(e) => setGallery([...(e.target.files ?? [])].slice(0, 8))} />
+        {gallery.length > 0 && <span className="muted">고른 사진 {gallery.length}장</span>}
       </label>
       {!isNew && (photos.main || photos.list.length > 0) && (
         <div className="photo-manage">
@@ -401,19 +473,75 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
           ))}
         </div>
       )}
+    </>
+  )
 
-      {errors.length > 0 && <ul className="error">{errors.map((e) => <li key={e}>{e}</li>)}</ul>}
+  const errorList = errors.length > 0 && <ul className="error">{errors.map((e) => <li key={e}>{e}</li>)}</ul>
 
-      <div className="actions">
-        <button type="button" className="button ghost" onClick={onCancel} disabled={saving}>취소</button>
+  // 관리자: 지금처럼 한 화면에 모두
+  if (!seller) {
+    return (
+      <div className="box form">
+        {header}
+        {itemBlock}
+        {priceBlock}
+        {harvestBlock}
+        {noticeBlock}
+        {introBlock}
+        {photosBlock}
+        {errorList}
+        <div className="actions">
+          <button type="button" className="button ghost" onClick={onCancel} disabled={saving}>취소</button>
+          <button type="button" className="button ghost" onClick={() => save('draft')} disabled={saving}>임시 저장</button>
+          <button type="button" className="button" onClick={() => save('active')} disabled={saving}>{saving ? '저장 중…' : product?.status === 'pending' ? '승인하고 판매' : '저장하고 판매'}</button>
+        </div>
+      </div>
+    )
+  }
+
+  // 판매자: 단계별로 한 화면씩. 위의 단계 표시를 누르면 바로 그 단계로 가고, 어느 단계에서든 임시 저장할 수 있다
+  const [key, title, guide] = STEPS[step]
+  const last = step === STEPS.length - 1
+  const blocks = { item: itemBlock, price: priceBlock, harvest: harvestBlock, photos: photosBlock, intro: introBlock, notice: noticeBlock }
+  const fix = (index) => <button type="button" className="link" onClick={() => goStep(index)}>고치기</button>
+  return (
+    <div className="box form product-steps" ref={top}>
+      {header}
+      <ol className="step-bar" aria-label="등록 단계">
+        {/* 지나온 단계: 꼭 적을 칸을 다 채웠으면 초록, 비어 있으면 빨강 (단계 표시로 건너뛴 경우) */}
+        {STEPS.map(([k, label], i) => (
+          <li key={k} className={i === step ? 'on' : i < step ? (stepProblems(k).length ? 'need' : 'done') : ''}>
+            <button type="button" aria-current={i === step ? 'step' : undefined} onClick={() => goStep(i)}><span className="step-no">{i + 1}</span>{label}</button>
+          </li>
+        ))}
+      </ol>
+      <h4 className="step-title">{step + 1}. {title}</h4>
+      <p className="step-guide">{guide}</p>
+      {blocks[key]}
+      {last && (
+        <div className="preview step-review">
+          <strong>등록 내용 확인</strong>
+          <ul>
+            <li>품목: {item ? `${item.category} · ${item.name}` : <b className="red">아직 안 골랐어요</b>} {fix(0)}</li>
+            <li>상품 이름: {form.name || <b className="red">비어 있어요</b>} {fix(0)}</li>
+            <li>가격: {hasOptions ? `옵션 ${form.options.length}개` : form.price ? `${won(form.price)} · ${form.unit}` : <b className="red">비어 있어요</b>} · 재고 {hasOptions ? '옵션마다' : form.stock || '–'} {fix(1)}</li>
+            <li>사진: 대표 {image || photos.main ? '있음' : <b className="red">없음</b>} · 상세 {gallery.length + photos.list.length}장 {fix(3)}</li>
+            <li>소개: {form.summary ? '있음' : '없음'} · 태그 {form.tags.length}개 {fix(4)}</li>
+          </ul>
+        </div>
+      )}
+      {errorList}
+      <div className="actions step-actions">
+        {step > 0 && <button type="button" className="button ghost" onClick={() => goStep(step - 1)} disabled={saving}>← 이전</button>}
         <button type="button" className="button ghost" onClick={() => save('draft')} disabled={saving}>임시 저장</button>
-        {seller ? (
+        {last ? (
           <button type="button" className="button" onClick={() => save(product?.status === 'active' ? 'active' : 'pending')} disabled={saving}>
             {saving ? '저장 중…' : product?.status === 'active' ? '저장 (바로 반영)' : '판매 요청'}
           </button>
         ) : (
-          <button type="button" className="button" onClick={() => save('active')} disabled={saving}>{saving ? '저장 중…' : product?.status === 'pending' ? '승인하고 판매' : '저장하고 판매'}</button>
+          <button type="button" className="button" onClick={nextStep} disabled={saving}>다음 →</button>
         )}
+        <button type="button" className="link" onClick={onCancel} disabled={saving}>취소</button>
       </div>
     </div>
   )

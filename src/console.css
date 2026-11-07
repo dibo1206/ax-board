@@ -138,3 +138,28 @@ button.stat-tile:hover { border-color: var(--accent); transform: translateY(-1px
 
 /* 상품 등록 폼: 고시 칸 */
 .notice-fields.is-empty { color: var(--muted); }
+
+/* 판매자 상품 등록: 단계별 화면 (src/admin/ProductForm.jsx, mode="seller") */
+.step-bar { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; padding: 0; }
+.step-bar li { margin: 0; }
+.step-bar button { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; font: inherit; font-size: 0.9rem; font-weight: 600; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; }
+.step-bar .step-no { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--c-gray-bg); color: var(--c-gray); font-size: 0.8rem; font-weight: 700; }
+.step-bar li.done button { color: var(--text); }
+.step-bar li.done .step-no { background: var(--c-green-bg); color: var(--c-green); }
+.step-bar li.need button { color: var(--c-red); border-color: var(--c-red); }
+.step-bar li.need .step-no { background: var(--c-red-bg); color: var(--c-red); }
+.step-bar li.on button { color: #fff; background: var(--accent); border-color: var(--accent); }
+.step-bar li.on .step-no { background: #fff; color: var(--accent); }
+.product-steps .step-title { margin: 10px 0 0; font-size: 1.3rem; }
+.product-steps .step-guide { margin: 0 0 4px; color: var(--muted); }
+.product-steps label { font-size: 0.95rem; }
+.product-steps input, .product-steps select, .product-steps textarea { padding: 10px 12px; }
+.step-review ul { margin: 8px 0 0; padding-left: 18px; }
+.step-review li { margin: 6px 0; }
+.step-review .red { color: var(--c-red); }
+.step-actions { position: sticky; bottom: 0; z-index: 2; margin-top: 6px; padding: 12px 0 4px; background: var(--surface); border-top: 1px solid var(--border); align-items: center; }
+
+/* 판매자 화면 글씨 크게 (머리의 [가 글씨 크게]). 화면 전체를 같은 비율로 키운다 */
+.seller-big { zoom: 1.18; }
+.console .admin-head .text-size { padding: 5px 12px; font: inherit; font-size: 0.85rem; font-weight: 700; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; }
+.console .admin-head .text-size[aria-pressed='true'] { color: #fff; background: var(--accent); border-color: var(--accent); }
