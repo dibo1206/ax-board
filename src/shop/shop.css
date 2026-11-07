@@ -571,8 +571,7 @@
 
 /* 히어로: 예전의 따뜻하고 가벼운 분위기로 — 흰 그라데이션은 원래 값(옅게, 슬라이드 설정대로)으로 되돌리고,
    읽기 쉽게 하는 건 소개 문구의 크기·굵기와 따뜻한 짙은 갈색 글자색으로 맡긴다 */
-.shop .hero-text .lead { font-size: 18.5px; line-height: 30px; font-weight: 500; color: #2b2118; }
-@media (min-width: 861px) { .shop .hero-text .lead { font-size: 20.6px; line-height: 33.8px; } }
+.shop .hero-text .lead { color: #2b2118; }
 
 /* 히어로 흰 그라데이션: 원래 값(0.88·0.72·58%까지)과 진하게 했던 값(0.94·0.84·66%까지)의 중간. 모든 슬라이드에 적용 */
 .shop .hero-scrim { opacity: 1; background: linear-gradient(to right, rgb(246 245 242 / 0.91) 0%, rgb(246 245 242 / 0.78) 33%, rgb(246 245 242 / 0) 62%); }
@@ -585,9 +584,7 @@
 /* 히어로 글씨 주변의 흰 후광(아우라) 제거 */
 .shop .hero-text .lead, .shop .hero-text .eyebrow, .shop .hero-text .display { text-shadow: none; }
 
-/* 히어로 큰 제목 "이번 달, 식탁에 올릴 과일": 조금 키움 (PC 1.2배 → 1.35배, 모바일 1.12배) */
-@media (min-width: 861px) { .shop .hero-text .display { font-size: calc(var(--hf) * 1.35); } }
-@media (max-width: 860px) { .shop .hero-text .display { font-size: calc(round(clamp(24px, min(2.88vw, calc(3.68vh + max(0px, 80vh - 880px) * 0.12)), 52px), 2.5px) * 1.12); } }
+/* 히어로 큰 제목·소개 문구 크기는 main 원래 크기를 그대로 쓴다 */
 
 /* 헤더 오른쪽 "로그인"(로그인 후에는 "○○님") 글씨 키움 */
 .shop .site-tools a:not(.tool-search):not(.icon-link) { font-size: 17px; }
@@ -694,6 +691,8 @@
 /* 예약 판매 표시는 글이 길어 동그라미 대신 원래 모양 */
 .shop .pcard-flag.preorder { display: block; width: auto; height: auto; padding: 3px 9px; border-radius: 3px; font-size: 12px; line-height: 16px; box-shadow: none; }
 
-/* "수확 ○일째": 사진 위 알약 대신 사진 아래 글자로 (별점 줄 앞) */
-.shop .pcard-harvest { color: var(--muted); font-size: 14.5px; }
-.shop .pcard-harvest + .rating::before { content: "·"; margin-right: 6px; color: var(--muted); }
+
+/* 수확 ○일째: 당도·제철처럼 사진 위 동그라미 (위에 "수확", 아래에 "N일째") */
+.shop .ptag.ptag-harvest { display: inline-grid; align-content: center; justify-items: center; gap: 0; width: 52.5px; height: 52.5px; padding: 0; border-radius: 50%; background: #3b8f8c; color: #fff; line-height: 1.1; text-align: center; box-shadow: 0 1px 4px rgb(0 0 0 / 0.2); }
+.shop .ptag-harvest small { font-size: 12px; font-weight: 500; opacity: 0.95; }
+.shop .ptag-harvest b { font-size: 14.5px; font-weight: 700; letter-spacing: -0.3px; }
