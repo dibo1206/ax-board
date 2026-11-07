@@ -6,6 +6,17 @@ import { EMAIL_DOMAINS, emailProblem, passwordRules } from './rules.js'
 
 export const Req = () => <em className="req" title="필수">*</em>
 
+// 약관 '모두 동의': 누르면 아래 필수 동의(이용약관·개인정보)를 한 번에 켜고 끈다. 둘 다 켜져 있으면 함께 켜진 것으로 보인다 (2026-11-07 피드백)
+export function AgreeAll({ form, setForm }) {
+  const all = form.agreeTerms && form.agreePrivacy
+  return (
+    <label className="check agree-all">
+      <input type="checkbox" checked={all} onChange={(e) => setForm((prev) => ({ ...prev, agreeTerms: e.target.checked, agreePrivacy: e.target.checked }))} />
+      <strong>약관에 모두 동의해요</strong> <span className="muted">(아래 필수 항목 전체)</span>
+    </label>
+  )
+}
+
 // 이메일: 아이디 칸 + @ + 자주 쓰는 주소 고르기(직접 입력도). onChange 로 'id@domain' 을 넘긴다
 export function EmailField({ id, value, onChange, show, label = '이메일', note }) {
   const [local, setLocal] = useState(() => value.split('@')[0] ?? '')

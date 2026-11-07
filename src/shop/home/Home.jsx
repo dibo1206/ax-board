@@ -117,6 +117,9 @@ function QuickCart({ p, onOpen }) {
   )
 }
 
+// 농산물 표준규격 등급 이름 (server/brix.js: 특 이상 = 3, 상 이상 = 2)
+const GRADE = { 3: '특', 2: '상' }
+
 // 옵션 상품(5kg·10kg …)은 판매 중 옵션의 가장 낮은 가격을 "~부터"로, 100g당 가격도 그 옵션으로. 모든 옵션이 품절이면 품절
 function ProductCard({ p, onOpen }) {
   const cheapest = cheapestOption(p)
@@ -129,12 +132,13 @@ function ProductCard({ p, onOpen }) {
             ? <img src={thumbUrl(p.image_url)} alt="" loading="lazy" width="400" height="400" />
             : <span className="photo-need"><span>사진 준비 중</span></span>}
           <span className="pcard-tags">
-            {/* 등급은 품목·품종별 공식 기준으로 서버가 정한다. 기준이 없거나 보통 당도면 측정값만. 동그라미에는 숫자만 넣고, 등급은 마우스 올림·스크린리더 글로 알린다 */}
-            {p.show_brix && p.brix && !p.info_disputed && (
-              <span className={`ptag ptag-brix ${p.brix_rank === 3 ? 'brix-high' : p.brix_rank === 2 ? 'brix-mid' : ''}`}
-                title={p.brix_rank >= 2 ? `${p.brix_grade} ${Number(p.brix)}°Bx` : `당도 ${Number(p.brix)}°Bx`}
-                aria-label={p.brix_rank >= 2 ? `${p.brix_grade} ${Number(p.brix)}°Bx` : `당도 ${Number(p.brix)}°Bx`}>
-                <small aria-hidden="true">당도</small><b aria-hidden="true">{Number(p.brix)}</b>
+            {/* 동그라미에는 당도 숫자 대신 농산물 표준규격 등급(특·상)을 쓴다 (2026-11-07 피드백). 서버가 품목·품종별 공식 기준으로 정하고,
+                판매자가 고를 수 없다. 보통 등급이거나 공식 기준이 없는 품목은 동그라미를 달지 않는다. 측정값은 마우스 올림·상세 화면에서 */}
+            {p.show_brix && p.brix && !p.info_disputed && p.brix_rank >= 2 && (
+              <span className={`ptag ptag-brix ${p.brix_rank === 3 ? 'brix-high' : 'brix-mid'}`}
+                title={`${GRADE[p.brix_rank]} 등급 · 당도 ${Number(p.brix)}°Bx (농산물 표준규격)`}
+                aria-label={`${GRADE[p.brix_rank]} 등급, 당도 ${Number(p.brix)}°Bx`}>
+                <small aria-hidden="true">등급</small><b aria-hidden="true">{GRADE[p.brix_rank]}</b>
               </span>
             )}
             {p.harvest_days != null && p.harvest_days <= 30 && (
@@ -160,17 +164,13 @@ function ProductCard({ p, onOpen }) {
   )
 }
 
-// 상품: 카테고리 탭(노란 밑줄) + 오른쪽 상품 검색 + 정렬 + 카드 + 더 보기
-export function ProductSection({ groups, loc, typed, setTyped, list, sorts, onChange, onOpen, onMore, loadingMore }) {
+// 상품: 카테고리 탭(노란 밑줄) + 정렬 + 카드 + 더 보기. 검색은 위쪽 헤더 검색 하나로만 한다 (2026-11-07 피드백: 상품 옆 검색칸 삭제)
+export function ProductSection({ groups, loc, list, sorts, onChange, onOpen, onMore, loadingMore }) {
   const tabs = [{ key: 'all', name: '전체' }, ...(groups ?? [])]
   return (
     <section id="products" className="wrap section" aria-labelledby="products-title">
       <div className="products-head">
         <h2 id="products-title" className="display-sm">상품</h2>
-        <form className="underline-search" role="search" onSubmit={(e) => { e.preventDefault(); onChange({ q: typed.trim() }) }}>
-          <label htmlFor="product-search">상품 검색</label>
-          <input id="product-search" type="search" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="사과, 농축액…" maxLength={50} />
-        </form>
       </div>
       <div className="products-bar">
         <nav className="text-tabs" aria-label="카테고리">
@@ -178,19 +178,23 @@ export function ProductSection({ groups, loc, typed, setTyped, list, sorts, onCh
             <button key={t.key} type="button" className={t.key === loc.cat ? 'on' : ''} aria-pressed={t.key === loc.cat} onClick={() => onChange({ cat: t.key })}>{t.name}</button>
           ))}
         </nav>
-        <label className="brix-filter"><input type="checkbox" checked={loc.brix === 'high'} onChange={(e) => onChange({ brix: e.target.checked ? 'high' : '' })} /> 높은 당도 이상</label>
         <select className="sort" value={loc.sort} onChange={(e) => onChange({ sort: e.target.value })} aria-label="정렬">
           {sorts.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select>
       </div>
       {!list ? <p className="muted">불러오는 중…</p> : list.total === 0 ? (
         <div className="empty">
-          <p>{loc.q ? `'${loc.q}'에 맞는 상품이 없습니다.` : '조건에 맞는 상품이 없습니다.'}</p>
+          <p>{loc.q ? `'${loc.q}'에 맞는 상품이 없습니다.` : '조건에 맞는 상품이 없습니다.'}{loc.q && <> <button type="button" className="link-btn" onClick={() => onChange({ q: '' })}>검색어 지우기</button></>}</p>
           <p className="muted">다른 말로 찾아보거나, 오른쪽 아래 상담하기에 원하는 걸 말해 보세요. (예: 부모님 선물로 달달한 거)</p>
         </div>
       ) : (
         <>
-          {loc.q && <p className="muted result-count">{list.loose ? `'${loc.q}'와 딱 맞는 상품이 없어 비슷한 상품 ${list.total}개를 보여 드려요` : `'${loc.q}' 검색 결과 ${list.total}개`}</p>}
+          {loc.q && (
+            <p className="muted result-count">
+              {list.loose ? `'${loc.q}'와 딱 맞는 상품이 없어 비슷한 상품 ${list.total}개를 보여 드려요` : `'${loc.q}' 검색 결과 ${list.total}개`}
+              {' '}<button type="button" className="link-btn" onClick={() => onChange({ q: '' })}>검색어 지우기 ×</button>
+            </p>
+          )}
           <ul className="pgrid">
             {list.items.map((p) => <li key={p.product_code}><ProductCard p={p} onOpen={onOpen} /></li>)}
           </ul>
@@ -207,7 +211,7 @@ export function ProductSection({ groups, loc, typed, setTyped, list, sorts, onCh
 
 // 제철 달력 (사진 카드형): 달 띠에서 달을 고르면 그 달 제철 품목을 실제 상품 사진 카드로 보여 준다.
 // 카드: 대표 사진 · 막 나왔어요/지금 한창/끝물 · 가장 싼 값 · 상품 수 · 열두 달 제철 막대. 누르면 그 품목 상품을 찾는다.
-// 아래 줄에는 다음 달에 새로 나오는 품목. 달 띠는 옆으로 넘기고, 화살표·좌우 키로도 바꾼다
+// 카드 순서는 content.js 목록 순서(인기 많은 품목부터). 달 띠는 옆으로 넘기고, 화살표·좌우 키로도 바꾼다
 const SEASON_NAME = (m) => (m <= 2 || m === 12 ? 'winter' : m <= 5 ? 'spring' : m <= 8 ? 'summer' : 'autumn')
 const SEASON_LABEL = { spring: '봄', summer: '여름', autumn: '가을', winter: '겨울' }
 const nextMonth = (m) => (m === 12 ? 1 : m + 1)
@@ -271,13 +275,10 @@ export function SeasonCalendar({ onPick }) {
     firstScroll.current = false
   }, [month])
 
-  // 판매 중인 상품이 있는 품목만, 한창인 것 → 막 나온 것 → 끝물 순서
-  const order = { peak: 0, new: 1, only: 1, last: 2 }
+  // 판매 중인 상품이 있는 품목만, 인기 많은 품목부터 (content.js 목록 순서 그대로)
   const picked = SEASON.items
     .map((item) => ({ item, stage: seasonStage(item.months, month), data: info[term(item)] }))
     .filter((x) => x.stage && (!x.data || x.data.products > 0))
-    .sort((a, b) => order[a.stage.key] - order[b.stage.key])
-  const coming = SEASON.items.filter((item) => item.months.includes(nextMonth(month)) && !item.months.includes(month))
   const season = SEASON_NAME(month)
 
   return (
@@ -342,12 +343,6 @@ export function SeasonCalendar({ onPick }) {
           </div>
         ) : <p className="muted season2-empty">이 달에 제철로 표시한 품목이 없어요. 다른 달을 골라 보세요.</p>}
 
-        {coming.length > 0 && (
-          <p className="season2-coming">
-            <span>{nextMonth(month)}월에 새로 나와요</span>
-            {coming.map((item) => <button key={item.name} type="button" onClick={() => setMonth(nextMonth(month))}>{item.name}</button>)}
-          </p>
-        )}
         <p className="note">{SEASON.note}</p>
       </div>
     </section>

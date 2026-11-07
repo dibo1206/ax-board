@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import './shop.css'
+import { clearChat } from '../chatStore.js'
 import { BRAND } from './home/content.js'
-import { cartCount, get, getAccount, getPolicy, post, thumbUrl, won } from './shared.js'
+import { cartCount, get, getAccount, getPolicy, post, readCart, thumbUrl, won } from './shared.js'
 
 // 손님 화면 공통 틀 (디자인 시안): 위쪽 YOONJU MARKET · 가운데 메뉴 · 오른쪽 검색·로그인·장바구니, 아래쪽 회사 정보·약관
 const MENU = [['상품', 'products'], ['제철 달력', 'season'], ['이야기', 'story'], ['문의·FAQ', 'faq']]
@@ -13,7 +14,6 @@ function goSection(e, id) {
   if (!onHome()) return
   e.preventDefault()
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  if (id === 'products') setTimeout(() => document.getElementById('product-search')?.focus({ preventScroll: true }), 400)
 }
 
 function openQuiz(e) {
@@ -48,6 +48,7 @@ export function ShopLayout({ children }) {
 
   async function logout() {
     await post('/account/logout', {}).catch(() => {})
+    clearChat()
     window.dispatchEvent(new Event('account-change'))
     window.location.href = '/'
   }
@@ -233,13 +234,39 @@ function HeaderSearch() {
 
 // 어디서 장바구니에 담든(상세·첫 화면 상품 카드·추천) 화면 아래에 "장바구니에 담겼어요" 알림을 잠깐 띄운다.
 // addToCart 가 보내는 'cart-added' 신호를 받는다. 알림 칸은 늘 두고 글만 바꿔서 화면 낭독기도 읽어 준다
-const TOAST_MS = 3000
+const TOAST_MS = 4000
+
+// 담은 상품의 농가 기준으로 무료 배송까지 남은 금액 (배송비는 농가마다 따로라 서버·장바구니와 같은 규칙)
+async function shippingNote(productCode) {
+  const [list, policy] = await Promise.all([get('/products'), getPolicy()])
+  const products = Object.fromEntries(list.map((p) => [p.product_code, p]))
+  const seller = products[productCode]?.seller_code
+  if (!seller || !policy?.shipping?.freeOver) return null
+  const lines = readCart().map((l) => ({ ...l, p: products[l.productCode] })).filter((l) => l.p)
+  const farmAmount = lines.filter((l) => l.p.seller_code === seller).reduce((sum, l) => {
+    const option = l.optionId ? l.p.options.find((o) => o.id === l.optionId) : null
+    return sum + (l.p.has_options ? (option?.price ?? 0) : l.p.price) * l.quantity
+  }, 0)
+  const manyFarms = new Set(lines.map((l) => l.p.seller_code)).size > 1
+  const farm = manyFarms ? `${products[productCode].seller_name.replace(/\[예시\]\s*/g, '')} 상품 ` : ''
+  const left = policy.shipping.freeOver - farmAmount
+  return left > 0
+    ? { done: false, text: `${won(left)} 더 담으면 ${farm}무료 배송이에요 (${won(policy.shipping.freeOver)} 이상)` }
+    : { done: true, text: `이제 ${farm}무료 배송이에요` }
+}
 
 function CartToast() {
   const [toast, setToast] = useState(null)
 
   useEffect(() => {
-    const show = (e) => setToast({ ...e.detail, at: Date.now() })
+    const show = (e) => {
+      const at = Date.now()
+      setToast({ ...e.detail, at })
+      if (!e.detail?.productCode) return
+      shippingNote(e.detail.productCode)
+        .then((note) => setToast((prev) => (prev?.at === at ? { ...prev, note } : prev)))
+        .catch(() => {}) // 금액을 못 불러와도 '담겼어요' 알림은 그대로
+    }
     window.addEventListener('cart-added', show)
     return () => window.removeEventListener('cart-added', show)
   }, [])
@@ -258,6 +285,7 @@ function CartToast() {
           <span className="cart-toast-text">
             <b>장바구니에 담겼어요</b>
             {toast.name && <span className="cart-toast-name">{toast.name}{toast.quantity > 1 ? ` · ${toast.quantity}개` : ''}</span>}
+            {toast.note && <span className={`cart-toast-ship${toast.note.done ? ' done' : ''}`}>{toast.note.text}</span>}
           </span>
           <a href="/cart">장바구니 보기</a>
         </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { AgreeAll } from '../account/fields.jsx'
 import { Totals } from './Cart.jsx'
 import { getAccount, loadScript, MAX_QTY, optionLabel, post, preorderNote, readCart, savePending, won } from './shared.js'
 import { useCartLines } from './useCartLines.js'
@@ -152,7 +153,7 @@ export function Checkout() {
         ))}</ul>
         {cart.ok.some((r) => r.product.preorder) && <p className="muted">예약 상품은 적힌 날부터 보내고, 같은 농가의 다른 상품도 그때 함께 보내요. 보내기 전에는 [주문 조회]에서 취소할 수 있어요.</p>}
         {cart.rows.length > cart.ok.length && <p className="warn">품절·재고 부족 상품은 빠졌어요.</p>}
-        <Totals {...cart} />
+        <Totals {...cart} shopMore />
       </section>
       <section className="box form">
         <h3>주문하는 분</h3>
@@ -188,6 +189,7 @@ export function Checkout() {
         {account && <label className="check"><input type="checkbox" checked={form.saveAddress} onChange={set('saveAddress')} />이 주소를 기본 배송지로 저장</label>}
       </section>
       <section className="box form">
+        <AgreeAll form={form} setForm={setForm} />
         <label className="check"><input type="checkbox" checked={form.agreeTerms} onChange={set('agreeTerms')} />[필수] 주문 상품과 결제 금액을 확인했고, <a href="/policy/terms" target="_blank" rel="noreferrer">이용약관</a>·<a href="/policy/refund" target="_blank" rel="noreferrer">교환·환불 정책</a>에 동의해요</label>
         <label className="check"><input type="checkbox" checked={form.agreePrivacy} onChange={set('agreePrivacy')} />[필수] 배송을 위한 <a href="/policy/privacy" target="_blank" rel="noreferrer">개인정보 수집·이용</a>에 동의해요 (이름·휴대폰·주소, 법에 따라 5년 보관)</label>
       </section>

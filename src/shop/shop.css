@@ -120,13 +120,9 @@
 .shop .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
 /* 이달의 상품 */
-.shop .products-head { display: flex; justify-content: flex-start; align-items: flex-end; gap: 24px 56px; flex-wrap: wrap; } /* 제목 바로 옆에 검색칸 */
-.shop .underline-search { display: flex; flex-direction: column; gap: 6px; width: min(340px, 100%); }
-/* 'placeholder'가 안내를 하므로 라벨은 화면에서만 숨기고(스크린리더는 읽음), 제목이 위로 올라오게 한다 */
-.shop .underline-search label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.shop .products-head { display: flex; justify-content: flex-start; align-items: flex-end; gap: 24px 56px; flex-wrap: wrap; }
 .shop #products { padding-top: 24px; }
-.shop .underline-search input { padding: 10px 0; border: none; border-bottom: 1.5px solid var(--line); border-radius: 0; background: transparent; font: inherit; font-size: 17px; color: var(--text); }
-.shop .underline-search input:focus { outline: none; border-bottom-color: var(--gold); }
+.shop .result-count .link-btn, .shop .empty .link-btn { padding: 0; border: 0; background: none; font: inherit; color: var(--text); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .shop .products-bar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin: 23px 0 13px; }
 .shop .text-tabs { display: flex; gap: round(clamp(16px, 2.4vw, 34px), 1px); flex-wrap: wrap; }
 .shop .text-tabs button { padding: 6px 0; border: none; border-bottom: 3px solid transparent; background: none; font: inherit; font-size: 15px; color: var(--muted); cursor: pointer; }
@@ -239,6 +235,8 @@
 .shop .cart-toast-text b { font-size: 15px; font-weight: 600; }
 .shop .cart-toast-name { font-size: 13px; color: #d8e2d6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shop .cart-toast a { flex: none; margin-left: 4px; color: #f2d77c; font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.shop .cart-toast-ship { font-size: 13px; font-weight: 600; color: #f2d77c; }
+.shop .cart-toast-ship.done { color: #9fe0a8; }
 @keyframes cart-toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .shop .cart-toast { animation: none; } }
 @media (max-width: 640px) { .shop .cart-toast-zone { bottom: 92px; } .shop .cart-toast { border-radius: 14px; width: 100%; } }
@@ -517,7 +515,6 @@
 .shop .brix-grade { padding: 2px 8px; border-radius: 4px; color: #fff; background: #5f6b5c; font-size: 0.85em; font-weight: 600; }
 .shop .brix-grade.rank-2 { background: #37833f; }
 .shop .brix-grade.rank-3 { background: #d9691c; }
-.shop .brix-filter { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 14px; white-space: nowrap; }
 .shop .pcard-tags { flex-wrap: wrap; }
 /* 1분 사용 안내와 상품 주소 공유 */
 .shop .guide { display: grid; gap: 14px; max-width: 720px; }
@@ -884,10 +881,6 @@
 .shop .s2-foot b { color: var(--text); font-size: 16px; font-weight: 700; }
 .shop .season2-empty { margin: 0; }
 
-.shop .season2-coming { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; padding: 14px 16px; border: 1px dashed var(--border); border-radius: 14px; background: rgb(255 255 255 / 0.6); font-size: 14px; }
-.shop .season2-coming span { margin-right: 4px; color: var(--muted); font-weight: 600; }
-.shop .season2-coming button { padding: 5px 12px; border: 1px solid var(--border); border-radius: 999px; background: #fff; color: var(--text); font: inherit; font-size: 14px; cursor: pointer; }
-.shop .season2-coming button:hover { border-color: var(--accent); color: var(--accent); }
 
 @media (max-width: 640px) {
   .shop .season2-head { align-items: center; }
@@ -904,3 +897,59 @@
 }
 .shop .season2-strip { position: relative; }
 @media (prefers-reduced-motion: reduce) { .shop .season2-card, .shop .s2-photo img, .shop .season2-strip button { transition: none; } }
+
+/* ---------- 마이페이지 (2026-11-07 피드백): 인사 카드 · 아이콘 탭 · 주문 카드 ----------
+   전에는 관리자 화면 모양(admin-head·tabs)을 빌려 써서, 29px 제목이 줄 높이 24px 안에 들어가지 못해 탭 버튼과 겹쳤다 */
+.shop .mypage { display: grid; gap: 18px; }
+.shop .my-hero { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 26px 28px; background: linear-gradient(135deg, #e9f1e5 0%, var(--surface) 70%); border: 1px solid var(--border); border-radius: 18px; }
+.shop .my-hero h2 { margin: 2px 0 6px; font-size: round(clamp(22px, 2.4vw, 28px), 1px); line-height: 1.3; letter-spacing: -0.5px; }
+.shop .my-hello { margin: 0; color: var(--accent); font-size: 14px; font-weight: 600; line-height: 1.4; }
+.shop .my-email { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+.shop .my-logout { flex: none; padding: 8px 16px; border: 1px solid var(--border); border-radius: 999px; background: #fff; font: inherit; font-size: 14px; line-height: 1.4; color: var(--muted); cursor: pointer; }
+.shop .my-logout:hover { border-color: var(--line); color: var(--text); }
+.shop .my-tabs { display: grid; grid-template-columns: repeat(4, 1fr); overflow: hidden; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; }
+.shop .my-tabs button { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 6px 11px; border: 0; border-bottom: 3px solid transparent; background: none; font: inherit; font-size: 14.5px; line-height: 1.3; color: var(--muted); cursor: pointer; }
+.shop .my-tabs button + button { border-left: 1px solid var(--border); }
+.shop .my-tabs button:hover:not(.on) { background: #fff; color: var(--text); }
+.shop .my-tabs button.on { background: #fff; color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+.shop .my-tabs svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.shop .my-tabs .new-dot { position: absolute; top: 8px; left: calc(50% + 8px); margin: 0; }
+.shop .mypage .box { margin: 0 0 12px; padding: 20px 24px; border: 1px solid var(--border); border-radius: 16px; }
+.shop .mypage .box h3 { margin: 4px 0 2px; line-height: 1.4; }
+.shop .mypage .form .zip-row { align-items: end; }
+.shop .mypage .form .zip-row .button { justify-self: start; }
+.shop .my-orders, .shop .mypage .my-questions { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.shop .my-order { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 16px; width: 100%; padding: 18px 22px; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; font: inherit; color: var(--text); cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.shop .my-order:hover { border-color: var(--accent); background: #fff; }
+.shop .my-order-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; color: var(--muted); font-size: 13px; line-height: 1.4; }
+.shop .my-order-no { font-variant-numeric: tabular-nums; }
+.shop .my-order-sum { grid-column: 1; font-size: 16px; font-weight: 600; line-height: 1.4; }
+.shop .my-order-amt { grid-column: 2; grid-row: 1 / span 2; font-size: 17px; font-weight: 700; white-space: nowrap; }
+.shop .my-order-amt span { margin-left: 4px; color: var(--muted); font-weight: 400; }
+.shop .my-status { padding: 2px 10px; border-radius: 999px; background: #e3eee0; color: var(--accent); font-size: 12px; font-weight: 700; }
+.shop .my-status.st-shipping, .shop .my-status.st-preparing { background: #fdf1d6; color: #8a5a00; }
+.shop .my-status.st-cancelled, .shop .my-status.st-failed, .shop .my-status.st-expired, .shop .my-status.st-pending { background: #ecebe7; color: var(--muted); }
+.shop .my-empty { display: grid; justify-items: center; gap: 10px; padding: 48px 20px; text-align: center; background: var(--surface); border: 1px dashed var(--border); border-radius: 16px; }
+.shop .my-empty p { margin: 0; color: var(--muted); }
+.shop .my-empty svg { width: 44px; height: 44px; fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.shop .my-go { padding: 10px 22px; border-radius: 999px; background: var(--accent); color: #fff; font-weight: 700; text-decoration: none; }
+.shop .my-go:hover { filter: brightness(1.08); }
+@media (max-width: 560px) {
+  .shop .my-hero { padding: 20px; align-items: flex-start; }
+  .shop .my-tabs button { padding: 12px 2px 9px; font-size: 12.5px; }
+  .shop .my-order { grid-template-columns: 1fr; padding: 16px 18px; }
+  .shop .my-order-amt { grid-column: 1; grid-row: auto; }
+  .shop .mypage .box { padding: 16px 18px; }
+}
+
+/* 주문서·장바구니: 무료 배송 안내 밑 초록 [계속 쇼핑하기] (2026-11-07 피드백) */
+.shop .free-more { display: block; margin-top: 10px; padding: 12px 16px; border-radius: 12px; background: var(--accent); color: #fff; font-weight: 700; text-align: center; text-decoration: none; }
+.shop .free-more:hover { filter: brightness(1.08); }
+/* 약관 모두 동의: 개별 동의 위에 굵게, 아래와 선으로 나눈다 */
+.shop .form label.agree-all, .form label.agree-all { padding-bottom: 10px; margin-bottom: 2px; border-bottom: 1px solid var(--border); }
+.form label.agree-all strong { font-weight: 700; }
+/* 휴대폰 헤더: 로고 칸(남은 너비)보다 로고 그림(140px)이 커서 검색 버튼 밑으로 들어가던 것 → 칸에 맞춰 줄인다 */
+@media (max-width: 560px) {
+  .shop .site-head-inner .logo { min-width: 0; max-width: 100%; }
+  .shop .site-head .logo img { width: 100%; max-width: 140px; height: auto; }
+}

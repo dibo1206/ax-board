@@ -34,30 +34,35 @@ export const GROUP_PHOTOS = {
 export const SEASON = {
   photo: { src: '/home/season.webp', alt: '나무 접시에 담은 성환 배', need: 'home/season.webp (세로형 정물 사진)' },
   // 판매 중인 품목의 제철 달 (search: 상품을 찾을 때 쓸 말, 없으면 name)
+  // 목록 순서 = 제철 달력에 보여 주는 순서 (인기 많은 품목부터, 2026-11-07 피드백).
+  // [가설] 손님이 많이 찾는 과일을 먼저, 일 년 내내 사는 채소는 뒤에 둔 순서다. 판매 기록이 쌓이면 실제 판매량 순서로 바꾸기
   items: [
-    { name: '사과', months: [9, 10, 11, 12] },
-    { name: '배', search: '신고배', months: [9, 10, 11] },
-    { name: '단감', months: [10, 11] },
-    { name: '감귤', months: [11, 12, 1, 2] },
+    // 과일
     { name: '딸기', months: [12, 1, 2, 3, 4] },
-    { name: '곶감', months: [12, 1, 2] },
+    { name: '감귤', months: [11, 12, 1, 2] },
     { name: '키위', months: [11, 12, 1, 2, 3] },
+    { name: '사과', months: [9, 10, 11, 12] },
     { name: '샤인머스캣', months: [8, 9, 10] },
     { name: '복숭아', months: [7, 8] },
+    { name: '배', search: '신고배', months: [9, 10, 11] },
+    { name: '단감', months: [10, 11] },
+    { name: '곶감', months: [12, 1, 2] },
+    { name: '유자', months: [11, 12] },
+    { name: '매실', months: [6] },
+    // 고구마·감자
     { name: '고구마', months: [9, 10, 11] },
     { name: '감자', months: [6, 7, 8] },
-    { name: '가을무', search: '가을무', months: [10, 11, 12] },
-    { name: '배추', months: [10, 11, 12] },
+    // 김장·채소 (제철은 있지만 저장·다른 산지 덕에 일 년 내내 나와서 뒤로)
     { name: '절임배추', months: [11, 12] },
+    { name: '배추', months: [10, 11, 12] },
+    { name: '가을무', search: '가을무', months: [10, 11, 12] },
     { name: '대파', months: [11, 12, 1, 2] },
-    { name: '마늘', months: [5, 6] },
-    { name: '양파', months: [5, 6] },
     { name: '당근', months: [11, 12, 1, 2, 3] },
+    { name: '양파', months: [5, 6] },
+    { name: '마늘', months: [5, 6] },
     { name: '브로콜리', months: [11, 12, 1, 2, 3] },
     { name: '표고버섯', months: [3, 4, 5, 9, 10, 11] },
     { name: '햇고춧가루', search: '고춧가루', months: [8, 9, 10] },
-    { name: '유자', months: [11, 12] },
-    { name: '매실', months: [6] },
   ],
   note: '※ 제철 시기는 일반적인 국내 출하 시기를 참고한 [예시]예요. 지역·해마다 다를 수 있어 실제 출하 시기가 정해지면 바꿔요.',
 }

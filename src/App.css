@@ -96,6 +96,8 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .chat-open { position: fixed; right: 16px; bottom: 16px; padding: 12px 18px; border: none; border-radius: 999px; background: var(--accent); color: #fff; font: inherit; font-weight: 700; box-shadow: 0 4px 14px rgb(0 0 0 / 0.2); cursor: pointer; }
 .chat { position: fixed; right: 16px; bottom: 16px; width: min(380px, calc(100vw - 32px)); height: min(560px, calc(100vh - 32px)); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 8px 28px rgb(0 0 0 / 0.25); overflow: hidden; }
 .chat header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.chat header { gap: 14px; }
+.chat header strong { margin-right: auto; } /* 제목은 왼쪽, [대화 지우기]·[닫기]는 오른쪽 */
 .chat-log { flex: 1; list-style: none; margin: 0; padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
 .bubble { max-width: 88%; padding: 8px 12px; border-radius: 12px; background: var(--bg); font-size: 0.92rem; }
 .bubble p { margin: 0; white-space: pre-wrap; }
