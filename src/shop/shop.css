@@ -693,3 +693,7 @@
 
 /* 예약 판매 표시는 글이 길어 동그라미 대신 원래 모양 */
 .shop .pcard-flag.preorder { display: block; width: auto; height: auto; padding: 3px 9px; border-radius: 3px; font-size: 12px; line-height: 16px; box-shadow: none; }
+
+/* "수확 ○일째": 사진 위 알약 대신 사진 아래 글자로 (별점 줄 앞) */
+.shop .pcard-harvest { color: var(--muted); font-size: 14.5px; }
+.shop .pcard-harvest + .rating::before { content: "·"; margin-right: 6px; color: var(--muted); }

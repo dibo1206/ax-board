@@ -137,7 +137,6 @@ function ProductCard({ p, onOpen }) {
                 <small aria-hidden="true">당도</small><b aria-hidden="true">{Number(p.brix)}</b>
               </span>
             )}
-            {p.harvest_days != null && p.harvest_days <= 30 && <span className="ptag">수확 {p.harvest_days}일째</span>}
             {p.tags?.includes('season') && <span className="ptag ptag-season">제철</span>}
           </span>
           {p.sold_out && <span className="pcard-flag">품절</span>}
@@ -150,6 +149,7 @@ function ProductCard({ p, onOpen }) {
           : <span className="pcard-price">{won(p.price)} <small>/ {p.unit}</small></span>}
         {unit && <span className="pcard-unit">{unit}{cheapest && p.options.length > 1 && ` (${cheapest.name})`}</span>}
         <span className="pcard-meta">
+          {p.harvest_days != null && p.harvest_days <= 30 && <span className="pcard-harvest">수확 {p.harvest_days}일째</span>}
           <RatingBadge rating={p.rating} count={p.review_count} />
         </span>
       </a>
