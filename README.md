@@ -40,7 +40,8 @@ B2B·B2C를 함께 하는 브랜드 자사몰. 상품을 등록하면 AI 상담�
 
 1. `npm run simulate-farms`: 농가 10곳·상품 100개의 가입 계획(`data/sample_farms.json`)을 만든다. 같은 씨앗이면 매번 같은 값이 나온다
 2. `npm run onboard-farms`: 계획대로 가입 신청, 관리자 승인, 농가 소개, 상품 등록과 검토 요청, 관리자 검토, 손님 문의와 농가 답변을 API로 한다 → [docs/farm_onboarding.md](docs/farm_onboarding.md). 처음부터 다시: `npm run onboard-farms -- --reset`
-3. 농가 계정 비밀번호는 서버의 `.farm-accounts.local.json`(본인만 읽기, 저장소에 올리지 않음)에 있다. CSV로 등록된 기존 농가 5곳에도 계정을 만들어 둔다
+3. `npm run attach-photos`: 사진이 없는 예시 상품에 `data/product_photos.csv`대로 `public/product-photos/` 사진을 붙인다. 사진은 Figma AI로 만든 시연용 이미지(40장, 같은 종류 상품은 1장을 함께 씀)라 실제 판매 전에 농가 실물 사진으로 바꾼다
+4. 농가 계정 비밀번호는 서버의 `.farm-accounts.local.json`(본인만 읽기, 저장소에 올리지 않음)에 있다. CSV로 등록된 기존 농가 5곳에도 계정을 만들어 둔다
 
 - **가격:** KAMIS 소매가격(`data/market_prices.csv`, 2026-11-05 서울)에 등급·포장·무게 할인을 곱한다. KAMIS에 없는 품목은 가정값이라고 적어 두었다
 - **재고·당도·수확일:** 출하량에서 판매 시작일부터 팔린 양을 빼고, 당도는 품종별 분포에서, 수확일은 실제 수확 철 안에서 뽑는다
@@ -128,6 +129,7 @@ npm run simulate-farms     # 예시 농가 10곳·상품 100개의 가입 계획
 npm run onboard-farms      # 계획대로 농가 가입·승인·상품 등록 (처음부터 다시: -- --reset)
 npm run sim-admin          # 관리자·농가 시뮬레이션 → docs/admin_simulation.md
 npm run live-sim           # 30분 실시간 운영 시뮬레이션 → docs/live_simulation.md
+npm run attach-photos      # 사진 없는 예시 상품에 시연용 사진 붙이기 (data/product_photos.csv)
 npm run create-admin -- farm_admin   # 관리자 계정 만들기 (비밀번호는 실행하면 물어봄, 10자 이상)
 npm run create-admin -- sunny_farm --seller farm_sunny   # 판매자(농가) 계정 — /seller 에서 로그인
 npm run admin-2fa -- farm_admin  # 2단계 인증(인증 앱) 등록 — 해제: -- 아이디 --off
