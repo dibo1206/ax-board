@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Quiz } from '../../Recommend.jsx'
 import { RatingBadge } from '../Reviews.jsx'
-import { cheapestOption, shipDay, thumbUrl, unitPrice, won } from '../shared.js'
+import { addToCart, cheapestOption, shipDay, thumbUrl, unitPrice, won } from '../shared.js'
 import { FAQ, GROUP_PHOTOS, HERO, SEASON, STORY } from './content.js'
 
 // 첫 화면 (디자인 시안): 큰 제목 → 카테고리 → 이달의 상품 → 제철 달력 → 이야기 → 자주 묻는 질문
@@ -94,6 +94,26 @@ export function CategoryRows({ groups, onPick }) {
 }
 
 // 옵션 상품(5kg·10kg …)은 판매 중 옵션의 가장 낮은 가격을 "~부터"로, 100g당 가격도 그 옵션으로. 모든 옵션이 품절이면 품절
+// 목록에서 바로 장바구니에 담기: 옵션 없는 상품은 1개를 바로 담고, 옵션 상품은 상세에서 옵션을 고르게 연다. 품절이면 버튼 없음
+function CardCart({ p, onOpen }) {
+  const [added, setAdded] = useState(false)
+  useEffect(() => {
+    if (!added) return undefined
+    const timer = setTimeout(() => setAdded(false), 1800)
+    return () => clearTimeout(timer)
+  }, [added])
+  if (p.sold_out) return null
+  if (p.has_options) {
+    return <button type="button" className="pcard-cart" onClick={() => onOpen(p.product_code)}>옵션 고르고 담기</button>
+  }
+  return (
+    <button type="button" className={`pcard-cart${added ? ' added' : ''}`} aria-live="polite"
+      onClick={() => { addToCart(p.product_code, 1, null); setAdded(true) }}>
+      {added ? '장바구니에 담았어요' : '장바구니 담기'}
+    </button>
+  )
+}
+
 function ProductCard({ p, onOpen }) {
   const cheapest = cheapestOption(p)
   const unit = cheapest ? unitPrice(cheapest.price, cheapest.name) : unitPrice(p.price, p.unit)
@@ -157,7 +177,7 @@ export function ProductSection({ groups, loc, typed, setTyped, list, sorts, onCh
         <>
           {loc.q && <p className="muted result-count">'{loc.q}' 검색 결과 {list.total}개</p>}
           <ul className="pgrid">
-            {list.items.map((p) => <li key={p.product_code}><ProductCard p={p} onOpen={onOpen} /></li>)}
+            {list.items.map((p) => <li key={p.product_code}><ProductCard p={p} onOpen={onOpen} /><CardCart p={p} onOpen={onOpen} /></li>)}
           </ul>
           {list.page < list.pages && (
             <button type="button" className="btn-line more" onClick={onMore} disabled={loadingMore}>
