@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
+import './console.css'
 import { Chat } from './Chat.jsx'
 import { B2bForm, QuestionForm } from './Inquiry.jsx'
 import { Related } from './Recommend.jsx'
@@ -336,23 +337,23 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
 function App() {
   if (window.location.pathname.startsWith('/seller')) {
     return (
-      <div className="app">
-        <header>
-          <h1>농가 판매 자사몰 · 판매자</h1>
-          <p className="notice">개발 중 · 농가 판매자 화면입니다. 내 농가 상품만 보여요. <a href="/">소비자 화면으로</a></p>
+      <div className="console">
+        <header className="console-bar">
+          <a className="brand-mark" href="/seller">YOONJU MARKET<small>판매자 센터</small></a>
+          <span className="bar-note">개발 중 · 내 농가 상품만 보여요 · <a href="/">쇼핑몰 보기</a></span>
         </header>
-        <Suspense fallback={loading}><Seller /></Suspense>
+        <main className="console-main"><Suspense fallback={loading}><Seller /></Suspense></main>
       </div>
     )
   }
   if (window.location.pathname.startsWith('/admin')) {
     return (
-      <div className="app">
-        <header>
-          <h1>농가 판매 자사몰 · 관리자</h1>
-          <p className="notice">개발 중 · 관리자 화면입니다. <a href="/">소비자 화면으로</a></p>
+      <div className="console">
+        <header className="console-bar">
+          <a className="brand-mark" href="/admin">YOONJU MARKET<small>관리자</small></a>
+          <span className="bar-note">개발 중 · <a href="/">쇼핑몰 보기</a></span>
         </header>
-        <Suspense fallback={loading}><Admin /></Suspense>
+        <main className="console-main"><Suspense fallback={loading}><Admin /></Suspense></main>
       </div>
     )
   }

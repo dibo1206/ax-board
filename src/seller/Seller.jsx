@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Login, StatusLabel } from '../admin/Admin.jsx'
+import { Login } from '../admin/Admin.jsx'
 import { adminApi, sellerApi } from '../admin/api.js'
 import { QuestionRow } from '../admin/Inbox.jsx'
 import { ProductForm } from '../admin/ProductForm.jsx'
 import { CourierList } from '../shop/CourierList.jsx'
 import { ORDER_STATUS, RETURN_STATUS, shipDay, when } from '../shop/shared.js'
+import { Chip, CountBadge, FilterChips, ProductStatus, ShipSteps, StatTile, StockChip, Thumb } from '../admin/ui.jsx'
 
 // 판매자(농가) 화면: 로그인 → [내 상품 | 상품 문의 | 주문 | 반품 | 농가 소개]. 모든 요청은 /api/seller (자기 농가 것만)
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
@@ -48,33 +49,59 @@ function MyProducts({ onMessage, onError }) {
       />
     )
   }
+  return <ProductCards products={products} onEdit={(p) => { setEditing(p); onMessage('') }} onNew={() => { setEditing('new'); onMessage('') }} onSoldOut={soldOut} />
+}
+
+const PRODUCT_FILTERS = [
+  ['all', '전체', () => true],
+  ['selling', '판매 중', (p) => p.status === 'active' && !p.sold_out],
+  ['review', '검토 대기', (p) => p.status === 'pending'],
+  ['rejected', '반려', (p) => p.status === 'draft' && p.review_note],
+  ['soldout', '품절', (p) => p.status === 'active' && p.sold_out],
+  ['draft', '임시 저장', (p) => p.status === 'draft' && !p.review_note],
+]
+
+function ProductCards({ products, onEdit, onNew, onSoldOut }) {
+  const [filter, setFilter] = useState('all')
+  const [q, setQ] = useState('')
+  const test = PRODUCT_FILTERS.find(([key]) => key === filter)?.[2] ?? (() => true)
+  const shown = products.filter(test).filter((p) => !q.trim() || `${p.name} ${p.item_name}`.includes(q.trim()))
   return (
     <>
+      <div className="toolbar">
+        <FilterChips value={filter} onChange={setFilter} items={PRODUCT_FILTERS.map(([key, label, f]) => ({ key, label, count: products.filter(f).length }))} />
+        <div className="actions">
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="상품 이름·품목 찾기" aria-label="상품 찾기" />
+          <button type="button" className="button" onClick={onNew}>+ 새 상품 등록</button>
+        </div>
+      </div>
       <p className="muted">새 상품은 [판매 요청]을 하면 자동으로 검사해요. 처음 상품 3개는 회사가 확인하고, 그 뒤로는 문제가 없으면 바로 판매돼요. 판매 중인 상품의 가격·재고 수정은 바로 반영돼요.</p>
-      <button type="button" className="button" onClick={() => { setEditing('new'); onMessage('') }}>새 상품 등록</button>
-      {products.length === 0 ? <p className="muted">아직 등록한 상품이 없어요.</p> : (
-        <table className="table">
-          <thead><tr><th>상품</th><th>가격</th><th>재고</th><th>상태</th><th></th></tr></thead>
-          <tbody>
-            {products.map((p) => (
-              <tr key={p.product_code} className={p.sold_out ? 'dim' : ''}>
-                <td>
-                  <strong>{p.name}</strong><br /><span className="muted">{p.category} · {p.item_name}</span>
-                  {p.status === 'draft' && p.review_note && <><br /><span className="warn">반려 사유: {p.review_note}</span></>}
-                  {p.status === 'pending' && p.review_reason && <><br /><span className="muted">회사 확인이 필요해요: {p.review_reason}</span></>}
-                </td>
-                <td>{won(p.price)}{p.options.length > 0 && '부터'}</td>
-                <td>{p.sold_out ? <span className="badge soldout">품절</span> : `${p.stock}개`}{p.options.length > 0 && <><br /><span className="muted">옵션 {p.options.length}개</span></>}</td>
-                <td><StatusLabel product={p} /></td>
-                <td className="row-actions">
-                  <button type="button" onClick={() => { setEditing(p); onMessage('') }}>수정</button>
+      {shown.length === 0 ? <p className="empty-state">{products.length ? '이 조건에 맞는 상품이 없어요.' : '아직 등록한 상품이 없어요. [+ 새 상품 등록]으로 시작해 주세요.'}</p> : (
+        <ul className="product-cards">
+          {shown.map((p) => (
+            <li key={p.product_code} className={`product-card${p.sold_out || p.status === 'draft' ? ' is-dim' : ''}`}>
+              <Thumb url={p.image_url} size={88} />
+              <div className="pc-body">
+                <p className="pc-name">{p.name}</p>
+                <span className="pc-sub">{p.category} · {p.item_name}{p.options.length > 0 && ` · 옵션 ${p.options.length}개`}</span>
+                <span className="pc-price">{won(p.price)}{p.options.length > 0 && '부터'}</span>
+                <div className="pc-chips">
+                  <ProductStatus product={p} />
+                  {p.status !== 'draft' && <StockChip product={p} />}
+                  {p.ship_from && <Chip tone="blue">예약 · {shipDay(p.ship_from)}부터</Chip>}
+                  {p.restock_waiting > 0 && <Chip tone="blue" title="품절일 때 재입고 알림을 신청한 손님 수">재입고 알림 {p.restock_waiting}명</Chip>}
+                </div>
+                {p.status === 'draft' && p.review_note && <p className="pc-note red">반려 사유: {p.review_note}</p>}
+                {p.status === 'pending' && p.review_reason && <p className="pc-note amber">회사 확인이 필요해요: {p.review_reason}</p>}
+                <div className="pc-actions">
+                  <button type="button" className="primary" onClick={() => onEdit(p)}>수정</button>
                   {/* 옵션 상품은 옵션마다 재고가 있어서 [수정]에서 옵션 재고를 바꾼다 */}
-                  {!p.sold_out && p.options.length === 0 && <button type="button" onClick={() => soldOut(p)}>품절 처리</button>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  {!p.sold_out && p.options.length === 0 && p.status === 'active' && <button type="button" onClick={() => onSoldOut(p)}>품절 처리</button>}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
     </>
   )
@@ -119,19 +146,22 @@ function Settlement() {
   if (!s) return null
   const refunds = s.confirmed_refunds + s.late_refunds
   return (
-    <div className="box">
-      <h3>정산 <span className="muted">구매 확정된 내 상품 매출 기준{s.has_test ? ' · 테스트 결제 포함' : ''}</span></h3>
-      <p>이번 달 정산 예정 <b>{won(s.confirmed_amount + s.confirmed_shipping - refunds)}</b> ({s.confirmed_orders}건, 배송비 {won(s.confirmed_shipping)} 포함{refunds > 0 && `, 반품 환불 ${won(refunds)} 뺌`})
-        · 구매 확정 기다리는 중 {won(s.waiting_amount + s.waiting_shipping - s.waiting_refunds)} ({s.waiting_orders}건{s.waiting_refunds > 0 && `, 반품 환불 ${won(s.waiting_refunds)} 뺌`})</p>
-      {s.late_refunds > 0 && <p className="muted">지난달까지 확정된 주문의 반품 환불 {won(s.late_refunds)}을 이번 달 정산에서 뺐어요.</p>}
+    <section className="settle">
+      <h3 className="section-title">정산 <span className="muted">구매 확정된 내 상품 매출 기준{s.has_test ? ' · 테스트 결제 포함' : ''}</span></h3>
+      <div className="stat-grid">
+        <StatTile label="이번 달 정산 예정" value={won(s.confirmed_amount + s.confirmed_shipping - refunds)} hint={`${s.confirmed_orders}건 · 배송비 ${won(s.confirmed_shipping)} 포함`} tone="green" />
+        <StatTile label="구매 확정 기다리는 중" value={won(s.waiting_amount + s.waiting_shipping - s.waiting_refunds)} hint={`${s.waiting_orders}건`} tone="blue" />
+        <StatTile label="반품 환불로 뺀 금액" value={won(refunds + s.waiting_refunds)} hint={s.late_refunds > 0 ? `지난달 확정분 ${won(s.late_refunds)} 포함` : '이번 달'} tone="red" />
+      </div>
       <p className="muted">배송 완료 {s.confirmDays}일 뒤 자동으로 구매 확정돼요. 손님이 먼저 확정할 수도 있어요.</p>
-    </div>
+    </section>
   )
 }
 
 function MyOrders({ onMessage, onError }) {
   const [orders, setOrders] = useState(null)
   const [tracking, setTracking] = useState({})
+  const [filter, setFilter] = useState('todo')
 
   const load = () => sellerApi('/orders').then(setOrders).catch((e) => onError(e.message))
   useEffect(() => {
@@ -165,34 +195,67 @@ function MyOrders({ onMessage, onError }) {
   }
 
   if (!orders) return <p className="muted">불러오는 중…</p>
-  if (!orders.length) return <><Settlement /><p className="muted">아직 내 상품 주문이 없어요.</p></>
+  const ORDER_FILTERS = [
+    ['todo', '할 일', (o) => ['paid', 'preparing'].includes(o.status) && !(o.status === 'paid' && o.ship_from)],
+    ['preorder', '예약 대기', (o) => o.status === 'paid' && o.ship_from],
+    ['shipping', '배송 중', (o) => o.status === 'shipping'],
+    ['done', '배송 완료', (o) => o.status === 'delivered'],
+    ['cancelled', '취소', (o) => o.status === 'cancelled'],
+    ['all', '전체', () => true],
+  ]
+  const test = ORDER_FILTERS.find(([key]) => key === filter)?.[2] ?? (() => true)
+  const shown = orders.filter(test)
   return (
     <>
     <Settlement />
-    <ul className="inbox">
-      {orders.map((o) => (
-        <li key={o.order_no} className={`box${o.status === 'cancelled' ? ' dim' : ''}`}>
-          <p><b>{o.order_no}</b> · 내 배송 {ORDER_STATUS[o.status]}{o.confirmed_at && ' · 구매 확정'} · {when(o.created_at)}{o.is_test && ' · 테스트'}
-            {o.ship_from && ['paid', 'preparing'].includes(o.status) && <> · <span className="badge pending">예약 · {shipDay(o.ship_from)}부터 출고</span></>}</p>
-          <ul>{o.items.map((i) => <li key={`${i.name}:${i.option_name ?? ''}`}>{i.name} ({i.option_name ?? i.unit}) × {i.quantity}</li>)}</ul>
-          <p className="muted">내 상품 {won(o.items_amount)} + 배송비 {o.shipping_fee ? won(o.shipping_fee) : '무료'}
-            {o.farms > 1 && ` · 다른 농가 ${o.farms - 1}곳 상품과 함께 주문됐어요 (내 상품만 따로 보내면 돼요)`}</p>
-          {o.receiver && <p className="muted">받는 분 {o.receiver.name} · {o.receiver.phone} · ({o.receiver.zipcode}) {o.receiver.address1} {o.receiver.address2 ?? ''}{o.receiver.memo && ` · 메모: ${o.receiver.memo}`}</p>}
-          {o.tracking_no && <p className="muted">송장 {o.courier} {o.tracking_no} {o.tracking_url && <a href={o.tracking_url} target="_blank" rel="noreferrer">배송 조회</a>}</p>}
-          {o.cancel_pending && <p className="warn">취소의 결제 취소 결과를 확인하고 있어요. 회사 담당자가 확인해요.</p>}
-          {['paid', 'preparing'].includes(o.status) && !o.cancel_pending && <><button type="button" className="link" onClick={() => cancel(o)}>내 농가 몫 취소</button>{' '}</>}
-          {o.status === 'paid' && <button type="button" className="button ghost" onClick={() => advance(o, 'preparing')}>배송 준비 시작</button>}
-          {o.status === 'preparing' && (
-            <div className="row form">
-              <label>택배사<input value={tracking[o.order_no]?.courier ?? ''} onChange={setT(o.order_no, 'courier')} list="couriers" placeholder="골라 주세요" /></label>
-              <CourierList />
-              <label>송장 번호<input value={tracking[o.order_no]?.no ?? ''} onChange={setT(o.order_no, 'no')} inputMode="numeric" /></label>
-              <button type="button" className="button" onClick={() => advance(o, 'shipping')}>배송 시작</button>
+    <h3 className="section-title">주문 <span className="muted">내 농가 상품만 보여요. 다른 농가 상품과 함께 주문됐어도 내 상품은 따로 보내요</span></h3>
+    <FilterChips value={filter} onChange={setFilter} items={ORDER_FILTERS.map(([key, label, f]) => ({ key, label, count: orders.filter(f).length }))} />
+    {shown.length === 0 ? <p className="empty-state">{orders.length ? '이 조건에 맞는 주문이 없어요.' : '아직 내 상품 주문이 없어요.'}</p> : (
+    <ul className="order-cards">
+      {shown.map((o) => (
+        <li key={o.order_no} className={`order-card${['cancelled', 'delivered'].includes(o.status) ? ' is-dim' : ''}`}>
+          <div className="oc-head">
+            <span className="oc-no">{o.order_no}</span>
+            <span className="oc-when">{when(o.created_at)}</span>
+            <ShipSteps status={o.status} />
+            {o.ship_from && ['paid', 'preparing'].includes(o.status) && <Chip tone="blue">예약 · {shipDay(o.ship_from)}부터 출고</Chip>}
+            {o.confirmed_at && <Chip tone="green">구매 확정</Chip>}
+            {o.is_test && <Chip>테스트</Chip>}
+          </div>
+          <div>
+            <ul className="oc-items">{o.items.map((i) => <li key={`${i.name}:${i.option_name ?? ''}`}><span>{i.name} <span className="muted">({i.option_name ?? i.unit})</span></span><span className="qty-x">× {i.quantity}</span></li>)}</ul>
+            <p className="oc-amount">내 상품 <b>{won(o.items_amount)}</b> + 배송비 {o.shipping_fee ? won(o.shipping_fee) : '무료'}{o.farms > 1 && ` · 다른 농가 ${o.farms - 1}곳과 함께 주문`}</p>
+          </div>
+          <div className="oc-side">
+            {o.receiver ? (
+              <dl>
+                <dt>받는 분</dt><dd>{o.receiver.name} · {o.receiver.phone}</dd>
+                <dt>주소</dt><dd>({o.receiver.zipcode}) {o.receiver.address1} {o.receiver.address2 ?? ''}</dd>
+                {o.receiver.memo && <><dt>메모</dt><dd>{o.receiver.memo}</dd></>}
+              </dl>
+            ) : <span className="muted">받는 분 연락처·주소는 보내기 전(결제 완료·배송 준비)에만 보여요</span>}
+            {o.tracking_no && <span>송장 {o.courier} {o.tracking_no} {o.tracking_url && <a href={o.tracking_url} target="_blank" rel="noreferrer">배송 조회</a>}</span>}
+          </div>
+          {(['paid', 'preparing'].includes(o.status) || o.cancel_pending) && (
+            <div className="oc-action">
+              {o.cancel_pending && <p className="warn">취소의 결제 취소 결과를 확인하고 있어요. 회사 담당자가 확인해요.</p>}
+              {o.status === 'paid' && <button type="button" className="button" onClick={() => advance(o, 'preparing')}>배송 준비 시작</button>}
+              {o.status === 'preparing' && (
+                <>
+                  <label>택배사<input value={tracking[o.order_no]?.courier ?? ''} onChange={setT(o.order_no, 'courier')} list="couriers" placeholder="골라 주세요" /></label>
+                  <CourierList />
+                  <label>송장 번호<input value={tracking[o.order_no]?.no ?? ''} onChange={setT(o.order_no, 'no')} inputMode="numeric" /></label>
+                  <button type="button" className="button" onClick={() => advance(o, 'shipping')}>배송 시작</button>
+                </>
+              )}
+              <span className="spacer" />
+              {['paid', 'preparing'].includes(o.status) && !o.cancel_pending && <button type="button" className="link" onClick={() => cancel(o)}>내 농가 몫 취소</button>}
             </div>
           )}
         </li>
       ))}
     </ul>
+    )}
     </>
   )
 }
@@ -272,13 +335,18 @@ function Profile({ seller, onSaved, onError }) {
 
 export default function Seller() {
   const [me, setMe] = useState(undefined)
-  const [tab, setTab] = useState('products')
+  const [tab, setTab] = useState('home')
+  const [summary, setSummary] = useState(null)
+  const loadSummary = () => sellerApi('/summary').then(setSummary).catch(() => {})
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
     sellerApi('/me').then(setMe).catch((e) => setMe(e.status === 403 ? 'not-seller' : null))
   }, [])
+  useEffect(() => {
+    if (me?.seller?.status === 'active') sellerApi('/summary').then(setSummary).catch(() => {})
+  }, [me])
 
   async function logout() {
     await adminApi('/logout', { method: 'POST' })
@@ -319,23 +387,44 @@ export default function Seller() {
     )
   }
 
-  const go = (next) => { setTab(next); setMessage(''); setError('') }
+  const go = (next) => { setTab(next); setMessage(''); setError(''); loadSummary() }
+  const t = summary ?? {}
+  const TABS = [['home', '오늘 할 일', 0], ['products', '내 상품', t.rejected], ['orders', '주문', (t.to_prepare ?? 0) + (t.to_ship ?? 0)], ['questions', '상품 문의', t.questions_waiting], ['returns', '반품', t.returns_waiting], ['profile', '농가 소개', 0]]
   return (
     <section>
       <div className="admin-head">
         <nav className="tabs">
-          <button type="button" className={tab === 'products' ? 'on' : ''} onClick={() => go('products')}>내 상품</button>
-          <button type="button" className={tab === 'questions' ? 'on' : ''} onClick={() => go('questions')}>상품 문의</button>
-          <button type="button" className={tab === 'orders' ? 'on' : ''} onClick={() => go('orders')}>주문</button>
-          <button type="button" className={tab === 'returns' ? 'on' : ''} onClick={() => go('returns')}>반품</button>
-          <button type="button" className={tab === 'profile' ? 'on' : ''} onClick={() => go('profile')}>농가 소개</button>
+          {TABS.map(([key, label, n]) => <button key={key} type="button" className={tab === key ? 'on' : ''} onClick={() => go(key)}>{label}<CountBadge n={n} /></button>)}
         </nav>
-        <span className="muted">{me.seller.name} · {me.loginId}</span>
-        {!me.mfa && <span className="badge soldout" title="회사 담당자에게 2단계 인증 등록을 요청하세요">2단계 인증 미등록</span>}
-        <button type="button" className="link" onClick={logout}>로그아웃</button>
+        <div className="account">
+          <span className="muted">{me.seller.name} · {me.loginId}</span>
+          {!me.mfa && <Chip tone="amber" title="회사 담당자에게 2단계 인증 등록을 요청하세요">2단계 인증 미등록</Chip>}
+          <button type="button" className="link" onClick={logout}>로그아웃</button>
+        </div>
       </div>
       {message && <p className="success">{message}</p>}
       {error && <p className="error">{error}</p>}
+      {tab === 'home' && (
+        <>
+          <h3 className="section-title">오늘 할 일 <span className="muted">숫자를 누르면 그 화면으로 가요</span></h3>
+          <div className="stat-grid">
+            <StatTile label="배송 준비할 주문" value={t.to_prepare ?? '–'} hint="결제가 끝난 내 배송" tone="red" onClick={() => go('orders')} />
+            <StatTile label="송장 넣을 주문" value={t.to_ship ?? '–'} hint="배송 준비 중" tone="amber" onClick={() => go('orders')} />
+            <StatTile label="답변 기다리는 문의" value={t.questions_waiting ?? '–'} tone="amber" onClick={() => go('questions')} />
+            <StatTile label="반품 신청" value={t.returns_waiting ?? '–'} hint="의견을 남겨 주세요" tone="red" onClick={() => go('returns')} />
+            <StatTile label="반려된 상품" value={t.rejected ?? '–'} hint="사유를 보고 고쳐 주세요" tone="red" onClick={() => go('products')} />
+            <StatTile label="예약 대기 주문" value={t.preorders_waiting ?? '–'} hint="출고 시작일에 보내요" tone="blue" onClick={() => go('orders')} />
+          </div>
+          <h3 className="section-title">내 상품</h3>
+          <div className="stat-grid">
+            <StatTile label="판매 중" value={t.selling ?? '–'} tone="green" onClick={() => go('products')} />
+            <StatTile label="회사 검토 대기" value={t.reviewing ?? '–'} tone="amber" onClick={() => go('products')} />
+            <StatTile label="품절" value={t.sold_out ?? '–'} tone="red" onClick={() => go('products')} />
+            <StatTile label="재고 5개 이하" value={t.low_stock ?? '–'} tone="amber" onClick={() => go('products')} />
+            <StatTile label="재입고 알림 기다리는 손님" value={t.restock_waiting ?? '–'} hint="재고를 채우면 메일이 가요" tone="blue" onClick={() => go('products')} />
+          </div>
+        </>
+      )}
       {tab === 'products' && <MyProducts onMessage={setMessage} onError={setError} />}
       {tab === 'questions' && <MyQuestions onMessage={setMessage} onError={setError} />}
       {tab === 'orders' && <MyOrders onMessage={setMessage} onError={setError} />}
