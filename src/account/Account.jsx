@@ -60,6 +60,7 @@ export function LoginPage() {
     try {
       if (email.includes('@')) {
         await post('/account/login', { email, password })
+        clearChat() // 로그인하면 앞사람 상담 기억을 지운다
         window.dispatchEvent(new Event('account-change'))
         goNext()
       } else {
@@ -106,6 +107,7 @@ export function SocialSignupPage() {
     event.preventDefault()
     try {
       const done = await post('/account/oauth/complete', form)
+      clearChat() // 로그인하면 앞사람 상담 기억을 지운다
       window.dispatchEvent(new Event('account-change'))
       window.location.href = done.next || '/account'
     } catch (e) {
@@ -231,6 +233,7 @@ export function SignupPage() {
     }
     try {
       await post('/account/signup', { ...form, phone: form.phone.replace(/\D/g, '') })
+      clearChat() // 로그인하면 앞사람 상담 기억을 지운다
       window.dispatchEvent(new Event('account-change'))
       goNext()
     } catch (e) {
