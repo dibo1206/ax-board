@@ -194,7 +194,7 @@ function HeaderSearch() {
       </button>
       <form role="search" onSubmit={(e) => { e.preventDefault(); if (q) go(allUrl); else input.current?.focus() }}>
         <label htmlFor="head-search-input" className="sr-only">상품 검색</label>
-        <input id="head-search-input" ref={input} type="search" value={text} placeholder="무엇을 찾으세요? (사과, 농축액, 김장 배추…)" maxLength={50} autoComplete="off"
+        <input id="head-search-input" ref={input} type="search" value={text} placeholder="무엇을 찾으세요?" maxLength={50} autoComplete="off"
           aria-controls="head-search-list" aria-expanded={show && ready}
           onChange={(e) => { setText(e.target.value); setShow(true) }} onFocus={() => setShow(true)}
           onKeyDown={(e) => {
@@ -234,7 +234,7 @@ function HeaderSearch() {
 
 // 어디서 장바구니에 담든(상세·첫 화면 상품 카드·추천) 화면 아래에 "장바구니에 담겼어요" 알림을 잠깐 띄운다.
 // addToCart 가 보내는 'cart-added' 신호를 받는다. 알림 칸은 늘 두고 글만 바꿔서 화면 낭독기도 읽어 준다
-const TOAST_MS = 4000
+const TOAST_MS = 5000 // 무료 배송 게이지까지 읽을 시간
 
 // 담은 상품의 농가 기준으로 무료 배송까지 남은 금액 (배송비는 농가마다 따로라 서버·장바구니와 같은 규칙)
 async function shippingNote(productCode) {
@@ -250,9 +250,11 @@ async function shippingNote(productCode) {
   const manyFarms = new Set(lines.map((l) => l.p.seller_code)).size > 1
   const farm = manyFarms ? `${products[productCode].seller_name.replace(/\[예시\]\s*/g, '')} 상품 ` : ''
   const left = policy.shipping.freeOver - farmAmount
+  // 게이지: 무료 배송 기준 대비 지금 담은 금액 (2026-11-07 피드백)
+  const percent = Math.min(100, Math.round((farmAmount / policy.shipping.freeOver) * 100))
   return left > 0
-    ? { done: false, text: `${won(left)} 더 담으면 ${farm}무료 배송이에요 (${won(policy.shipping.freeOver)} 이상)` }
-    : { done: true, text: `이제 ${farm}무료 배송이에요` }
+    ? { done: false, percent, text: `${won(left)} 더 담으면 ${farm}무료 배송이에요`, scale: `${won(farmAmount)} / ${won(policy.shipping.freeOver)}` }
+    : { done: true, percent, text: `이제 ${farm}무료 배송이에요`, scale: `${won(policy.shipping.freeOver)} 이상 채웠어요` }
 }
 
 function CartToast() {
@@ -285,7 +287,13 @@ function CartToast() {
           <span className="cart-toast-text">
             <b>장바구니에 담겼어요</b>
             {toast.name && <span className="cart-toast-name">{toast.name}{toast.quantity > 1 ? ` · ${toast.quantity}개` : ''}</span>}
-            {toast.note && <span className={`cart-toast-ship${toast.note.done ? ' done' : ''}`}>{toast.note.text}</span>}
+            {toast.note && (
+              <span className={`cart-toast-ship${toast.note.done ? ' done' : ''}`}>
+                <span>{toast.note.text}</span>
+                <span className="cart-toast-bar" aria-hidden="true"><span style={{ width: `${toast.note.percent}%` }} /></span>
+                <small>{toast.note.scale}</small>
+              </span>
+            )}
           </span>
           <a href="/cart">장바구니 보기</a>
         </div>

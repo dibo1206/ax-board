@@ -86,7 +86,15 @@ export function Cart() {
     <section>
       <h2>장바구니</h2>
       {lines.length === 0 ? (
-        <div className="box"><p>장바구니가 비어 있어요.</p><a className="button" href="/">상품 보러 가기</a></div>
+        <div className="cart-empty">
+          {/* 반짝이는 장바구니 아이콘 (2026-11-07 피드백) */}
+          <span className="cart-empty-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48"><path d="M7 15h5l4.5 17h17.5l4-12H14" /><circle cx="19" cy="38" r="2.4" /><circle cx="31" cy="38" r="2.4" /><path d="M24 4v5M16 7l2.5 4M32 7l-2.5 4" /></svg>
+          </span>
+          <p className="cart-empty-title">장바구니에 담긴 상품이 없습니다.</p>
+          <p className="muted">제철 과일과 농산물을 둘러보고 마음에 드는 상품을 담아 보세요.</p>
+          <a className="cart-empty-go" href="/#products">상품 보러 가기</a>
+        </div>
       ) : (
         <>
           <ul className="cart">

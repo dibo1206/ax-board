@@ -953,3 +953,97 @@
   .shop .site-head-inner .logo { min-width: 0; max-width: 100%; }
   .shop .site-head .logo img { width: 100%; max-width: 140px; height: auto; }
 }
+
+/* ---------- 2026-11-07 피드백 2차 ---------- */
+/* 빈 장바구니: 반짝이는 장바구니 아이콘 카드 */
+.shop .cart-empty { display: grid; justify-items: center; gap: 8px; margin-top: 8px; padding: 56px 24px 52px; text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; }
+.shop .cart-empty-icon { display: grid; place-items: center; width: 104px; height: 104px; margin-bottom: 10px; border-radius: 50%; background: #ecebe8; }
+.shop .cart-empty-icon svg { width: 56px; height: 56px; fill: none; stroke: #5d605b; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.shop .cart-empty-title { margin: 0; font-family: var(--display); font-size: 20px; font-weight: 600; line-height: 1.4; }
+.shop .cart-empty .muted { margin: 0 0 14px; font-size: 14px; }
+.shop .cart-empty-go { padding: 12px 28px; border-radius: 999px; background: var(--accent); color: #fff; font-weight: 700; text-decoration: none; }
+.shop .cart-empty-go:hover { filter: brightness(1.08); }
+
+/* 장바구니 담기 알림: 조금 더 크게 + 무료 배송 게이지 */
+.shop .cart-toast { gap: 14px; max-width: 560px; padding: 16px 22px 16px 18px; border-radius: 20px; }
+.shop .cart-toast svg { width: 28px; height: 28px; padding: 4px; }
+.shop .cart-toast-text { gap: 2px; line-height: 22px; }
+.shop .cart-toast-text b { font-size: 17px; }
+.shop .cart-toast-name { font-size: 14.5px; }
+.shop .cart-toast a { font-size: 15px; }
+.shop .cart-toast-ship { display: grid; gap: 6px; margin-top: 8px; font-size: 14.5px; }
+.shop .cart-toast-bar { display: block; width: min(300px, 60vw); height: 8px; overflow: hidden; border-radius: 999px; background: rgb(255 255 255 / 0.18); }
+.shop .cart-toast-bar span { display: block; height: 100%; border-radius: 999px; background: var(--gold); transition: width 0.4s ease; }
+.shop .cart-toast-ship.done .cart-toast-bar span { background: #7fd08a; }
+.shop .cart-toast-ship small { font-size: 12.5px; font-weight: 400; color: #c9d4c7; }
+
+/* 마이페이지 내 문의: 답변·대기 문구를 콜아웃 안에 */
+.shop .my-empty .my-empty-sub { max-width: 420px; font-size: 14px; line-height: 1.6; }
+.shop .my-callout { margin: 8px 0 0; padding: 12px 16px; border-radius: 12px; background: #f1f0ec; color: var(--muted); font-size: 14.5px; line-height: 1.6; }
+.shop .my-callout.answered { background: #eaf2e7; color: var(--text); border-left: 4px solid var(--accent); }
+
+/* 추천받기: 둥근 창 · 둥근 선택 카드 · 알약 버튼 */
+.shop .quiz-dialog { border-radius: 24px; background: #fdfcfa; }
+.shop .quiz2-head { padding: 22px 28px 14px; }
+.shop .quiz2-kicker { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: #e9f1e5; font-size: 13.5px; letter-spacing: 0; }
+.shop .quiz2-kicker svg { width: 16px; height: 16px; fill: var(--accent); }
+.shop .quiz2-kicker span { margin-left: 4px; color: var(--accent); opacity: 0.75; }
+.shop .quiz2-x { border-radius: 50%; }
+.shop .quiz2-bar { height: 6px; border-radius: 999px; overflow: hidden; }
+.shop .quiz2-bar span { border-radius: 999px; }
+.shop .quiz2-body h3 { font-size: 27px; letter-spacing: -0.5px; }
+.shop .quiz2-grid { gap: 12px; }
+.shop .quiz2-opt { padding: 18px 18px 16px 56px; border-radius: 16px; background: #fff; transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s; }
+.shop .quiz2-opt:hover:not(:disabled) { border-color: var(--accent); box-shadow: 0 6px 18px rgb(47 111 58 / 0.12); transform: translateY(-1px); }
+.shop .quiz2-check { left: 18px; top: 19px; width: 24px; height: 24px; border-radius: 50%; }
+.shop .quiz2-opt.on .quiz2-check::after { left: 8px; top: 4px; }
+.shop .quiz2-opt.on { background: #eef5eb; }
+.shop .quiz2-count { display: inline-block; padding: 2px 9px; border-radius: 999px; background: #f1f0ec; }
+.shop .quiz2-opt.on .quiz2-count { background: #dbead6; }
+.shop .quiz2-foot { padding: 16px 28px; background: #f6f5f1; }
+.shop .quiz2-live b { color: var(--accent); }
+.shop .quiz2 .button { border-radius: 999px; padding-inline: 20px; }
+.shop .quiz2-item { border-radius: 18px; background: #fff; transition: border-color 0.15s, box-shadow 0.15s; }
+.shop .quiz2-item:hover { border-color: var(--accent); box-shadow: 0 6px 18px rgb(47 111 58 / 0.12); }
+.shop .quiz2-img { border-radius: 14px; }
+.shop .quiz2-best { left: 6px; right: auto; bottom: 6px; padding: 3px 9px; border-radius: 999px; }
+.shop .quiz2-why span { border-radius: 999px; padding: 2px 9px; }
+.shop .quiz2-go { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border-radius: 50%; background: #f1f0ec; font-size: 18px; }
+@media (max-width: 640px) { .shop .quiz-dialog { border-radius: 0; } .shop .quiz2-go { display: none; } }
+
+/* 주문 조회: 안내 카드 · 조회 칸 · 도움말 · 배송 단계 */
+.shop .lookup { display: grid; gap: 18px; }
+.shop .lookup-hero { display: flex; align-items: center; gap: 18px; padding: 26px 28px; background: linear-gradient(135deg, #e9f1e5 0%, var(--surface) 70%); border: 1px solid var(--border); border-radius: 20px; }
+.shop .lookup-icon { flex: none; display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px rgb(0 0 0 / 0.06); }
+.shop .lookup-icon svg { width: 30px; height: 30px; fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.shop .lookup-hero h2 { margin: 0 0 4px; line-height: 1.3; }
+.shop .lookup-hero p { margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.5; }
+.shop .lookup-member { flex: none; margin-left: auto; padding: 8px 14px; border: 1px solid var(--border); border-radius: 999px; background: #fff; color: var(--text); font-size: 14px; text-decoration: none; white-space: nowrap; }
+.shop .lookup-member:hover { border-color: var(--accent); color: var(--accent); }
+.shop .lookup-form { padding: 24px 28px; background: #fff; border: 1px solid var(--border); border-radius: 20px; }
+.shop .lookup-form input { padding: 13px 14px; border-radius: 12px; font-size: 16px; }
+.shop .lookup-submit { padding: 14px; border: 0; border-radius: 999px; background: var(--accent); color: #fff; font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
+.shop .lookup-submit:hover:not(:disabled) { filter: brightness(1.08); }
+.shop .lookup-submit:disabled { opacity: 0.6; cursor: default; }
+.shop .lookup-form .error { margin: 0; }
+.shop .lookup-tips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.shop .lookup-tips li { padding: 16px 18px; border-radius: 16px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); font-size: 13.5px; line-height: 1.6; }
+.shop .lookup-tips b { display: block; margin-bottom: 4px; color: var(--text); font-size: 14.5px; }
+.shop .lookup-result { padding: 24px 28px; background: #fff; border: 1px solid var(--border); border-radius: 20px; }
+.shop .lookup-steps { display: grid; grid-template-columns: repeat(4, 1fr); margin: 0 0 22px; padding: 0; list-style: none; }
+.shop .lookup-steps li { position: relative; display: grid; justify-items: center; gap: 6px; color: var(--muted); font-size: 13.5px; text-align: center; }
+.shop .lookup-steps li::before { content: ""; position: absolute; top: 15px; left: -50%; width: 100%; height: 3px; background: var(--border); z-index: 0; }
+.shop .lookup-steps li:first-child::before { display: none; }
+.shop .lookup-steps li.done::before, .shop .lookup-steps li.now::before { background: var(--accent); }
+.shop .lookup-steps .dot { position: relative; z-index: 1; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: #fff; border: 2px solid var(--border); font-weight: 700; }
+.shop .lookup-steps li.done .dot { background: var(--accent); border-color: var(--accent); color: #fff; }
+.shop .lookup-steps li.now { color: var(--accent); font-weight: 700; }
+.shop .lookup-steps li.now .dot { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 5px #e3eee0; }
+.shop .lookup-state { display: inline-block; margin: 0 0 18px; padding: 6px 14px; border-radius: 999px; background: #ecebe7; color: var(--muted); font-weight: 700; }
+@media (max-width: 640px) {
+  .shop .lookup-hero { flex-wrap: wrap; padding: 20px; }
+  .shop .lookup-member { margin-left: 0; }
+  .shop .lookup-form, .shop .lookup-result { padding: 18px; }
+  .shop .lookup-tips { grid-template-columns: 1fr; }
+  .shop .lookup-steps li { font-size: 12px; }
+}
