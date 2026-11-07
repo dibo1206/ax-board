@@ -27,7 +27,7 @@ function toForm(item) {
     danger_note: item.danger_note ?? '',
     allergen_note: item.allergen_note ?? '',
     cafe_note: item.cafe_note ?? '',
-    recipes: (item.recipes ?? []).map((r) => `${r.title}: ${r.ingredients}: ${r.method}`).join('\n'),
+    recipes: (item.recipes ?? []).map((r) => `${r.title}: ${r.ingredients}: ${r.method}${r.image ? `: ${r.image}` : ''}`).join('\n'),
     source: item.source ?? '',
   }
 }
@@ -46,7 +46,9 @@ function toBody(form) {
     danger_signs: splitLines(form.danger_signs),
     recipes: splitLines(form.recipes).map((line) => {
       const [title, ingredients, ...method] = line.split(':').map((s) => s.trim())
-      return { title, ingredients: ingredients ?? '', method: method.join(':') }
+      // 끝 칸이 / 로 시작하면 레시피 카드 사진 주소 (예: /recipe-photos/kiwi-yogurt.webp)
+      const image = method.length > 1 && method.at(-1).startsWith('/') ? method.pop() : ''
+      return { title, ingredients: ingredients ?? '', method: method.join(':'), ...(image ? { image } : {}) }
     }),
   }
 }
@@ -143,7 +145,7 @@ function ItemCard({ item, onDone }) {
       {form.show_brix && <p className="muted">판매자가 이 범위 밖의 당도를 적으면 저장이 막혀요. 근거 없이 정하지 말고 출처에 나온 값으로 적어 주세요.</p>}
       <label>알레르기 안내 문장 (선택)<input value={form.allergen_note} onChange={set('allergen_note')} maxLength={300} placeholder="예: 다른 원료가 들어간 제품은 라벨을 확인해 주세요" /></label>
       <label>카페 메뉴 비율 (선택, 시험 제조 제안값이면 그렇게 적기)<input value={form.cafe_note} onChange={set('cafe_note')} maxLength={400} /></label>
-      <label>레시피 (한 줄에 하나: 제목: 재료: 방법)<textarea rows={3} value={form.recipes} onChange={set('recipes')} placeholder="수박 화채: 수박·사이다: 깍둑썰어 사이다를 붓기" /></label>
+      <label>레시피 (한 줄에 하나: 제목: 재료: 방법, 카드 사진은 끝에 : /recipe-photos/kiwi-yogurt.webp — 없으면 기본 그림)<textarea rows={3} value={form.recipes} onChange={set('recipes')} placeholder="수박 화채: 수박·사이다: 깍둑썰어 사이다를 붓기" /></label>
       <label>출처* (확인한 자료의 기관·제목·주소)<textarea rows={2} value={form.source} onChange={set('source')} maxLength={1000} placeholder="예: 농촌진흥청 농사로 「수박 보관법」 https://..." /></label>
 
       {message && <p className="success">{message}</p>}

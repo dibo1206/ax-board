@@ -321,6 +321,19 @@
 .shop .hero { border-radius: 0; }
 .shop .form input, .shop .form select, .shop .form textarea { border-radius: 0; background: #fff; }
 .shop .badge { border-radius: 0; }
+
+/* 상세의 '이렇게 즐겨 보세요' 레시피 카드: 아이보리 바탕, 그림이 큰 카드(모서리 둥글게) 아래 번호 제목과 한 줄 설명.
+   PC 3열, 모바일은 옆으로 넘기기 (src/shop/RecipeCards.jsx) */
+.shop .recipe-section { background: #f8f3e7; border-color: #e9e1cc; }
+.shop .recipe-cards { list-style: none; margin: 14px 0 4px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.shop .recipe-card { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.shop .recipe-card img { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 16px; background: #efe7d4; margin-bottom: 10px; }
+.shop .recipe-card strong { font-family: var(--display); font-size: 17px; font-weight: 700; line-height: 24px; color: var(--text); }
+.shop .recipe-card p { margin: 0; font-size: 14px; line-height: 21px; color: #66685f; }
+@media (max-width: 640px) {
+  .shop .recipe-cards { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; padding-bottom: 8px; }
+  .shop .recipe-card { flex: 0 0 72%; scroll-snap-align: start; }
+}
 @media (max-width: 480px) {
   .shop .logo img { width: 160px; height: 28px; }
   .shop .site-menu { gap: 20px; }

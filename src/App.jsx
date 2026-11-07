@@ -7,6 +7,7 @@ import { Related } from './Recommend.jsx'
 import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
 import { addToCart, getPolicy, post, preorderNote, thumbUrl, unitPrice } from './shop/shared.js'
 import { Guide } from './shop/Guide.jsx'
+import { RecipeCards } from './shop/RecipeCards.jsx'
 import { CategoryRows, Faq, Hero, ProductSection, QuizDialog, SeasonCalendar, Story } from './shop/home/Home.jsx'
 import { ShopLayout } from './shop/ShopLayout.jsx'
 import { netFetch } from './net.js'
@@ -295,16 +296,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
           {item.reviewed_by && item.source && <p className="note">출처: {item.source}</p>}
         </section>
 
-        {item.recipes.length > 0 && (
-          <section className="box">
-            <h3>이렇게 즐겨 보세요</h3>
-            <ul>
-              {item.recipes.map((r) => (
-                <li key={r.title}><strong>{r.title}</strong> — {r.ingredients} · {r.method}</li>
-              ))}
-            </ul>
-          </section>
-        )}
+        <RecipeCards recipes={item.recipes} />
 
         <section className="box">
           <h3>판매 농가 이야기</h3>
