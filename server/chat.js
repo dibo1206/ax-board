@@ -65,7 +65,8 @@ const DIALECT = [
 ]
 export const easySpeech = (text) => DIALECT.reduce((s, [re, to]) => s.replace(re, to), String(text))
 
-const QNA_HINT = `상품 페이지 아래 Q&A에 질문을 남겨 주시면 담당자가 직접 답해 드려요. 급하면 고객센터 ${SHOP.phone}로 연락해 주세요.`
+// 고객센터 전화는 관리자가 [쇼핑몰 설정]에서 바꿀 수 있어서 부를 때마다 만든다
+const qnaHint = () => `상품 페이지 아래 Q&A에 질문을 남겨 주시면 담당자가 직접 답해 드려요. 급하면 고객센터 ${SHOP.phone}로 연락해 주세요.`
 
 // 건강 질문: 드셔도 되는지는 판단하지 않는다(의료 판단·효능 표현 금지). 대신 전문가와 상담할 때 쓸 등록된 사실만 붙인다
 // 알레르기 표시, 가공품 원재료, 당·혈당을 물으면 당도 수치(판매자 측정). 사실이 없으면 붙이지 않는다
@@ -89,7 +90,7 @@ const ROUTES = [
     // 반려동물에게 줘도 되나: 사람 기준 상품 정보로 판단하지 않는다 (2026-11-07, 팀 시험 질문에서 놓친 안전 질문)
     kind: 'pet',
     re: /강아지|고양이|반려\s?(동물|견|묘)|애완|댕댕이|멍멍이|냥이|강쥐|(?<![가-힣])개(한테|에게)/,
-    answer: () => `반려동물에게 줘도 되는지는 제가 판단할 수 없어요. 수의사와 꼭 상의해 주세요. 이 쇼핑몰의 보관·섭취 정보는 사람이 먹는 기준이에요. ${QNA_HINT}`,
+    answer: () => `반려동물에게 줘도 되는지는 제가 판단할 수 없어요. 수의사와 꼭 상의해 주세요. 이 쇼핑몰의 보관·섭취 정보는 사람이 먹는 기준이에요. ${qnaHint()}`,
     handoff: true,
     action: 'qna',
   },
@@ -101,7 +102,7 @@ const ROUTES = [
       const facts = healthFacts(ctx)
       return '건강 상태에 따라 드셔도 되는지는 제가 판단할 수 없어요. 의사·약사 같은 전문가와 꼭 상의해 주세요.\n'
         + (facts.length ? `상담받을 때 참고할 수 있는 상품 정보예요.\n${facts.map((f) => `- ${f}`).join('\n')}\n` : '')
-        + QNA_HINT
+        + qnaHint()
     },
     handoff: true,
     action: 'qna',
@@ -166,7 +167,7 @@ const ROUTES = [
       const parts = []
       if (/포장|보자기|리본|쇼핑백|가방/.test(said)) parts.push('선물 포장(보자기·쇼핑백 등)은 아직 정해진 안내가 없어서 약속드릴 수 없어요. 선물세트 상품은 상품 페이지의 구성 설명을 확인해 주세요.')
       if (/냉장|아이스|보냉/.test(said)) parts.push('택배는 농가가 직접 보내요. 냉장으로 보내는지(아이스박스·보냉 포장)는 농가·상품마다 달라서 정해진 안내가 없어요.')
-      return `${parts.join(' ')} ${QNA_HINT}`
+      return `${parts.join(' ')} ${qnaHint()}`
     },
     handoff: true,
     action: 'qna',
@@ -247,7 +248,7 @@ const ROUTES = [
     re: /납품|도매|대량|견적|사업자|기업\s?구매|정기\s?(구매|납품)|\d{2,}\s*(병|박스|상자)/,
     answer: (ctx) => {
       const b2b = ctx.products.filter((p) => p.b2b_available)
-      if (ctx.products.length && !b2b.length) return `${ctx.products[0].name}은(는) 아직 기업 구매 문의를 받지 않는 상품이에요. ${QNA_HINT}`
+      if (ctx.products.length && !b2b.length) return `${ctx.products[0].name}은(는) 아직 기업 구매 문의를 받지 않는 상품이에요. ${qnaHint()}`
       return '대량 구매·납품은 기업 구매 문의로 받고 있어요. 상품 페이지의 [기업 구매 문의]에 회사 이름, 연락처, 희망 수량을 남겨 주시면 담당자가 확인 후 견적을 안내해 드려요.'
     },
     handoff: true,
@@ -265,7 +266,7 @@ const ROUTES = [
     // 칼로리·영양 성분은 자료에 없다: 지어내지 않는다
     kind: 'nutrition',
     re: /칼로리|열량|kcal|영양\s?(성분|정보|소)|성분표|당류|나트륨|단백질|탄수화물|철분|비타민|칼슘|칼륨|식이\s?섬유|미네랄/i,
-    answer: (ctx) => `${ctx.items.length ? `${ctx.items.map((i) => i.name).join(', ')}의 ` : ''}칼로리·영양 성분 정보는 아직 상품 정보에 없어요. 정확한 값이 필요하면 ${QNA_HINT.replace('질문을 남겨', '물어봐')}`,
+    answer: (ctx) => `${ctx.items.length ? `${ctx.items.map((i) => i.name).join(', ')}의 ` : ''}칼로리·영양 성분 정보는 아직 상품 정보에 없어요. 정확한 값이 필요하면 ${qnaHint().replace('질문을 남겨', '물어봐')}`,
     handoff: false,
     action: 'qna',
   },
@@ -713,7 +714,7 @@ const SAY_ITEM = {
   },
   ripe: (item) => (item.stage1_state
     ? `${josa(item.name, '은', '는')} 이런 상태면 신선한 때예요: ${sentence(item.stage1_state)}${item.stage2_state ? ` 이런 상태면 품질이 떨어진 거예요: ${sentence(item.stage2_state)}` : ''} 드셔도 되는지는 제가 판단하지 않아요.`
-    : `${item.name}가 익었는지 알아보는 기준은 아직 상품 정보에 없어요. ${QNA_HINT}`),
+    : `${item.name}가 익었는지 알아보는 기준은 아직 상품 정보에 없어요. ${qnaHint()}`),
   storage: (item, message) => {
     const asksHowLong = /언제까지|며칠|유통|얼마나/.test(message)
     const asksFreeze = /얼려|얼리|냉동/.test(message)
@@ -787,7 +788,7 @@ function answerTemplate(message, catalog, ctx) {
     const product = ofItems.find((p) => p.item_code === pendingItem.item_code)
     return {
       ...base,
-      answer: `${josa(pendingItem.name, '은', '는')} 담당자가 아직 ${({ recipe: '레시피', allergy: '알레르기' })[topic.kind] ?? '보관·안전'} 정보를 확인하고 있어요.${topic.kind === 'safety' ? ' 곰팡이나 이상한 냄새처럼 의심되는 상태라면 드시지 마시고, 사진과 함께 알려 주세요.' : ''} ${QNA_HINT}`,
+      answer: `${josa(pendingItem.name, '은', '는')} 담당자가 아직 ${({ recipe: '레시피', allergy: '알레르기' })[topic.kind] ?? '보관·안전'} 정보를 확인하고 있어요.${topic.kind === 'safety' ? ' 곰팡이나 이상한 냄새처럼 의심되는 상태라면 드시지 마시고, 사진과 함께 알려 주세요.' : ''} ${qnaHint()}`,
       sources: product ? [{ code: product.product_code, name: product.name }] : [],
       productCode: product?.product_code ?? null,
       handoff: true, action: 'qna',
@@ -825,7 +826,7 @@ function answerOddWords(message, catalog, ctx) {
     return { ...base, answer: `못난이·등외 상품은 지금 따로 팔지 않아요. 지금 파는 품목 ${catalog.items.filter((i) => catalog.products.some((p) => p.item_code === i.item_code)).map((i) => i.name).join(', ')} 중에서 골라 주세요.`, model: 'rule:grade' }
   }
   if (/[ㄱ-ㅎ]{3,}/.test(message)) {
-    return { ...base, answer: `어떤 말인지 알아보지 못했어요. 상품 이름을 풀어서 다시 적어 주세요. ${QNA_HINT}`, model: 'rule:ask' }
+    return { ...base, answer: `어떤 말인지 알아보지 못했어요. 상품 이름을 풀어서 다시 적어 주세요. ${qnaHint()}`, model: 'rule:ask' }
   }
   return null
 }
@@ -1091,14 +1092,14 @@ function askFirst(ctx, fallbackProduct, evidence = [], message = '', catalog = n
   const facts = item ? (catalog ? narrow(ofItem, message, catalog) : ofItem).slice(0, 2).map((p) => choiceFacts(p, item)).join(' / ') : ''
   if (!item) {
     return {
-      answer: `저는 이 쇼핑몰의 상품·배송·주문 질문에 답해 드려요. 아래에서 고르시거나 상품 이름을 넣어 다시 물어봐 주세요. ${QNA_HINT}`,
+      answer: `저는 이 쇼핑몰의 상품·배송·주문 질문에 답해 드려요. 아래에서 고르시거나 상품 이름을 넣어 다시 물어봐 주세요. ${qnaHint()}`,
       suggestions: ['배송비 얼마예요?', '선물용 추천해 주세요', '교환·환불은 어떻게 해요?'],
       // 품목을 말하지 않았어도 관련 자료를 찾았으면 AI에게 물을 수 있다
       askAi: Boolean(evidence[0] && evidence[0].score >= RAG_ASK_MIN) && keyLoaded() && dailyLimit() > 0, sources: [], handoff: false, action: null, productCode: null, model: 'rule:ask', blocked: false,
     }
   }
   return {
-    answer: `등록된 상품 정보에서 바로 맞는 답을 찾지 못했어요. ${facts ? `참고로 등록된 ${item.name} 정보는 이래요: ${facts}. ` : ''}아래 질문 중에 고르시거나${canAskAi ? ', [AI에게 물어보기]를 누르면 AI가 상품 정보를 읽고 답해 드려요' : ''}. ${QNA_HINT}`,
+    answer: `등록된 상품 정보에서 바로 맞는 답을 찾지 못했어요. ${facts ? `참고로 등록된 ${item.name} 정보는 이래요: ${facts}. ` : ''}아래 질문 중에 고르시거나${canAskAi ? ', [AI에게 물어보기]를 누르면 AI가 상품 정보를 읽고 답해 드려요' : ''}. ${qnaHint()}`,
     suggestions: [`${item.name} 보관법`, `${item.name} 레시피`, `${item.name} 가격`],
     askAi: canAskAi,
     sources: [],
@@ -1186,9 +1187,9 @@ function toSourceChips(codes, catalog, ctx) {
   return chips
 }
 
-const FALLBACK = { answer: `정확한 답을 드리기 어려워요. ${QNA_HINT}`, sources: [], handoff: true, action: 'qna' }
+const FALLBACK = { answer: `정확한 답을 드리기 어려워요. ${qnaHint()}`, sources: [], handoff: true, action: 'qna' }
 const LIMIT_REPLY = {
-  answer: `오늘은 AI 상담 이용이 많아 설명이 필요한 질문은 잠시 쉬어요. ${QNA_HINT} 가격·품절·당도 질문은 지금도 바로 답해 드려요.`,
+  answer: `오늘은 AI 상담 이용이 많아 설명이 필요한 질문은 잠시 쉬어요. ${qnaHint()} 가격·품절·당도 질문은 지금도 바로 답해 드려요.`,
   sources: [], handoff: true, action: 'qna',
 }
 
@@ -1446,10 +1447,10 @@ chatRouter.post('/chat', async (req, res) => {
     const customer = await currentCustomer(req)
     req.customerId = customer?.id
     if (customer ? tooManyAiMember(req) : tooManyAiGuest(req)) {
-      return res.status(429).json({ error: `AI 질문은 잠시 후 다시 해 주세요.${customer ? '' : ' 로그인하면 더 많이 물어볼 수 있어요.'} ${QNA_HINT}` })
+      return res.status(429).json({ error: `AI 질문은 잠시 후 다시 해 주세요.${customer ? '' : ' 로그인하면 더 많이 물어볼 수 있어요.'} ${qnaHint()}` })
     }
     if (customer ? aiTodayMember(req) : aiTodayGuest(req)) {
-      return res.status(429).json({ error: `오늘 물어볼 수 있는 AI 질문을 다 썼어요. 내일 다시 물어봐 주세요. ${QNA_HINT}` })
+      return res.status(429).json({ error: `오늘 물어볼 수 있는 AI 질문을 다 썼어요. 내일 다시 물어봐 주세요. ${qnaHint()}` })
     }
   }
 
@@ -1458,7 +1459,7 @@ chatRouter.post('/chat', async (req, res) => {
     result = await answerChat({ message, history: cleanHistory(req.body.history), productCode }, { allowAi })
   } catch (error) {
     const { status, message: text } = error.code === 'NO_KEY'
-      ? { status: 503, message: `AI 상담 준비 중이에요. ${QNA_HINT}` }
+      ? { status: 503, message: `AI 상담 준비 중이에요. ${qnaHint()}` }
       : describeAiError(error)
     return res.status(status).json({ error: text })
   }

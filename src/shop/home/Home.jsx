@@ -424,6 +424,8 @@ export function Faq({ policy, onRecommend }) {
     .replace('{출고}', policy?.shipping.leadTime ?? '결제 후 1~3일 안에 출고해요')
     .replace('{배송비}', policy ? won(policy.shipping.fee) : '정책에 따라')
     .replace('{무료배송}', policy ? won(policy.shipping.freeOver) : '일정 금액')
+    .replaceAll('{전화}', policy?.shop.phone ?? '고객센터')
+    .replaceAll('{업무시간}', policy?.shop.hours ?? '업무 시간')
   return (
     <section id="faq" className="wrap section faq" aria-labelledby="faq-title">
       <div>

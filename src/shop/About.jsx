@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import { ABOUT } from './home/content.js'
+import { getPolicy } from './shared.js'
 
 // 회사 소개 (/about): 회사 홈페이지(yunjufarm.co.kr)의 회사소개·로컬푸드·지역상생·오시는 길을 한 화면에.
 // 홈페이지에서 그림 속 글이던 내용은 화면 글로 옮겼다 (화면 낭독기·휴대폰에서 읽히게). 글은 src/shop/home/content.js 의 ABOUT,
@@ -8,7 +10,11 @@ const SECTIONS = [['intro', '회사소개'], ['values', '핵심 가치'], ['loca
 
 export function AboutPage() {
   const a = ABOUT
-  const mapQuery = encodeURIComponent(a.location.address)
+  // 오시는 길은 [쇼핑몰 설정]의 사업자 정보 값 (못 받으면 이 파일의 기본값)
+  const [shop, setShop] = useState(null)
+  useEffect(() => { getPolicy().then((p) => setShop(p.shop)).catch(() => {}) }, [])
+  const loc = shop ? { ceo: shop.ceo, address: shop.address, phone: shop.phone, email: shop.email, hours: shop.hours } : a.location
+  const mapQuery = encodeURIComponent(loc.address)
   return (
     <article className="about">
       <header className="about-hero">
@@ -90,11 +96,11 @@ export function AboutPage() {
         <div className="about-location">
           <dl>
             <dt>회사명</dt><dd>{a.name}</dd>
-            <dt>대표</dt><dd>{a.location.ceo}</dd>
-            <dt>주소</dt><dd>{a.location.address}</dd>
-            <dt>대표전화</dt><dd><a href={`tel:${a.location.phone.replace(/\D/g, '')}`}>{a.location.phone}</a></dd>
-            <dt>이메일</dt><dd>{a.location.email}</dd>
-            <dt>업무시간</dt><dd>{a.location.hours}</dd>
+            <dt>대표</dt><dd>{loc.ceo}</dd>
+            <dt>주소</dt><dd>{loc.address}</dd>
+            <dt>대표전화</dt><dd><a href={`tel:${loc.phone.replace(/\D/g, '')}`}>{loc.phone}</a></dd>
+            <dt>이메일</dt><dd>{loc.email}</dd>
+            <dt>업무시간</dt><dd>{loc.hours}</dd>
           </dl>
           <div className="about-maps">
             <p className="muted">지도에서 보기</p>

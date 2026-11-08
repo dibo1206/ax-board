@@ -236,7 +236,7 @@ export function SiteContent() {
         {section === 'faq' && (
           <>
             <label>위쪽 안내<input value={draft.lead} onChange={(e) => put({ lead: e.target.value })} maxLength={200} /></label>
-            <p className="muted">답에 {'{출고}'} · {'{배송비}'} · {'{무료배송}'}을 적으면 배송 정책 값으로 바뀌어요.</p>
+            <p className="muted">답에 {'{출고}'} · {'{배송비}'} · {'{무료배송}'} · {'{전화}'} · {'{업무시간}'}을 적으면 [쇼핑몰 설정] 값으로 바뀌어요.</p>
             {draft.items.map((it, i) => (
               <div key={i} className="site-row">
                 <p className="site-row-head"><b>질문 {i + 1}</b><RowTools index={i} count={draft.items.length} onMove={items.move} onRemove={items.remove} /></p>

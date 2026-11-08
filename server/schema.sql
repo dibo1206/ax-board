@@ -554,3 +554,11 @@ CREATE TABLE IF NOT EXISTS site_content (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_by TEXT
 );
+
+-- 쇼핑몰 설정 (2026-11-08, server/settings.js): 관리자가 고친 사업자 정보·배송·반품 기간·정책 글(shop·shipping·returns·policies)만 둔다. 없으면 server/policy.js 의 기본값
+CREATE TABLE IF NOT EXISTS shop_settings (
+  key TEXT PRIMARY KEY,
+  value JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_by TEXT
+);
