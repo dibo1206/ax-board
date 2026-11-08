@@ -193,3 +193,10 @@ button.stat-tile:hover { border-color: var(--accent); transform: translateY(-1px
 .button.small { padding: 4px 10px; font-size: 13px; }
 .link.danger { color: #b3261e; }
 @media (max-width: 700px) { .recipe-row { grid-template-columns: 84px minmax(0, 1fr); } .recipe-photo { width: 84px; height: 105px; } }
+
+/* 관리자 계정 · 2단계 인증 등록 (src/admin/Staff.jsx, 로그인 화면) */
+.staff .table td.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.twofa-steps { margin: 6px 0; padding-left: 20px; line-height: 1.6; }
+.twofa-key { display: inline-block; margin: 6px 0; padding: 6px 10px; border-radius: 6px; background: #f1efe9; font-family: ui-monospace, Consolas, monospace; font-size: 16px; letter-spacing: 1px; word-break: break-all; }
+.button.danger { background: #b3261e; border-color: #b3261e; color: #fff; }
+input.invalid { border-color: #b3261e; }

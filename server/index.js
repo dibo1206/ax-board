@@ -14,7 +14,7 @@ import { adminRouter, UPLOAD_DIR } from './admin.js'
 import { bannedRouter, loadBanned } from './banned.js'
 import { cached, clearCache } from './cache.js'
 import { scheduleRagSync, startRag } from './rag.js'
-import { currentStaff, login, logout, requireAdmin } from './auth.js'
+import { currentStaff, firstTwoFactor, login, logout, requireAdmin } from './auth.js'
 import { listMails } from './mailer.js'
 import { adminChatRouter, chatRouter } from './chat.js'
 import { initDb, isTransientDbError, pool } from './db.js'
@@ -33,6 +33,7 @@ import { restockRouter, sweepRestock } from './restock.js'
 import { searchWhere, searchWords } from './search.js'
 import { adminPostRouter, publicPostRouter } from './posts.js'
 import { adminSettingsRouter, loadSettings } from './settings.js'
+import { adminStaffRouter } from './staff.js'
 import { adminSiteRouter, publicSiteRouter } from './siteContent.js'
 import { adminReturnRouter, memberReturnRouter, publicReturnRouter, sellerReturnRouter } from './returns.js'
 import { isPreorder } from './preorder.js'
@@ -361,6 +362,7 @@ app.get('/api/tags', async (req, res) => {
 // 관리자·판매자 화면에서 한 일은 모두 접속 기록에 남긴다
 app.use(['/api/admin', '/api/seller'], accessLogger)
 app.post('/api/admin/login', login)
+app.post('/api/admin/2fa-first', firstTwoFactor) // 2단계 인증 필수인데 아직 등록 안 한 계정의 처음 로그인
 app.post('/api/admin/logout', logout)
 app.get('/api/admin/me', async (req, res) => {
   const admin = await currentStaff(req)
@@ -379,6 +381,7 @@ app.use('/api/admin/sellers', adminSellerRouter)
 app.use('/api/admin/posts', adminPostRouter)
 app.use('/api/admin/site-content', adminSiteRouter)
 app.use('/api/admin/settings', adminSettingsRouter)
+app.use('/api/admin/staff', adminStaffRouter)
 app.use('/api/seller-signup', sellerSignupRouter)
 app.get('/api/admin/notifications', requireAdmin, async (req, res) => res.json(await listMails()))
 app.use('/api/admin', adminRouter)

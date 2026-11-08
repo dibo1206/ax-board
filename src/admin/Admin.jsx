@@ -4,6 +4,7 @@ import { BannedWords } from './BannedWords.jsx'
 import { ChatLogs } from './ChatLogs.jsx'
 import { AdminPosts } from './Posts.jsx'
 import { Settings } from './Settings.jsx'
+import { Staff } from './Staff.jsx'
 import { SiteContent } from './SiteContent.jsx'
 import { ItemReview } from './ItemReview.jsx'
 import { SellerApproval } from './SellerApproval.jsx'
@@ -71,7 +72,7 @@ function Admin() {
   // ?tab=site 처럼 주소로 바로 열 수 있다 (쇼핑몰 맨 위 관리자 막대에서 들어올 때)
   const [tab, setTab] = useState(() => {
     const t = new URLSearchParams(window.location.search).get('tab')
-    return ['dashboard', 'orders', 'returns', 'products', 'items', 'sellers', 'inbox', 'reviews', 'chat', 'site', 'posts', 'mail', 'access', 'banned', 'settings'].includes(t) ? t : 'dashboard'
+    return ['dashboard', 'orders', 'returns', 'products', 'items', 'sellers', 'inbox', 'reviews', 'chat', 'site', 'posts', 'mail', 'access', 'banned', 'settings', 'staff'].includes(t) ? t : 'dashboard'
   })
   const [productFilter, setProductFilter] = useState('all')
   const [productQuery, setProductQuery] = useState('')
@@ -182,7 +183,7 @@ function Admin() {
     ['상품', [['products', '상품 관리', pending + (counts?.auto_unchecked ?? 0)], ['items', '품목 검수', counts?.pending_items ?? 0], ['sellers', '판매자 승인', counts?.pending_sellers ?? 0]]],
     ['손님', [['inbox', '문의함', waiting], ['reviews', '후기', 0], ['chat', '상담 기록', 0]]],
     ['홈페이지', [['site', '홈페이지 관리', 0], ['posts', '공지·언론', 0]]],
-    ['기록·설정', [['settings', '쇼핑몰 설정', 0], ['mail', '알림 기록', 0], ['access', '접속 기록', 0], ['banned', '금지어', 0]]],
+    ['기록·설정', [['settings', '쇼핑몰 설정', 0], ['staff', '관리자 계정', 0], ['mail', '알림 기록', 0], ['access', '접속 기록', 0], ['banned', '금지어', 0]]],
   ]
 
   return (
@@ -231,6 +232,8 @@ function Admin() {
         <SiteContent />
       ) : tab === 'settings' ? (
         <Settings />
+      ) : tab === 'staff' ? (
+        <Staff />
       ) : tab === 'chat' ? (
         <ChatLogs />
       ) : editing && options ? (

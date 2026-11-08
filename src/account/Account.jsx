@@ -52,12 +52,18 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [otp, setOtp] = useState('')
   const [needOtp, setNeedOtp] = useState(false)
+  const [setup, setSetup] = useState(null) // 2단계 인증이 필수인데 아직 등록 안 한 관리자·판매자: 처음 로그인 때 여기서 등록
   const query = new URLSearchParams(window.location.search)
   const [errors, setErrors] = useState(() => (query.get('error') ? [query.get('error')] : [])) // 간편 로그인에서 돌아온 오류
 
   async function submit(event) {
     event.preventDefault()
     try {
+      if (setup) {
+        const me = await adminApi('/2fa-first', { method: 'POST', body: { setup: setup.setup, code: otp } })
+        window.location.href = me.role === 'admin' ? '/admin' : '/seller'
+        return
+      }
       if (email.includes('@')) {
         await post('/account/login', { email, password })
         clearChat() // 로그인하면 앞사람 상담 기억을 지운다
@@ -69,6 +75,8 @@ export function LoginPage() {
       }
     } catch (e) {
       if (e.needOtp) setNeedOtp(true)
+      if (e.data?.needSetup2fa) setSetup({ setup: e.data.setup, key: e.data.key, uri: e.data.uri })
+      if (setup && /시간이 지났|더 이상 맞지/.test(e.message)) setSetup(null)
       setOtp('')
       setErrors([e.message])
     }
@@ -80,7 +88,16 @@ export function LoginPage() {
       <h2 className="sr-only">로그인</h2>
       <label><span className="sr-only">이메일 또는 판매자 아이디</span><input value={email} onChange={(e) => setEmail(e.target.value.trim())} placeholder="이메일 또는 판매자 아이디" autoComplete="username" autoCapitalize="none" /></label>
       <label><span className="sr-only">비밀번호</span><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호" autoComplete="current-password" /></label>
-      {needOtp && <label><span className="sr-only">인증 앱 코드 (6자리)</span><input value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="인증 앱 코드 (6자리)" inputMode="numeric" autoComplete="one-time-code" /></label>}
+      {setup && (
+        <div className="twofa-first">
+          <ol className="twofa-steps">
+            <li>휴대폰 인증 앱(Google Authenticator 등)에서 <b>설정 키 입력</b>을 고르세요. 휴대폰이라면 <a href={setup.uri}>인증 앱에 바로 추가</a>.</li>
+            <li>키: <span className="twofa-key">{setup.key}</span> (다른 사람에게 보여 주지 마세요)</li>
+            <li>앱에 나온 6자리 코드를 아래에 넣고 [로그인]을 누르세요 (10분 안에).</li>
+          </ol>
+        </div>
+      )}
+      {(needOtp || setup) && <label><span className="sr-only">인증 앱 코드 (6자리)</span><input value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="인증 앱 코드 (6자리)" inputMode="numeric" autoComplete="one-time-code" /></label>}
       <Errors list={errors} />
       <button type="submit" className="button login-submit">로그인</button>
       <div className="login-links">
