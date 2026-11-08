@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { when } from '../shop/shared.js'
 import { adminApi } from './api.js'
+import { usePage } from './paging.js'
+import { Pager } from './ui.jsx'
 
 // 관리자·판매자 접속 기록 (누가·언제·어디서·무엇을). 개인정보 안전성 확보조치에 따라 1년 이상 보관한다
 const ACTIONS = {
@@ -12,6 +14,7 @@ export function AccessLogs() {
   const [data, setData] = useState(null)
   const [loginId, setLoginId] = useState('')
   const [error, setError] = useState('')
+  const logPage = usePage(data?.logs ?? [], 20, data)
 
   useEffect(() => {
     adminApi('/access-logs').then(setData).catch((e) => setError(e.message))
@@ -38,7 +41,7 @@ export function AccessLogs() {
       <table className="table">
         <thead><tr><th>때</th><th>계정</th><th>한 일</th><th>IP</th></tr></thead>
         <tbody>
-          {data.logs.map((l) => (
+          {logPage.rows.map((l) => (
             <tr key={l.id} className={l.action.includes('fail') || l.action.includes('blocked') ? 'warn-row' : ''}>
               <td className="muted">{when(l.created_at)}</td>
               <td>{l.login_id ?? '-'}{l.role && <span className="muted"> ({l.role === 'seller' ? '판매자' : '관리자'})</span>}</td>
@@ -48,6 +51,7 @@ export function AccessLogs() {
           ))}
         </tbody>
       </table>
+      <Pager paging={logPage} />
     </section>
   )
 }

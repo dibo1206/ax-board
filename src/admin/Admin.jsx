@@ -16,9 +16,11 @@ import { AdminReviews } from './Reviews.jsx'
 import { Orders } from './Orders.jsx'
 import { Returns } from './Returns.jsx'
 import { ProductForm } from './ProductForm.jsx'
-import { Chip, CountBadge, FilterChips, ProductStatus, StockChip, Thumb } from './ui.jsx'
+import { usePage } from './paging.js'
+import { Chip, CountBadge, FilterChips, MoreMenu, Pager, ProductStatus, StockChip, Thumb } from './ui.jsx'
 
-// 관리자 화면: 로그인 → [상품 관리 | 문의함 | 상담 기록]. 모든 요청은 /api/admin (로그인 쿠키 필요)
+// 관리자 화면: 왼쪽 큰 메뉴 5개(홈·주문·상품·손님·홈페이지) + 설정. 큰 메뉴 안의 화면은 위쪽 탭으로 나눈다.
+// 모든 요청은 /api/admin (로그인 쿠키 필요)
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
 // 상품 상태 표시: 반려된 상품은 임시 저장 상태에 반려 사유가 남아 있다
 export function StatusLabel({ product }) {
@@ -99,6 +101,12 @@ function Admin() {
     if (found) { setTab('products'); setEditing(found) }
   }, [products])
 
+  // 상품 목록은 걸러 보기·검색 뒤 20개씩 (훅이라 아래 return 들보다 먼저 부른다)
+  const shownProducts = products
+    .filter(ADMIN_FILTERS.find(([key]) => key === productFilter)?.[2] ?? (() => true))
+    .filter((p) => !productQuery.trim() || `${p.name} ${p.seller_name} ${p.item_name}`.includes(productQuery.trim()))
+  const productPage = usePage(shownProducts, 20, `${productFilter}|${productQuery}`)
+
   // 새 주문 알림: 1분마다 확인해서 늘었으면 화면 위에 알리고 탭 제목에 개수를 붙인다
   const [alert, setAlert] = useState('')
   useEffect(() => {
@@ -178,30 +186,49 @@ function Admin() {
   const newOrders = counts?.new_orders ?? 0
 
   const open = (next) => { setTab(next); setEditing(null); setMessage('') }
-  const NAV = [
-    ['운영', [['dashboard', '매출·할 일', 0], ['orders', '주문', newOrders], ['returns', '반품', counts?.returns_requested ?? 0]]],
-    ['상품', [['products', '상품 관리', pending + (counts?.auto_unchecked ?? 0)], ['items', '품목 검수', counts?.pending_items ?? 0], ['sellers', '판매자 승인', counts?.pending_sellers ?? 0]]],
-    ['손님', [['inbox', '문의함', waiting], ['reviews', '후기', 0], ['chat', '상담 기록', 0]]],
-    ['홈페이지', [['site', '홈페이지 관리', 0], ['posts', '공지·언론', 0]]],
-    ['기록·설정', [['settings', '쇼핑몰 설정', 0], ['staff', '관리자 계정', 0], ['mail', '알림 기록', 0], ['access', '접속 기록', 0], ['banned', '금지어', 0]]],
+  // 큰 메뉴(섹션)와 그 안의 화면(탭). 숫자는 할 일 개수 — 큰 메뉴에는 안쪽 화면 숫자를 더해서 보여 준다
+  const SECTIONS = [
+    { key: 'home', label: '홈', icon: ICONS.home, tabs: [['dashboard', '오늘 할 일', 0]] },
+    { key: 'orders', label: '주문', icon: ICONS.orders, tabs: [['orders', '주문', newOrders], ['returns', '반품', counts?.returns_requested ?? 0]] },
+    { key: 'products', label: '상품', icon: ICONS.products, tabs: [['products', '상품 관리', pending + (counts?.auto_unchecked ?? 0)], ['items', '품목 검수', counts?.pending_items ?? 0], ['sellers', '판매자 승인', counts?.pending_sellers ?? 0]] },
+    { key: 'customers', label: '손님', icon: ICONS.customers, tabs: [['inbox', '문의함', waiting], ['reviews', '후기', 0], ['chat', '상담 기록', 0]] },
+    { key: 'site', label: '홈페이지', icon: ICONS.site, tabs: [['site', '홈페이지 관리', 0], ['posts', '공지·언론', 0]] },
   ]
+  // 자주 안 쓰는 설정·기록은 맨 아래 [설정] 하나로
+  const SETTINGS = { key: 'settings', label: '설정', icon: ICONS.settings, tabs: [['settings', '쇼핑몰 설정', 0], ['staff', '관리자 계정', 0], ['mail', '알림 기록', 0], ['access', '접속 기록', 0], ['banned', '금지어', 0]] }
+  const section = [...SECTIONS, SETTINGS].find((s) => s.tabs.some(([key]) => key === tab)) ?? SECTIONS[0]
+  const sum = (s) => s.tabs.reduce((n, [, , c]) => n + c, 0)
+  const navButton = (s) => (
+    <button key={s.key} type="button" className={section.key === s.key ? 'on' : ''} aria-current={section.key === s.key ? 'page' : undefined} onClick={() => open(s.tabs[0][0])}>
+      <span className="nav-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d={s.icon} /></svg>{s.label}</span>
+      <CountBadge n={sum(s)} />
+    </button>
+  )
 
   return (
     <section className="console-layout">
       <aside className="side-nav" aria-label="관리자 메뉴">
-        {NAV.map(([group, items]) => (
-          <div key={group}>
-            <p className="group-name">{group}</p>
-            {items.map(([key, label, n]) => <button key={key} type="button" className={tab === key ? 'on' : ''} onClick={() => open(key)}>{label}<CountBadge n={n} /></button>)}
+        <div className="nav-main">{SECTIONS.map(navButton)}</div>
+        <div className="nav-foot">
+          {navButton(SETTINGS)}
+          <div className="account">
+            <span>{me.loginId} 로그인 중</span>
+            {!me.mfa && <Chip tone="amber" title="관리자 계정 화면에서 등록해요">2단계 인증 미등록</Chip>}
+            <button type="button" className="link" onClick={logout}>로그아웃</button>
           </div>
-        ))}
-        <div className="account">
-          <span>{me.loginId} 로그인 중</span>
-          {!me.mfa && <Chip tone="amber" title="서버에서 npm run admin-2fa -- 아이디">2단계 인증 미등록</Chip>}
-          <button type="button" className="link" onClick={logout}>로그아웃</button>
         </div>
       </aside>
       <div className="console-content">
+      <header className="section-head">
+        <h2>{section.label === '홈' ? '오늘 할 일' : section.label}</h2>
+        {section.tabs.length > 1 && (
+          <nav className="sub-tabs" aria-label={`${section.label} 화면`}>
+            {section.tabs.map(([key, label, n]) => (
+              <button key={key} type="button" className={tab === key ? 'on' : ''} aria-current={tab === key ? 'page' : undefined} onClick={() => open(key)}>{label}<CountBadge n={n} /></button>
+            ))}
+          </nav>
+        )}
+      </header>
       {alert && <p className="notice-new" role="status">{alert} <button type="button" className="link" onClick={() => { setTab('orders'); setAlert('') }}>주문 보기</button></p>}
       {tab === 'products' && message && <p className="success">{message}</p>}
       {error && <p className="error">{error}</p>}
@@ -257,42 +284,74 @@ function Admin() {
               <tr><th>상품</th><th>가격</th><th>재고</th><th>상태</th><th></th></tr>
             </thead>
             <tbody>
-              {products.filter(ADMIN_FILTERS.find(([key]) => key === productFilter)?.[2] ?? (() => true))
-                .filter((p) => !productQuery.trim() || `${p.name} ${p.seller_name} ${p.item_name}`.includes(productQuery.trim()))
-                .map((p) => (
+              {productPage.rows.map((p) => {
+                const flags = productFlags(p)
+                const autoUnchecked = p.auto_approved_at && !p.auto_checked_at && p.status === 'active'
+                const edit = () => { setEditing(p); setMessage('') }
+                return (
                 <tr key={p.product_code} className={p.sold_out ? 'dim' : ''}>
                   <td><div className="cell-product"><Thumb url={p.image_url} size={56} /><div><strong>{p.name}</strong><br /><span className="muted">{p.category} · {p.seller_name}</span>
-                    <div className="cell-flags">
-                    {p.item_status === 'pending' && <button type="button" className="chip chip-amber" onClick={() => setTab('items')}>품목 검수 전</button>}
-                    {/* 거짓 표시 막기: 당도계 사진이 없는 당도, 후기의 '표시와 달랐어요', 판매 중 수정 이력 */}
                     {p.status === 'pending' && p.review_reason && <><br /><span className="muted">{p.review_reason}</span></>}
-                    {p.auto_approved_at && !p.auto_checked_at && p.status === 'active' && <Chip tone="amber">자동 승인 · 확인 전</Chip>}
-                    {p.notice_missing?.length > 0 && <Chip tone="red" title={p.notice_missing.join(', ')}>고시 미입력 {p.notice_missing.length}</Chip>}
-                    {p.show_brix && p.brix && !p.brix_photo_url && <Chip tone="amber">당도 사진 없음</Chip>}
-                    {p.info_no > 0 && <Chip tone="red">표시와 다름 후기 {p.info_no}</Chip>}
-                    {p.changes > 0 && <Chip>수정 이력 {p.changes}</Chip>}
-                    </div></div></div></td>
+                    {/* 표시는 가장 급한 하나만, 나머지는 개수로 (마우스를 올리면 전부) */}
+                    {flags.length > 0 && (
+                      <div className="cell-flags">
+                        {flags[0].key === 'item'
+                          ? <button type="button" className="chip chip-amber" onClick={() => open('items')}>{flags[0].text}</button>
+                          : <Chip tone={flags[0].tone} title={flags[0].title}>{flags[0].text}</Chip>}
+                        {flags.length > 1 && <Chip title={flags.slice(1).map((f) => f.text).join(', ')}>+{flags.length - 1}</Chip>}
+                      </div>
+                    )}
+                  </div></div></td>
                   <td>{won(p.price)}{p.options.length > 0 && '부터'}</td>
                   <td><StockChip product={p} />{p.options.length > 0 && <><br /><span className="muted">옵션 {p.options.length}개</span></>}</td>
                   <td><ProductStatus product={p} /></td>
+                  {/* 자주 쓰는 버튼 하나만 밖에: 검토 대기 → 승인, 자동 승인 확인 전 → 확인, 나머지 → 수정 */}
                   <td className="row-actions">
-                    {p.status === 'pending' && <button type="button" onClick={() => review(p, true)}>승인</button>}
-                    {p.status === 'pending' && <button type="button" onClick={() => review(p, false)}>반려</button>}
-                    {p.auto_approved_at && !p.auto_checked_at && p.status === 'active' && <button type="button" onClick={() => checkAuto(p)}>확인</button>}
-                    {p.auto_approved_at && !p.auto_checked_at && p.status === 'active' && <button type="button" onClick={() => review(p, false)}>내리기</button>}
-                    <button type="button" onClick={() => { setEditing(p); setMessage('') }}>{p.status === 'pending' ? '열어 보기' : '수정'}</button>
-                    {/* 옵션 상품은 옵션마다 재고가 있어서 [수정]에서 옵션 재고를 바꾼다 */}
-                    {p.sold_out || p.options.length > 0 ? null : <button type="button" onClick={() => quickStock(p, 0)}>품절 처리</button>}
+                    {p.status === 'pending' ? <button type="button" className="primary" onClick={() => review(p, true)}>승인</button>
+                      : autoUnchecked ? <button type="button" className="primary" onClick={() => checkAuto(p)}>확인</button>
+                        : <button type="button" onClick={edit}>수정</button>}
+                    <MoreMenu label={`${p.name} 다른 작업`}>
+                      {(p.status === 'pending' || autoUnchecked) && <button type="button" onClick={edit}>{p.status === 'pending' ? '열어 보기' : '수정'}</button>}
+                      {p.status === 'pending' && <button type="button" onClick={() => review(p, false)}>반려</button>}
+                      {autoUnchecked && <button type="button" onClick={() => review(p, false)}>판매 내리기</button>}
+                      {/* 옵션 상품은 옵션마다 재고가 있어서 [수정]에서 옵션 재고를 바꾼다 */}
+                      {!p.sold_out && p.options.length === 0 && <button type="button" onClick={() => quickStock(p, 0)}>품절 처리</button>}
+                      <a href={`/p/${encodeURIComponent(p.product_code)}`} target="_blank" rel="noreferrer">손님 화면에서 보기</a>
+                    </MoreMenu>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
+          <Pager paging={productPage} />
         </>
       )}
       </div>
     </section>
   )
+}
+
+// 상품 줄에 붙는 확인 표시, 급한 순서 (거짓 표시 막기: 고시 미입력, 후기의 '표시와 달랐어요', 당도계 사진 없는 당도, 판매 중 수정 이력)
+function productFlags(p) {
+  return [
+    p.item_status === 'pending' && { key: 'item', tone: 'amber', text: '품목 검수 전' },
+    p.notice_missing?.length > 0 && { key: 'notice', tone: 'red', text: `고시 미입력 ${p.notice_missing.length}`, title: p.notice_missing.join(', ') },
+    p.info_no > 0 && { key: 'info', tone: 'red', text: `표시와 다름 후기 ${p.info_no}` },
+    p.auto_approved_at && !p.auto_checked_at && p.status === 'active' && { key: 'auto', tone: 'amber', text: '자동 승인 · 확인 전' },
+    p.show_brix && p.brix && !p.brix_photo_url && { key: 'brix', tone: 'amber', text: '당도 사진 없음' },
+    p.changes > 0 && { key: 'changes', tone: 'gray', text: `수정 이력 ${p.changes}` },
+  ].filter(Boolean)
+}
+
+// 왼쪽 큰 메뉴 아이콘 (선 그림)
+const ICONS = {
+  home: 'M4 11 12 4l8 7M6 9.5V20h12V9.5',
+  orders: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6',
+  products: 'M3 12V4h8l10 10-8 8zM7.5 8.5h.01',
+  customers: 'M5 5h14v10H9l-4 4z',
+  site: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18',
+  settings: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1',
 }
 
 const ADMIN_FILTERS = [

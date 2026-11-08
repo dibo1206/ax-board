@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from './api.js'
+import { usePage } from './paging.js'
+import { Pager } from './ui.jsx'
 
 // 5단계 상담 기록: 손님이 물은 것과 답, 답 못 한 질문 모아 보기. 틀린 답을 찾아 chat_rules.md·상품 정보를 고치는 데 쓴다
 const when = (t) => new Date(t).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })
@@ -49,6 +51,7 @@ function Gaps() {
 export function ChatLogs() {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
+  const logPage = usePage(data?.logs ?? [], 20)
 
   useEffect(() => {
     adminApi('/chat-logs').then(setData).catch((e) => setError(e.message))
@@ -68,7 +71,7 @@ export function ChatLogs() {
         <table className="table">
           <thead><tr><th>때</th><th>질문</th><th>답</th><th>근거·처리</th></tr></thead>
           <tbody>
-            {logs.map((l) => (
+            {logPage.rows.map((l) => (
               <tr key={l.id}>
                 <td className="muted">{when(l.created_at)}</td>
                 <td>{l.question}</td>
@@ -83,6 +86,7 @@ export function ChatLogs() {
           </tbody>
         </table>
       )}
+      <Pager paging={logPage} />
     </section>
   )
 }

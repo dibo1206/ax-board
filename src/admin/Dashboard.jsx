@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { won } from '../shop/shared.js'
 import { adminApi } from './api.js'
+import { StatTile } from './ui.jsx'
 
-// 관리자 매출 화면: 숫자 타일 · 날짜별 매출 막대(마우스를 올리면 그날 매출·주문 수) · 표로 보기 · 많이 팔린 상품 · 재고 부족 · 할 일
+// 관리자 홈 (2026-11-08 정리): 맨 위 '오늘 할 일' 카드(누르면 그 화면으로) → 매출 숫자 → 날짜별 매출 막대 → 재고 부족 · 많이 팔린 상품
 const short = (n) => (n >= 10_000 ? `${Math.round(n / 1000) / 10}만` : n.toLocaleString('ko-KR'))
 const md = (day) => `${Number(day.slice(5, 7))}/${Number(day.slice(8, 10))}`
 
@@ -86,19 +87,35 @@ export function Dashboard({ onGo }) {
   if (!data) return <p className="muted">불러오는 중…</p>
   const { summary, series, top, lowStock, todo } = data
   const periodSales = series.reduce((sum, d) => sum + d.sales, 0)
+  // 할 일: 지금 손이 가야 하는 것만 큰 카드로. 0개인 일은 숨기고, 급한 순서(주문 → 손님 → 상품)
   const tasks = [
-    ['orders', '배송 준비할 주문', todo.to_prepare], ['orders', '송장 넣을 주문', todo.to_ship],
-    ['orders', `예약 대기 주문${todo.next_ship_from ? ` (가장 빠른 출고 ${todo.next_ship_from.slice(5).replace('-', '/')})` : ''}`, todo.preorders_waiting],
-    ['inbox', '답변 기다리는 문의', todo.unanswered],
-    ['inbox', '새 기업 문의', todo.new_b2b], ['products', '검토 대기 상품', todo.pending_products], ['reviews', '답글 안 단 후기', todo.reviews_to_reply],
-    ['returns', '확인할 반품 신청', todo.returns_requested], ['returns', '환불 기다리는 반품', todo.returns_to_refund],
+    ['orders', '배송 준비할 주문', todo.to_prepare, 'amber'],
+    ['orders', '송장 넣을 주문', todo.to_ship, 'amber'],
+    ['returns', '확인할 반품 신청', todo.returns_requested, 'red'],
+    ['returns', '환불 기다리는 반품', todo.returns_to_refund, 'red'],
+    ['inbox', '답변 기다리는 문의', todo.unanswered, 'blue'],
+    ['inbox', '새 기업 문의', todo.new_b2b, 'blue'],
+    ['products', '검토 대기 상품', todo.pending_products, 'amber'],
+    ['reviews', '답글 안 단 후기', todo.reviews_to_reply, 'blue'],
+    ['orders', '예약 대기 주문', todo.preorders_waiting, 'green', todo.next_ship_from ? `가장 빠른 출고 ${todo.next_ship_from.slice(5).replace('-', '/')}` : ''],
   ].filter(([, , n]) => n > 0)
 
   return (
     <section className="dashboard">
-      <div className="filters">
-        {[7, 30, 90].map((n) => <button key={n} type="button" className={days === n ? 'on' : ''} onClick={() => setDays(n)}>최근 {n}일</button>)}
-        <label className="check"><input type="checkbox" checked={test} onChange={(e) => setTest(e.target.checked)} />테스트 결제 포함</label>
+      {tasks.length === 0 ? (
+        <p className="todo-clear">밀린 일이 없어요. 새 주문·문의가 오면 여기에 바로 보여요.</p>
+      ) : (
+        <div className="todo-grid">
+          {tasks.map(([tab, label, n, tone, hint]) => <StatTile key={label} label={label} value={n} tone={tone} hint={hint || '눌러서 처리하기 →'} onClick={() => onGo(tab)} />)}
+        </div>
+      )}
+
+      <div className="dash-head">
+        <h3>매출</h3>
+        <div className="filters">
+          {[7, 30, 90].map((n) => <button key={n} type="button" className={days === n ? 'on' : ''} onClick={() => setDays(n)}>최근 {n}일</button>)}
+          <label className="check"><input type="checkbox" checked={test} onChange={(e) => setTest(e.target.checked)} />테스트 결제 포함</label>
+        </div>
       </div>
       <div className="tiles">
         <div className="tile"><span className="muted">오늘 매출</span><b>{won(summary.today_sales)}</b><span className="muted">주문 {summary.today_orders}건</span></div>
@@ -107,7 +124,7 @@ export function Dashboard({ onGo }) {
       </div>
 
       <div className="box">
-        <h3>날짜별 매출 <span className="muted">최근 {days}일 · 결제 완료 기준 · 농가별 취소·반품 환불은 결제한 날에서 뺌</span></h3>
+        <h3>날짜별 매출 <span className="muted">결제 완료 기준 · 취소·반품 환불은 결제한 날에서 뺌</span></h3>
         {periodSales === 0 ? <p className="muted">이 기간에 결제된 주문이 없어요.</p> : <SalesChart series={series} />}
         <details>
           <summary>표로 보기</summary>
@@ -120,29 +137,17 @@ export function Dashboard({ onGo }) {
 
       <div className="two">
         <div className="box">
-          <h3>할 일</h3>
-          {tasks.length === 0 ? <p className="muted">밀린 일이 없어요.</p> : (
-            <ul className="tasks">
-              {tasks.map(([tab, label, n]) => <li key={label}><button type="button" className="link" onClick={() => onGo(tab)}>{label}</button> <b>{n}</b></li>)}
-            </ul>
-          )}
-        </div>
-        <div className="box">
           <h3>재고 부족 <span className="muted">{data.lowStockLimit}개 이하</span></h3>
           {lowStock.length === 0 ? <p className="muted">없어요.</p> : (
             <ul className="tasks">{lowStock.map((p) => <li key={p.product_code}>{p.name} <b className={p.stock === 0 ? 'error' : 'warn'}>{p.stock === 0 ? '품절' : `${p.stock}개`}</b></li>)}</ul>
           )}
         </div>
-      </div>
-
-      <div className="box">
-        <h3>많이 팔린 상품 <span className="muted">최근 {days}일</span></h3>
-        {top.length === 0 ? <p className="muted">아직 판매가 없어요.</p> : (
-          <table className="table">
-            <thead><tr><th>상품</th><th>수량</th><th>매출</th></tr></thead>
-            <tbody>{top.map((p) => <tr key={p.product_code}><td>{p.name}</td><td>{p.quantity}개</td><td>{won(p.revenue)}</td></tr>)}</tbody>
-          </table>
-        )}
+        <div className="box">
+          <h3>많이 팔린 상품 <span className="muted">최근 {days}일</span></h3>
+          {top.length === 0 ? <p className="muted">아직 판매가 없어요.</p> : (
+            <ul className="tasks">{top.map((p) => <li key={p.product_code}>{p.name} <b>{p.quantity}개 · {won(p.revenue)}</b></li>)}</ul>
+          )}
+        </div>
       </div>
     </section>
   )
