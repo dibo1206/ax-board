@@ -18,6 +18,7 @@ function makeApi(base) {
       error.status = response.status
       error.errors = data.errors
       error.issues = data.issues // 품목 검수: 고칠 것 목록
+      error.data = data // 처음 로그인 2단계 인증 등록(needSetup2fa · setup · key) 같은 추가 내용
       error.needOtp = data.needOtp === true
       error.pending = data.pending === true
       throw error

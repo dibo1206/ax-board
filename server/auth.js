@@ -3,7 +3,7 @@
 import { createHmac, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
 import { writeAccessLog } from './accessLog.js'
-import { decrypt, verifyTotp } from './crypto.js'
+import { decrypt, encrypt, newTotpSecret, otpauthUri, verifyTotp } from './crypto.js'
 import { pool } from './db.js'
 
 const scrypt = promisify(scryptCb)
@@ -105,7 +105,7 @@ export function adminIpAllowed(ip) {
 }
 
 // 2단계 인증을 등록하지 않은 계정은 로그인할 수 없다: REQUIRE_2FA=1 이거나, 운영(NODE_ENV=production)이면 기본으로 켜진다 (REQUIRE_2FA=0 으로만 끈다)
-const twoFactorRequired = () => process.env.REQUIRE_2FA === '1' || (process.env.NODE_ENV === 'production' && process.env.REQUIRE_2FA !== '0')
+export const twoFactorRequired = () => process.env.REQUIRE_2FA === '1' || (process.env.NODE_ENV === 'production' && process.env.REQUIRE_2FA !== '0')
 
 // 손님 회원 로그인도 같은 잠금 규칙을 쓴다 (key 앞에 'c:'를 붙여 관리자 아이디와 섞이지 않게)
 // 비밀번호 확인(scrypt)은 느려서, 확인이 끝난 뒤에 실패를 세면 동시에 들어온 요청이 모두 '0번 틀림'을 보고 통과한다.
@@ -160,13 +160,54 @@ export async function login(req, res) {
     }
     await pool.query('UPDATE admins SET totp_last_counter = $1 WHERE id = $2', [counter, id]) // 같은 코드를 다시 못 쓰게
   } else if (twoFactorRequired()) {
+    // 2단계 인증이 필수인데 아직 등록하지 않은 계정(새로 만든 관리자·승인된 판매자): 비밀번호는 맞았으니 이 자리에서 등록하게 한다.
+    // 로그인 쿠키는 주지 않고, 10분짜리 등록 표(비밀값은 암호화)만 준다 → 인증 앱 코드로 확인해야 로그인된다 (/api/admin/2fa-first)
     log('login_no_2fa', { role })
-    return res.status(403).json({ error: '2단계 인증을 먼저 등록해 주세요. (서버에서 npm run admin-2fa -- 아이디)' })
+    const secret = newTotpSecret()
+    const setup = signToken({ kind: 'totp_first', id, sv, sealed: encrypt(secret), exp: Date.now() + 10 * 60_000 })
+    res.set('Cache-Control', 'no-store')
+    return res.status(403).json({
+      error: '처음 로그인이에요. 휴대폰 인증 앱에 아래 키를 등록하고, 앱에 나온 6자리 코드를 넣어 주세요.',
+      needSetup2fa: true, setup, key: secret.match(/.{1,4}/g).join(' '), uri: otpauthUri(account, secret),
+    })
   }
   fails.delete(loginId)
-  setSessionCookie(res, signToken({ kind: 'staff', id, sv, loginId: account, role, sellerCode, mfa: Boolean(sealed), exp: Date.now() + SESSION_HOURS * 3_600_000 }), SESSION_HOURS * 3600)
+  issueStaffSession(res, { id, session_version: sv, login_id: account, role, seller_code: sellerCode, totp_secret_enc: sealed })
   log('login_ok', { role })
   res.json({ loginId: account, role, sellerCode, mfa: Boolean(sealed) })
+}
+
+// 로그인 쿠키 만들기 (로그인할 때, 그리고 [관리자 계정]에서 내 비밀번호·2단계 인증을 바꿔 session_version 이 올라갔을 때 이 브라우저를 이어 가려고)
+export function issueStaffSession(res, row) {
+  const { id, session_version: sv, login_id: loginId, role, seller_code: sellerCode, totp_secret_enc: sealed } = row
+  setSessionCookie(res, signToken({ kind: 'staff', id, sv, loginId, role, sellerCode, mfa: Boolean(sealed), exp: Date.now() + SESSION_HOURS * 3_600_000 }), SESSION_HOURS * 3600)
+}
+
+// POST /api/admin/2fa-first {setup, code}: 처음 로그인 때 받은 등록 표 + 인증 앱 코드 → 2단계 인증을 저장하고 로그인
+export async function firstTwoFactor(req, res) {
+  const token = verifyToken(typeof req.body?.setup === 'string' ? req.body.setup : '')
+  if (token?.kind !== 'totp_first') return res.status(400).json({ error: '등록 시간이 지났어요. 아이디와 비밀번호로 다시 로그인해 주세요.' })
+  const key = `2fa-first:${token.id}`
+  if (!reserveAttempt(key, req.ip)) return res.status(429).json({ error: `코드를 여러 번 틀렸어요. ${LOCK_MINUTES}분 뒤에 다시 해 주세요.` })
+  const { rows } = await pool.query('SELECT * FROM admins WHERE id = $1', [token.id])
+  const row = rows[0]
+  // 그사이 비밀번호가 바뀌었거나(session_version) 다른 곳에서 이미 등록했으면 이 표는 쓸 수 없다
+  if (!row || row.session_version !== token.sv || row.totp_secret_enc) return res.status(400).json({ error: '등록 표가 더 이상 맞지 않아요. 다시 로그인해 주세요.' })
+  if (row.role === 'admin' && !adminIpAllowed(req.ip)) return res.status(403).json({ error: '허용된 곳에서만 관리자 로그인이 돼요.' })
+  const secret = decrypt(token.sealed)
+  const counter = verifyTotp(secret, String(req.body?.code ?? '').replace(/\s/g, ''))
+  if (counter === null) {
+    writeAccessLog({ loginId: row.login_id, role: row.role, action: 'otp_fail', ip: req.ip })
+    return res.status(400).json({ error: '코드가 맞지 않아요. 휴대폰 시간이 자동으로 맞춰져 있는지 보고, 새 코드로 다시 넣어 주세요.' })
+  }
+  undoAttempt(key, req.ip)
+  const updated = await pool.query(
+    'UPDATE admins SET totp_secret_enc = $2, totp_last_counter = $3, session_version = session_version + 1 WHERE id = $1 RETURNING *',
+    [row.id, encrypt(secret), counter],
+  )
+  issueStaffSession(res, updated.rows[0])
+  writeAccessLog({ loginId: row.login_id, role: row.role, action: 'login_ok_2fa_setup', ip: req.ip })
+  res.json({ loginId: row.login_id, role: row.role, sellerCode: row.seller_code, mfa: true })
 }
 
 export function logout(req, res) {

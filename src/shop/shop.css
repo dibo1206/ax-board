@@ -1262,3 +1262,8 @@
   .shop .pgrid-list .pcard-img { height: 96px; }
   .shop .pgrid-list .pcard-wrap { grid-template-columns: 1fr; }
 }
+
+/* 로그인: 2단계 인증 처음 등록 (관리자·판매자) */
+.twofa-first { padding: 10px 12px; border-radius: 10px; background: #f4f1e8; font-size: 14px; }
+.twofa-first .twofa-steps { margin: 0; padding-left: 18px; line-height: 1.6; }
+.twofa-first .twofa-key { font-family: ui-monospace, Consolas, monospace; font-weight: 700; letter-spacing: 1px; word-break: break-all; }
