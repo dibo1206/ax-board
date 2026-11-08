@@ -1,5 +1,6 @@
 // 관리자·판매자 화면이 같이 쓰는 작은 조각: 상태 칩, 숫자 카드, 개수 배지, 걸러 보기 칩, 배송 단계
 // 색은 뜻으로만 쓴다: 초록 = 판매·완료, 노랑 = 기다림·확인 필요, 빨강 = 품절·반려·문제, 회색 = 임시·끝난 것
+import { useState } from 'react'
 import { thumbUrl } from '../shop/shared.js'
 
 export function Chip({ tone = 'gray', children, title }) {
@@ -92,6 +93,18 @@ export function MoreMenu({ label = '더 보기', children }) {
       <summary aria-label={label} title={label}>⋯</summary>
       <div className="row-menu">{children}</div>
     </details>
+  )
+}
+
+// 긴 설명은 늘 펼쳐 두지 않고 [?]를 눌렀을 때만 (2026-11-08 관리자 화면 정리 2차)
+// 글 줄(p)·입력 칸 이름(label) 안에도 넣을 수 있게 span·button 으로만 만든다
+export function Help({ label = '도움말', children }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <span className="help">
+      <button type="button" aria-label={label} title={label} aria-expanded={open} onClick={(e) => { e.preventDefault(); setOpen((v) => !v) }}>?</button>
+      {open && <span className="help-pop" role="note">{children}</span>}
+    </span>
   )
 }
 
