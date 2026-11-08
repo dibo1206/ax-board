@@ -1,4 +1,4 @@
-// 홈페이지 관리 (2026-11-08): 관리자가 첫 화면의 큰 배너·이야기 배너·제철 달력·자주 묻는 질문을 코드 없이 고친다.
+// 홈페이지 관리 (2026-11-08): 관리자가 첫 화면의 큰 배너·이야기 배너·제철 달력·자주 묻는 질문과 회사 소개(/about)를 코드 없이 고친다.
 // 저장한 값만 DB(site_content)에 두고, 없으면 코드의 기본값(src/shop/home/content.js)을 쓴다. 화면은 그리기 전에 받아 기본값을 바꾼다.
 // 글은 글자 그대로 보여 준다(HTML 을 받지 않는다). 사진은 이 사이트 안의 사진 주소나 여기서 올린 사진만, 링크는 #칸 · /주소 · https 만
 import { randomBytes } from 'node:crypto'
@@ -75,6 +75,46 @@ const CHECK = {
     }))
     if (!items.length) errors.push('질문을 1개 이상 넣어 주세요.')
     return { lead: str(errors, v.lead, 200, '위쪽 안내', false), items, note: str(errors, v.note, 200, '아래 안내', false) }
+  },
+  // 회사 소개 (/about). 오시는 길(주소·전화)은 사업자 정보와 같은 값이라 여기서 받지 않는다
+  about(v, errors) {
+    const pairs = (arr, max, name, titleMax, textMax) => {
+      const rows = list(arr).slice(0, max).map((x, i) => ({ title: str(errors, x?.title, titleMax, `${name} ${i + 1} 제목`), text: str(errors, x?.text, textMax, `${name} ${i + 1} 글`) }))
+      if (!rows.length) errors.push(`${name}을(를) 1개 이상 넣어 주세요.`)
+      return rows
+    }
+    const image = (p, name) => { const { src, alt } = photo(errors, p, name); return { src, alt } }
+    const lf = v.localfood && typeof v.localfood === 'object' ? v.localfood : {}
+    const qa = list(lf.qa).slice(0, 6).map((x, i) => ({ q: str(errors, x?.q, 60, `로컬푸드 질문 ${i + 1}`), a: str(errors, x?.a, 600, `로컬푸드 답 ${i + 1}`) }))
+    const products = list(v.products).slice(0, 6).map((p, i) => {
+      const n = `만드는 것 ${i + 1}`
+      const href = typeof p?.href === 'string' ? p.href.trim() : ''
+      if (!HREF.test(href)) errors.push(`${n} 주소는 /products?cat=base 처럼 /주소나 https://… 로 적어 주세요.`)
+      const src = typeof p?.image === 'string' ? p.image.trim() : ''
+      if (!PHOTO.test(src)) errors.push(`${n} 사진을 올려 주세요.`)
+      return { title: str(errors, p?.title, 40, `${n} 이름`), text: str(errors, p?.text, 120, `${n} 설명`), image: src, href }
+    })
+    return {
+      name: str(errors, v.name, 40, '회사 이름'),
+      eyebrow: str(errors, v.eyebrow, 60, '작은 제목', false),
+      lead: str(errors, v.lead, 400, '소개 글'),
+      heroImage: image(v.heroImage, '맨 위'),
+      promises: pairs(v.promises, 4, '회사소개 약속', 40, 500),
+      valuesEyebrow: str(errors, v.valuesEyebrow, 40, '핵심 가치 작은 제목', false),
+      valuesTitle: str(errors, v.valuesTitle, 60, '핵심 가치 제목'),
+      values: pairs(v.values, 12, '핵심 가치', 30, 300),
+      localfood: {
+        title: str(errors, lf.title, 60, '로컬푸드 제목'),
+        keywordsTitle: str(errors, lf.keywordsTitle, 60, '키워드 제목'),
+        lead: str(errors, lf.lead, 300, '로컬푸드 소개 글', false),
+        image: image(lf.image, '로컬푸드'),
+        qa,
+        keywords: pairs(lf.keywords, 8, '로컬푸드 키워드', 30, 300),
+      },
+      productsTitle: str(errors, v.productsTitle, 40, '만드는 것 제목'),
+      products,
+      note: str(errors, v.note, 300, '아래 안내', false),
+    }
   },
 }
 export const SITE_KEYS = Object.keys(CHECK)

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { DEFAULTS, FAQ, HERO, SEASON, STORY } from '../shop/home/content.js'
+import { ABOUT, DEFAULTS, FAQ, HERO, SEASON, STORY } from '../shop/home/content.js'
 import { adminApi } from './api.js'
 
-// 관리자 [홈페이지 관리]: 첫 화면의 큰 배너·이야기 배너·제철 달력·자주 묻는 질문을 고친다 (server/siteContent.js).
+// 관리자 [홈페이지 관리]: 첫 화면의 큰 배너·이야기 배너·제철 달력·자주 묻는 질문과 회사 소개(/about)를 고친다 (server/siteContent.js).
 // 저장하면 손님 화면에 바로(최대 30초) 나오고, [기본값으로]를 누르면 코드에 적힌 처음 내용으로 돌아간다
-const SECTIONS = [['hero', '큰 배너'], ['story', '이야기 배너'], ['season', '제철 달력'], ['faq', '자주 묻는 질문']]
-const LIVE = { hero: HERO, story: STORY, season: SEASON, faq: FAQ }
+const SECTIONS = [['hero', '큰 배너'], ['story', '이야기 배너'], ['season', '제철 달력'], ['faq', '자주 묻는 질문'], ['about', '회사 소개']]
+const LIVE = { hero: HERO, story: STORY, season: SEASON, faq: FAQ, about: ABOUT }
 const clone = (v) => JSON.parse(JSON.stringify(v))
 const POSITIONS = [['center 50%', '가운데'], ['center 30%', '위쪽'], ['center 70%', '아래쪽'], ['left center', '왼쪽'], ['right center', '오른쪽']]
 
@@ -14,6 +14,17 @@ function editable(key, v) {
   const c = clone(v)
   if (key === 'hero') return { eyebrow: c.eyebrow ?? '', title: c.title ?? [''], lead: c.lead ?? '', cta: c.cta ?? '', interval: c.interval ?? 5000, slides: (c.slides ?? []).map(({ src, alt, position, cover, scrim }) => ({ src, alt, position: position ?? 'center 50%', cover: !!cover, scrim: !!scrim })) }
   if (key === 'story') return { label: c.label ?? '', interval: c.interval ?? 7000, slides: (c.slides ?? []).map((s) => ({ title: s.title ?? ['', ''], text: s.text ?? '', photo: { src: s.photo?.src ?? '', alt: s.photo?.alt ?? '', position: s.photo?.position ?? 'center 50%' }, links: s.links ?? [] })) }
+  if (key === 'about') {
+    const pic = (p) => ({ src: p?.src ?? '', alt: p?.alt ?? '', position: 'center 50%' })
+    const pairs = (arr) => (arr ?? []).map(({ title, text }) => ({ title: title ?? '', text: text ?? '' }))
+    const lf = c.localfood ?? {}
+    return {
+      name: c.name ?? '', eyebrow: c.eyebrow ?? '', lead: c.lead ?? '', heroImage: pic(c.heroImage), promises: pairs(c.promises),
+      valuesEyebrow: c.valuesEyebrow ?? '', valuesTitle: c.valuesTitle ?? '', values: pairs(c.values),
+      localfood: { title: lf.title ?? '', keywordsTitle: lf.keywordsTitle ?? '', lead: lf.lead ?? '', image: pic(lf.image), qa: (lf.qa ?? []).map(({ q, a }) => ({ q, a })), keywords: pairs(lf.keywords) },
+      productsTitle: c.productsTitle ?? '', products: (c.products ?? []).map(({ title, text, image, href }) => ({ title, text, image, href })), note: c.note ?? '',
+    }
+  }
   if (key === 'season') return { items: (c.items ?? []).map((i) => ({ name: i.name, search: i.search ?? '', months: i.months ?? [] })), note: c.note ?? '' }
   return { lead: c.lead ?? '', items: (c.items ?? []).map(({ tag, q, a, action }) => ({ tag, q, a, action })), note: c.note ?? '' }
 }
@@ -29,7 +40,25 @@ function RowTools({ index, count, onMove, onRemove }) {
   )
 }
 
-function PhotoField({ value, onChange, label }) {
+// 제목·글 짝 목록 (회사 소개의 약속·핵심 가치·키워드, 로컬푸드 질문·답)
+function PairList({ rows, onChange, max, name, keys = ['title', 'text'], labels = ['제목', '글'], limits = [40, 300] }) {
+  const set = (i, v) => onChange(rows.map((x, j) => (j === i ? v : x)))
+  const move = (i, dir) => { const a = [...rows]; [a[i], a[i + dir]] = [a[i + dir], a[i]]; onChange(a) }
+  return (
+    <>
+      {rows.map((r, i) => (
+        <div key={i} className="site-row">
+          <p className="site-row-head"><b>{name} {i + 1}</b><RowTools index={i} count={rows.length} onMove={move} onRemove={(n) => onChange(rows.filter((_, j) => j !== n))} /></p>
+          <label>{labels[0]}<input value={r[keys[0]]} maxLength={limits[0]} onChange={(e) => set(i, { ...r, [keys[0]]: e.target.value })} /></label>
+          <label>{labels[1]}<textarea value={r[keys[1]]} rows={2} maxLength={limits[1]} onChange={(e) => set(i, { ...r, [keys[1]]: e.target.value })} /></label>
+        </div>
+      ))}
+      {rows.length < max && <button type="button" className="button ghost" onClick={() => onChange([...rows, { [keys[0]]: '', [keys[1]]: '' }])}>{name} 더하기</button>}
+    </>
+  )
+}
+
+function PhotoField({ value, onChange, label, alt = true, position = true }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   async function upload(e) {
@@ -54,10 +83,10 @@ function PhotoField({ value, onChange, label }) {
         <label>{label} 사진<input type="file" accept="image/jpeg,image/png,image/webp" onChange={upload} disabled={busy} /></label>
         {busy && <span className="muted">올리는 중…</span>}
         {error && <span className="error">{error}</span>}
-        <label>사진 설명 <span className="muted">(화면 낭독기가 읽어요)</span><input value={value.alt} onChange={(e) => onChange({ ...value, alt: e.target.value })} maxLength={100} /></label>
-        <label>화면이 좁을 때 남길 쪽<select value={value.position} onChange={(e) => onChange({ ...value, position: e.target.value })}>
+        {alt && <label>사진 설명 <span className="muted">(화면 낭독기가 읽어요)</span><input value={value.alt} onChange={(e) => onChange({ ...value, alt: e.target.value })} maxLength={100} /></label>}
+        {position && <label>화면이 좁을 때 남길 쪽<select value={value.position} onChange={(e) => onChange({ ...value, position: e.target.value })}>
           {POSITIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select></label>
+        </select></label>}
       </div>
     </div>
   )
@@ -124,7 +153,7 @@ export function SiteContent() {
         <h2>홈페이지 관리</h2>
         <a className="button ghost" href="/" target="_blank" rel="noreferrer">홈페이지 보기 ↗</a>
       </div>
-      <p className="muted">첫 화면의 글과 사진을 고쳐요. 회사 소개·공지는 [공지·언론], 상품은 [상품 관리]에서 고쳐요.</p>
+      <p className="muted">첫 화면과 회사 소개(/about)의 글과 사진을 고쳐요. 공지·언론보도는 [공지·언론], 상품은 [상품 관리], 품목 레시피는 [품목 검수]에서 고쳐요.</p>
       <nav className="tabs">
         {SECTIONS.map(([key, label]) => (
           <button key={key} type="button" className={key === section ? 'on' : ''} onClick={() => open(key)}>{label}{info[key] && ' · 고침'}</button>
@@ -217,6 +246,51 @@ export function SiteContent() {
             ))}
             {draft.items.length < 20 && <button type="button" className="button ghost" onClick={() => items.add({ q: '', a: '' })}>질문 더하기</button>}
             <label>아래 안내<input value={draft.note} onChange={(e) => put({ note: e.target.value })} maxLength={200} /></label>
+          </>
+        )}
+
+        {section === 'about' && (
+          <>
+            <p className="muted">회사 소개 화면(<a href="/about" target="_blank" rel="noreferrer">/about ↗</a>)의 글과 사진이에요. 오시는 길(주소·전화·이메일)은 사업자 정보와 같은 값이라 [쇼핑몰 설정]에서 고쳐요. 제목에 {'{개수}'}를 쓰면 목록 개수로 바뀌어요.</p>
+            <h3>맨 위</h3>
+            <label>작은 제목<input value={draft.eyebrow} onChange={(e) => put({ eyebrow: e.target.value })} maxLength={60} /></label>
+            <label>회사 이름<em className="req">*</em><input value={draft.name} onChange={(e) => put({ name: e.target.value })} maxLength={40} /></label>
+            <label>소개 글<em className="req">*</em><textarea value={draft.lead} onChange={(e) => put({ lead: e.target.value })} rows={2} maxLength={400} /></label>
+            <PhotoField label="맨 위" value={draft.heroImage} onChange={(v) => put({ heroImage: v })} position={false} />
+            <h3>회사소개 (약속)</h3>
+            <PairList rows={draft.promises} onChange={(v) => put({ promises: v })} max={4} name="약속" limits={[40, 500]} />
+            <h3>핵심 가치</h3>
+            <div className="row">
+              <label>작은 제목<input value={draft.valuesEyebrow} onChange={(e) => put({ valuesEyebrow: e.target.value })} maxLength={40} /></label>
+              <label>제목<em className="req">*</em><input value={draft.valuesTitle} onChange={(e) => put({ valuesTitle: e.target.value })} maxLength={60} /></label>
+            </div>
+            <PairList rows={draft.values} onChange={(v) => put({ values: v })} max={12} name="가치" limits={[30, 300]} />
+            <h3>로컬푸드</h3>
+            <label>제목<em className="req">*</em><input value={draft.localfood.title} onChange={(e) => put({ localfood: { ...draft.localfood, title: e.target.value } })} maxLength={60} /></label>
+            <label>소개 글<textarea value={draft.localfood.lead} rows={2} maxLength={300} onChange={(e) => put({ localfood: { ...draft.localfood, lead: e.target.value } })} /></label>
+            <PhotoField label="로컬푸드" value={draft.localfood.image} onChange={(v) => put({ localfood: { ...draft.localfood, image: v } })} position={false} />
+            <PairList rows={draft.localfood.qa} onChange={(v) => put({ localfood: { ...draft.localfood, qa: v } })} max={6} name="질문" keys={['q', 'a']} labels={['질문', '답']} limits={[60, 600]} />
+            <label>키워드 제목<em className="req">*</em><input value={draft.localfood.keywordsTitle} onChange={(e) => put({ localfood: { ...draft.localfood, keywordsTitle: e.target.value } })} maxLength={60} /></label>
+            <PairList rows={draft.localfood.keywords} onChange={(v) => put({ localfood: { ...draft.localfood, keywords: v } })} max={8} name="키워드" limits={[30, 300]} />
+            <h3>만드는 것</h3>
+            <label>제목<em className="req">*</em><input value={draft.productsTitle} onChange={(e) => put({ productsTitle: e.target.value })} maxLength={40} /></label>
+            {draft.products.map((p, i) => {
+              const setP = (v) => put({ products: draft.products.map((x, j) => (j === i ? v : x)) })
+              const move = (n, dir) => { const a = [...draft.products]; [a[n], a[n + dir]] = [a[n + dir], a[n]]; put({ products: a }) }
+              return (
+                <div key={i} className="site-row">
+                  <p className="site-row-head"><b>{p.title || `만드는 것 ${i + 1}`}</b><RowTools index={i} count={draft.products.length} onMove={move} onRemove={(n) => put({ products: draft.products.filter((_, j) => j !== n) })} /></p>
+                  <div className="row">
+                    <label>이름<input value={p.title} maxLength={40} onChange={(e) => setP({ ...p, title: e.target.value })} /></label>
+                    <label>누르면 갈 주소 <span className="muted">/products?cat=base</span><input value={p.href} onChange={(e) => setP({ ...p, href: e.target.value })} /></label>
+                  </div>
+                  <label>설명<input value={p.text} maxLength={120} onChange={(e) => setP({ ...p, text: e.target.value })} /></label>
+                  <PhotoField label={`만드는 것 ${i + 1}`} value={{ src: p.image, alt: '', position: '' }} onChange={(v) => setP({ ...p, image: v.src })} alt={false} position={false} />
+                </div>
+              )
+            })}
+            {draft.products.length < 6 && <button type="button" className="button ghost" onClick={() => put({ products: [...draft.products, { title: '', text: '', image: '', href: '/products' }] })}>만드는 것 더하기</button>}
+            <label>아래 안내<input value={draft.note} onChange={(e) => put({ note: e.target.value })} maxLength={300} /></label>
           </>
         )}
 

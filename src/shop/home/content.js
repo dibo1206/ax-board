@@ -117,6 +117,8 @@ export const ABOUT = {
     { title: '지속가능한 농업, 함께하는 성장', text: '윤주(주)농업회사법인은 단순히 농산물을 판매하는 것이 목적이 아닌 지역농가와의 상생이 가장 중요한 가치이자 이념입니다. 매 계절 최고의 농산물을 공급하기 위해 농가와의 계약재배를 통해 안정적이고 지속가능한 농업 생태계를 함께 만들어 가고 있습니다.' },
     { title: '자연을 담은 건강한 약속', text: '농가와의 계약재배를 통해 생산부터 유통까지 모든 과정을 관리하고 있기에 누구나 안심하고 먹을 수 있는 건강한 먹거리 문화를 만들기 위해 노력하고 있으며, 소비자의 삶 속에 작지만 확실한 변화를 전하고자 합니다.' },
   ],
+  valuesEyebrow: '윤주(주) 핵심가치',
+  valuesTitle: '윤주(주)를 만드는 {개수}가지 원칙',
   values: [
     { title: '프리미엄 품질관리', text: '엄격한 품질 기준과 전문적인 관리 시스템을 통해 생산부터 유통까지 전 과정에서 높은 수준의 농산물을 제공합니다.' },
     { title: '사회적 가치창출', text: '지역 농가와의 협력을 강화하여 사회에 긍정적인 영향을 만들어 갑니다.' },
@@ -128,6 +130,7 @@ export const ABOUT = {
   ],
   localfood: {
     title: '내가 사는 지역에서 자란 농산물',
+    keywordsTitle: '로컬푸드의 {개수}가지 키워드',
     lead: '매 계절 최고의 농산물을 공급하기 위해 농가와의 계약재배를 통해 안정적이고 지속가능한 농업생태계를 함께 만들어가고 있습니다.',
     image: { src: '/about/soil.webp', alt: '흙을 두 손에 담은 모습' },
     qa: [
@@ -143,9 +146,10 @@ export const ABOUT = {
       { title: '농민 소득 안정', text: '농가와의 계약재배를 통해 농민들에게 안정적인 수익을 가져다줌으로써 품질적으로 개선을 이루어내고 있습니다.' },
     ],
   },
+  productsTitle: '윤주(주)가 만드는 것',
   products: [
-    { title: '프리미엄 과일 농축액 베이스', text: '복숭아·자몽·유자·레몬·패션후르츠·청포도·딸기 1.9kg. 카페·행사용 대용량', image: '/about/base-lineup.webp', href: '/?cat=base#products' },
-    { title: '로컬 과일세트', text: '천안 성환 배 세트, 명품 사과세트, 과일 혼합 세트, 도라지 배즙 세트', image: '/product-photos/yj_pear_set.webp', href: '/?cat=fresh#products' },
+    { title: '프리미엄 과일 농축액 베이스', text: '복숭아·자몽·유자·레몬·패션후르츠·청포도·딸기 1.9kg. 카페·행사용 대용량', image: '/about/base-lineup.webp', href: '/products?cat=base' },
+    { title: '로컬 과일세트', text: '천안 성환 배 세트, 명품 사과세트, 과일 혼합 세트, 도라지 배즙 세트', image: '/product-photos/yj_pear_set.webp', href: '/products?cat=fresh' },
   ],
   location: {
     ceo: '배윤주',
@@ -159,8 +163,8 @@ export const ABOUT = {
 
 // 홈페이지 관리 (관리자 [홈페이지 관리], server/siteContent.js): 저장한 칸은 위 기본값을 덮어쓴다.
 // main.jsx 가 화면을 그리기 전에 applySiteContent 를 부른다. DEFAULTS 는 [기본값으로]를 위한 처음 내용
-export const DEFAULTS = JSON.parse(JSON.stringify({ hero: HERO, story: STORY, season: SEASON, faq: FAQ }))
-const LIVE_CONTENT = { hero: HERO, story: STORY, season: SEASON, faq: FAQ }
+export const DEFAULTS = JSON.parse(JSON.stringify({ hero: HERO, story: STORY, season: SEASON, faq: FAQ, about: ABOUT }))
+const LIVE_CONTENT = { hero: HERO, story: STORY, season: SEASON, faq: FAQ, about: ABOUT }
 export function applySiteContent(saved) {
   for (const [key, value] of Object.entries(saved ?? {})) {
     if (Object.hasOwn(LIVE_CONTENT, key) && value && typeof value === 'object') Object.assign(LIVE_CONTENT[key], value)
