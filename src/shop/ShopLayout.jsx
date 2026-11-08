@@ -57,6 +57,7 @@ export function ShopLayout({ children }) {
   return (
     <div className="shop">
       <a className="skip" href="#main">본문으로 건너뛰기</a>
+      <StaffBar />
       {policy?.payment.test && (
         <p className="dev-bar">개발 중 · 모든 상품은 [예시]이고 테스트 결제라 실제로 돈이 나가지 않아요. <a href="/guide">1분 사용 안내</a> · <a href="/admin">관리자</a> · <a href="/seller">판매자</a></p>
       )}
@@ -125,6 +126,32 @@ export function ShopLayout({ children }) {
         </div>
       </footer>
       <CartToast />
+    </div>
+  )
+}
+
+// 관리자·판매자로 로그인한 채 쇼핑몰을 보면 맨 위에 막대를 띄운다: 관리자 화면으로 돌아가기, 홈페이지 관리, 보고 있는 상품 고치기
+function StaffBar() {
+  const [staff, setStaff] = useState(null)
+  const [path, setPath] = useState(() => window.location.pathname)
+  useEffect(() => {
+    get('/staff').then(setStaff).catch(() => {})
+    const onPop = () => setPath(window.location.pathname)
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+  if (!staff) return null
+  if (staff.role === 'seller') {
+    return <div className="staff-bar" role="region" aria-label="판매자 메뉴"><span>판매자({staff.loginId})로 보는 중</span><a href="/seller">판매자 센터로</a></div>
+  }
+  const code = path.startsWith('/p/') ? decodeURIComponent(path.slice(3)) : null
+  return (
+    <div className="staff-bar" role="region" aria-label="관리자 메뉴">
+      <span>관리자({staff.loginId})로 보는 중</span>
+      <a href="/admin">관리자 화면</a>
+      <a href="/admin?tab=site">홈페이지 관리</a>
+      <a href="/admin?tab=posts">공지·언론</a>
+      {code && <a href={`/admin?tab=products&edit=${encodeURIComponent(code)}`}>이 상품 고치기</a>}
     </div>
   )
 }

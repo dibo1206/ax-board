@@ -546,3 +546,11 @@ CREATE TABLE IF NOT EXISTS posts (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS posts_list_idx ON posts (kind, pinned DESC, created_at DESC);
+
+-- 홈페이지 관리 (2026-11-08, server/siteContent.js): 관리자가 고친 첫 화면 칸(hero·story·season·faq)만 둔다. 없으면 코드의 기본값
+CREATE TABLE IF NOT EXISTS site_content (
+  key TEXT PRIMARY KEY,
+  value JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_by TEXT
+);

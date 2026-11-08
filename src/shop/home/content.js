@@ -156,3 +156,13 @@ export const ABOUT = {
   },
   note: '※ 글과 그림은 회사 홈페이지(yunjufarm.co.kr)에서 옮겼어요 (2026-11-08). 회사 홈페이지의 경영공시는 시험 글뿐이고 함께하는 사람들은 준비 중이라 옮기지 않았어요.',
 }
+
+// 홈페이지 관리 (관리자 [홈페이지 관리], server/siteContent.js): 저장한 칸은 위 기본값을 덮어쓴다.
+// main.jsx 가 화면을 그리기 전에 applySiteContent 를 부른다. DEFAULTS 는 [기본값으로]를 위한 처음 내용
+export const DEFAULTS = JSON.parse(JSON.stringify({ hero: HERO, story: STORY, season: SEASON, faq: FAQ }))
+const LIVE_CONTENT = { hero: HERO, story: STORY, season: SEASON, faq: FAQ }
+export function applySiteContent(saved) {
+  for (const [key, value] of Object.entries(saved ?? {})) {
+    if (Object.hasOwn(LIVE_CONTENT, key) && value && typeof value === 'object') Object.assign(LIVE_CONTENT[key], value)
+  }
+}
