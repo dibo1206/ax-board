@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { when } from '../shop/shared.js'
 import { adminApi } from './api.js'
+import { usePage } from './paging.js'
+import { Pager } from './ui.jsx'
 
 // 알림 기록: 손님·관리자에게 보낸(또는 메일 서버 설정이 없어 보내지 않은) 메일
 const STATUS = { queued: '보내는 중', sent: '보냄', failed: '실패', skipped: '설정 없음' }
@@ -9,6 +11,7 @@ export function Notifications() {
   const [data, setData] = useState(null)
   const [open, setOpen] = useState(null)
   const [error, setError] = useState('')
+  const mailPage = usePage(data?.mails ?? [], 20)
 
   useEffect(() => {
     adminApi('/notifications').then(setData).catch((e) => setError(e.message))
@@ -23,7 +26,7 @@ export function Notifications() {
         <table className="table">
           <thead><tr><th>때</th><th>받는 사람</th><th>제목</th><th>상태</th></tr></thead>
           <tbody>
-            {data.mails.map((m) => (
+            {mailPage.rows.map((m) => (
               <tr key={m.id}>
                 <td className="muted">{when(m.created_at)}</td>
                 <td>{m.to_email}</td>
@@ -37,6 +40,7 @@ export function Notifications() {
           </tbody>
         </table>
       )}
+      <Pager paging={mailPage} />
     </section>
   )
 }
