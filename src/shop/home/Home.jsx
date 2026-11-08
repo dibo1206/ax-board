@@ -121,7 +121,7 @@ function QuickCart({ p, onOpen }) {
 const GRADE = { 3: '특', 2: '상' }
 
 // 옵션 상품(5kg·10kg …)은 판매 중 옵션의 가장 낮은 가격을 "~부터"로, 100g당 가격도 그 옵션으로. 모든 옵션이 품절이면 품절
-function ProductCard({ p, onOpen }) {
+export function ProductCard({ p, onOpen, rank = null }) {
   const cheapest = cheapestOption(p)
   const unit = cheapest ? unitPrice(cheapest.price, cheapest.name) : unitPrice(p.price, p.unit)
   return (
@@ -146,6 +146,7 @@ function ProductCard({ p, onOpen }) {
             )}
             {p.tags?.includes('season') && <span className="ptag ptag-season">제철</span>}
           </span>
+          {rank && <span className="pcard-rank" aria-label={`판매 ${rank}위`}>{rank}</span>}
           {p.sold_out && <span className="pcard-flag">품절</span>}
           {p.preorder && !p.sold_out && <span className="pcard-flag preorder">예약 · {shipDay(p.ship_from)}부터</span>}
         </span>
@@ -171,6 +172,7 @@ export function ProductSection({ groups, loc, list, sorts, onChange, onOpen, onM
     <section id="products" className="wrap section" aria-labelledby="products-title">
       <div className="products-head">
         <h2 id="products-title" className="display-sm">상품</h2>
+        <a className="products-all" href="/products">전체 상품·베스트 보기 →</a>
       </div>
       <div className="products-bar">
         <nav className="text-tabs" aria-label="카테고리">

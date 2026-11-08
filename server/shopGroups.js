@@ -16,6 +16,19 @@ export const groupWhere = (key) => GROUPS.find((g) => g.key === key)?.where ?? n
 
 export const shopGroupRouter = express.Router()
 
+// 묶음(생과일·농축액 …)마다 판매 중 상품이 있는 품목과 상품 수, 많은 순
+shopGroupRouter.get('/shop-items', async (req, res) => {
+  res.json(await cached('shop-items', 30_000, async () => {
+    const which = `CASE ${GROUPS.map((g, n) => `WHEN ${g.where} THEN ${n}`).join(' ')} END`
+    const { rows } = await pool.query(
+      `SELECT i.item_code, i.name, ${which} AS g, count(*)::int AS count
+       FROM products p JOIN items i ON i.item_code = p.item_code WHERE p.status = 'active'
+       GROUP BY i.item_code, i.name, g ORDER BY count DESC, i.name`,
+    )
+    return rows.filter((r) => r.g !== null).map(({ g, ...r }) => ({ ...r, group: GROUPS[g].key }))
+  }))
+})
+
 shopGroupRouter.get('/shop-groups', async (req, res) => {
   res.json(await cached('shop-groups', 15_000, async () => {
     const { rows } = await pool.query(

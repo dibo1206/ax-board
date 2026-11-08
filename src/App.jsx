@@ -22,6 +22,7 @@ const OrderSuccess = page(() => import('./shop/Orders.jsx'), 'OrderSuccess')
 const OrderFail = page(() => import('./shop/Orders.jsx'), 'OrderFail')
 const OrderLookup = page(() => import('./shop/Orders.jsx'), 'OrderLookup')
 const AboutPage = page(() => import('./shop/About.jsx'), 'AboutPage')
+const ProductsPage = page(() => import('./shop/ProductsPage.jsx'), 'ProductsPage')
 const SitemapPage = page(() => import('./shop/About.jsx'), 'SitemapPage')
 const PostListPage = page(() => import('./shop/Posts.jsx'), 'PostListPage')
 const PostDetailPage = page(() => import('./shop/Posts.jsx'), 'PostDetailPage')
@@ -430,6 +431,7 @@ function innerPage(path) {
   if (path === '/order/fail') return <OrderFail />
   if (path === '/order/lookup') return <OrderLookup />
   if (path.startsWith('/policy/')) return <Policy kind={path.split('/')[2]} />
+  if (path === '/products') return <ProductsPage />
   if (path === '/about') return <AboutPage />
   if (path === '/sitemap') return <SitemapPage />
   if (path === '/notice' || path === '/press') return <PostListPage kind={path.slice(1)} />

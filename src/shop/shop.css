@@ -1194,3 +1194,71 @@
 /* 관리자·판매자로 쇼핑몰을 볼 때 맨 위 막대 */
 .shop .staff-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 16px; padding: 7px 16px; background: #1f3a2a; color: #f4f1e8; font-size: 13px; }
 .shop .staff-bar a { color: #e9d9a6; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
+/* 상품 화면 (/products, 2026-11-08): 카테고리(드롭다운 품목) · 걸러 보기 칩 · 정렬 · 개수 · 보기 방식 */
+.shop .page:has(.plist) { max-width: 1440px; }
+.shop .plist { display: flex; flex-direction: column; gap: 14px; }
+.shop .pcrumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; }
+.shop .pcrumbs a, .shop .pcrumbs .link { color: var(--muted); }
+.shop .pcrumbs b { color: var(--text); }
+.shop .plist-title { margin: 0; font-family: var(--display); font-size: clamp(24px, 2.6vw, 32px); }
+.shop .chev { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; margin-left: 2px; }
+.shop .pcat { display: flex; flex-wrap: wrap; gap: 2px 4px; border-bottom: 1.5px solid var(--line); }
+.shop .pcat-tab { position: relative; }
+.shop .pcat-tab > button { padding: 12px 14px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--muted); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; margin-bottom: -1.5px; }
+.shop .pcat-tab > button:hover { color: var(--text); }
+.shop .pcat-tab > button.on { border-bottom-color: var(--accent); color: var(--text); }
+.shop .pcat-drop { position: absolute; top: 100%; left: 0; z-index: 30; display: none; min-width: 180px; padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: #fff; box-shadow: 0 10px 28px rgb(0 0 0 / 0.12); }
+@media (hover: hover) { .shop .pcat-tab.has-sub:hover .pcat-drop, .shop .pcat-tab.has-sub:focus-within .pcat-drop { display: flex; flex-direction: column; } }
+.shop .pcat-drop button { display: flex; justify-content: space-between; gap: 16px; padding: 8px 10px; border: 0; border-radius: 6px; background: none; color: var(--text); font: inherit; font-size: 15px; text-align: left; cursor: pointer; white-space: nowrap; }
+.shop .pcat-drop button:hover, .shop .pcat-drop button:focus-visible { background: #f4f1e8; }
+.shop .pcat-drop small, .shop .pitems small { color: var(--muted); }
+.shop .pitems { display: flex; flex-wrap: wrap; gap: 6px; }
+.shop .pitems button { padding: 6px 14px; border: 1px solid var(--border); border-radius: 999px; background: #fff; color: var(--text); font: inherit; font-size: 14px; cursor: pointer; }
+.shop .pitems button.on { border-color: var(--accent); background: var(--accent); color: #fff; }
+.shop .pitems button.on small { color: rgb(255 255 255 / 0.8); }
+.shop .pfilter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 12px; background: #efede7; }
+.shop .pchip { display: inline-flex; align-items: center; gap: 2px; padding: 8px 16px; border: 1px solid var(--border); border-radius: 999px; background: #fff; color: var(--text); font: inherit; font-size: 14px; cursor: pointer; }
+.shop .pchip:hover { border-color: var(--text); }
+.shop .pchip.on { border-color: #8a5a3c; background: #9b6a4c; color: #fff; }
+.shop .pclear { margin-left: 4px; font-size: 14px; }
+.shop .pprice { position: relative; }
+.shop .pprice-pop { position: absolute; top: calc(100% + 8px); left: 0; z-index: 30; display: flex; align-items: center; gap: 6px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: #fff; box-shadow: 0 10px 28px rgb(0 0 0 / 0.12); }
+.shop .pprice-pop input { width: 110px; height: 38px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
+.shop .pprice-pop button[type=submit] { height: 38px; padding: 0 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
+.shop .psort { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.shop .psort-list { display: flex; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; }
+.shop .psort-list li + li::before { content: '|'; margin: 0 6px; color: var(--border); }
+.shop .psort-list button { padding: 4px 2px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px; cursor: pointer; }
+.shop .psort-list button.on { color: var(--text); font-weight: 700; }
+.shop .psort-note { margin: 0; }
+.shop .psort-tools { display: flex; align-items: center; gap: 10px; }
+.shop .psort-tools select { height: 36px; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px; background: #fff; font: inherit; font-size: 14px; }
+.shop .pview { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.shop .pview button { display: grid; place-items: center; width: 36px; height: 34px; border: 0; background: #fff; color: var(--muted); cursor: pointer; }
+.shop .pview button + button { border-left: 1px solid var(--border); }
+.shop .pview button.on { background: var(--text); color: #fff; }
+.shop .pview svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.shop .pgrid-big { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.shop .pgrid-big .pcard-img { height: 460px; }
+.shop .pgrid-list { grid-template-columns: 1fr; gap: 0; }
+.shop .pgrid-list > li { padding: 14px 0; border-bottom: 1px solid var(--border); }
+.shop .pgrid-list .pcard-wrap { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.shop .pgrid-list .pcard { display: grid; grid-template-columns: 150px minmax(0, 1fr); column-gap: 18px; align-content: start; }
+.shop .pgrid-list .pcard-img { grid-row: 1 / span 6; height: 150px; margin: 0; }
+.shop .pcard-rank { position: absolute; left: 0; bottom: 0; z-index: 1; display: grid; place-items: center; min-width: 38px; height: 38px; padding: 0 8px; background: #1e221f; color: #fff; font-size: 17px; font-weight: 700; }
+.shop .products-head { position: relative; }
+.shop .products-all { margin-left: auto; color: var(--accent); font-weight: 600; text-decoration: none; }
+.shop .products-all:hover { text-decoration: underline; }
+@media (max-width: 760px) {
+  .shop .pcat { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .shop .pcat-tab > button { white-space: nowrap; padding: 10px 10px; font-size: 15px; }
+  .shop .pcat-tab .chev { display: none; }
+  .shop .psort-list { flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; scrollbar-width: none; width: 100%; }
+  .shop .psort-tools { width: 100%; justify-content: space-between; }
+  .shop .pgrid-big { grid-template-columns: 1fr; }
+  .shop .pgrid-big .pcard-img { height: 340px; }
+  .shop .pgrid-list .pcard { grid-template-columns: 96px minmax(0, 1fr); column-gap: 12px; }
+  .shop .pgrid-list .pcard-img { height: 96px; }
+  .shop .pgrid-list .pcard-wrap { grid-template-columns: 1fr; }
+}
