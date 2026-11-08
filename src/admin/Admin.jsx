@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { adminApi } from './api.js'
 import { BannedWords } from './BannedWords.jsx'
 import { ChatLogs } from './ChatLogs.jsx'
+import { AdminPosts } from './Posts.jsx'
 import { ItemReview } from './ItemReview.jsx'
 import { SellerApproval } from './SellerApproval.jsx'
 import { Inbox } from './Inbox.jsx'
@@ -164,7 +165,7 @@ function Admin() {
   const NAV = [
     ['운영', [['dashboard', '매출·할 일', 0], ['orders', '주문', newOrders], ['returns', '반품', counts?.returns_requested ?? 0]]],
     ['상품', [['products', '상품 관리', pending + (counts?.auto_unchecked ?? 0)], ['items', '품목 검수', counts?.pending_items ?? 0], ['sellers', '판매자 승인', counts?.pending_sellers ?? 0]]],
-    ['손님', [['inbox', '문의함', waiting], ['reviews', '후기', 0], ['chat', '상담 기록', 0]]],
+    ['손님', [['inbox', '문의함', waiting], ['reviews', '후기', 0], ['chat', '상담 기록', 0], ['posts', '공지·언론', 0]]],
     ['기록·설정', [['mail', '알림 기록', 0], ['access', '접속 기록', 0], ['banned', '금지어', 0]]],
   ]
 
@@ -208,6 +209,8 @@ function Admin() {
         <BannedWords />
       ) : tab === 'access' ? (
         <AccessLogs />
+      ) : tab === 'posts' ? (
+        <AdminPosts />
       ) : tab === 'chat' ? (
         <ChatLogs />
       ) : editing && options ? (

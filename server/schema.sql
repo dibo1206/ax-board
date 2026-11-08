@@ -526,3 +526,23 @@ ALTER TABLE questions ADD COLUMN IF NOT EXISTS customer_id INT REFERENCES custom
 ALTER TABLE questions ADD COLUMN IF NOT EXISTS answer_seen_at TIMESTAMPTZ;
 ALTER TABLE questions ADD COLUMN IF NOT EXISTS answer_mailed_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS questions_customer_idx ON questions (customer_id) WHERE customer_id IS NOT NULL;
+
+-- 회사 콘텐츠 (2026-11-08): 상품 상세 이미지(세로로 긴 상세페이지), 공지사항·언론보도 게시판 (server/posts.js)
+ALTER TABLE products ADD COLUMN IF NOT EXISTS detail_images TEXT[] NOT NULL DEFAULT '{}';
+CREATE TABLE IF NOT EXISTS posts (
+  id SERIAL PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('notice', 'press')),
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  link_url TEXT,
+  image_url TEXT,
+  pinned BOOLEAN NOT NULL DEFAULT false,
+  popup BOOLEAN NOT NULL DEFAULT false,
+  popup_until DATE,
+  hidden BOOLEAN NOT NULL DEFAULT false,
+  author TEXT,
+  seed_key TEXT UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS posts_list_idx ON posts (kind, pinned DESC, created_at DESC);

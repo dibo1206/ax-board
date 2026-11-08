@@ -30,6 +30,7 @@ import { adminOrderRouter, memberOrderRouter, publicOrderRouter, sellerOrderRout
 import { recommendRouter } from './recommend.js'
 import { restockRouter, sweepRestock } from './restock.js'
 import { searchWhere, searchWords } from './search.js'
+import { adminPostRouter, publicPostRouter } from './posts.js'
 import { adminReturnRouter, memberReturnRouter, publicReturnRouter, sellerReturnRouter } from './returns.js'
 import { isPreorder } from './preorder.js'
 import { adminReviewRouter, reviewRouter } from './reviews.js'
@@ -350,6 +351,7 @@ app.use('/api/admin/reviews', adminReviewRouter)
 app.use('/api/admin/dashboard', dashboardRouter)
 app.use('/api/admin/banned-words', bannedRouter)
 app.use('/api/admin/sellers', adminSellerRouter)
+app.use('/api/admin/posts', adminPostRouter)
 app.use('/api/seller-signup', sellerSignupRouter)
 app.get('/api/admin/notifications', requireAdmin, async (req, res) => res.json(await listMails()))
 app.use('/api/admin', adminRouter)
@@ -364,6 +366,7 @@ app.use('/api', publicOrderRouter)
 app.use('/api', publicReturnRouter)
 app.use('/api', reviewRouter)
 app.use('/api', shopGroupRouter)
+app.use('/api', publicPostRouter)
 app.use('/api/account/orders', memberReturnRouter)
 app.use('/api/account/orders', memberOrderRouter)
 app.use('/api/account/oauth', oauthRouter)
