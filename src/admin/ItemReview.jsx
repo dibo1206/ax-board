@@ -27,9 +27,71 @@ function toForm(item) {
     danger_note: item.danger_note ?? '',
     allergen_note: item.allergen_note ?? '',
     cafe_note: item.cafe_note ?? '',
-    recipes: (item.recipes ?? []).map((r) => `${r.title}: ${r.ingredients}: ${r.method}${r.image ? `: ${r.image}` : ''}`).join('\n'),
+    recipes: (item.recipes ?? []).map((r) => ({ title: r.title ?? '', ingredients: r.ingredients ?? '', method: r.method ?? '', image: r.image ?? '' })),
     source: item.source ?? '',
   }
+}
+
+const MAX_RECIPES = 5
+const emptyRecipe = () => ({ title: '', ingredients: '', method: '', image: '' })
+
+// 레시피 한 줄: 제목·재료·방법 + 카드 사진 (올리기 · AI로 만들기 · 빼기). 사진이 없으면 손님 화면은 요리 종류별 기본 그림
+function RecipeRow({ recipe, number, itemCode, photoAi, busy, onChange, onRemove, onBusy }) {
+  const [error, setError] = useState('')
+  const set = (key) => (e) => onChange({ ...recipe, [key]: e.target.value })
+
+  async function upload(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setError('')
+    if (file.size > 2 * 1024 * 1024) return setError('사진은 2MB 이하로 올려 주세요.')
+    onBusy(true)
+    try {
+      const { url } = await adminApi('/recipe-photo', { method: 'POST', body: file, headers: { 'Content-Type': file.type } })
+      onChange({ ...recipe, image: url })
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      onBusy(false)
+    }
+  }
+
+  async function make() {
+    if (!recipe.title || !recipe.method) return setError('제목과 방법을 먼저 적어 주세요.')
+    setError('')
+    onBusy(true)
+    try {
+      const { url } = await adminApi('/recipe-photo/generate', { method: 'POST', body: { item_code: itemCode, ...recipe }, timeoutMs: 90_000 })
+      onChange({ ...recipe, image: url })
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      onBusy(false)
+    }
+  }
+
+  return (
+    <div className="recipe-row">
+      <div className="recipe-photo">
+        {recipe.image ? <img src={recipe.image} alt={`${recipe.title || `레시피 ${number}`} 사진`} /> : <span className="muted">사진 없음<br />(기본 그림)</span>}
+      </div>
+      <div className="recipe-fields">
+        <div className="row">
+          <label>{number}. 제목<input value={recipe.title} onChange={set('title')} maxLength={30} placeholder="수박 화채" /></label>
+          <label>재료 (·로 나눠)<input value={recipe.ingredients} onChange={set('ingredients')} maxLength={60} placeholder="수박·사이다" /></label>
+        </div>
+        <label>만드는 방법 (한 문장)<input value={recipe.method} onChange={set('method')} maxLength={120} placeholder="깍둑썰어 사이다를 붓기" /></label>
+        <div className="actions">
+          <label className="button ghost small file-button">사진 올리기<input type="file" accept="image/jpeg,image/png,image/webp" onChange={upload} disabled={busy} /></label>
+          {photoAi.enabled && <button type="button" className="button ghost small" onClick={make} disabled={busy}>AI로 사진 만들기</button>}
+          {recipe.image && <button type="button" className="link" onClick={() => onChange({ ...recipe, image: '' })} disabled={busy}>사진 빼기</button>}
+          <button type="button" className="link danger" onClick={onRemove} disabled={busy}>레시피 지우기</button>
+        </div>
+        {error && <p className="error">{error}</p>}
+      </div>
+    </div>
+  )
 }
 
 function toBody(form) {
@@ -44,22 +106,65 @@ function toBody(form) {
     }),
     allergens: splitCommas(form.allergens),
     danger_signs: splitLines(form.danger_signs),
-    recipes: splitLines(form.recipes).map((line) => {
-      const [title, ingredients, ...method] = line.split(':').map((s) => s.trim())
-      // 끝 칸이 / 로 시작하면 레시피 카드 사진 주소 (예: /recipe-photos/kiwi-yogurt.webp)
-      const image = method.length > 1 && method.at(-1).startsWith('/') ? method.pop() : ''
-      return { title, ingredients: ingredients ?? '', method: method.join(':'), ...(image ? { image } : {}) }
-    }),
+    recipes: form.recipes
+      .map((r) => ({ title: r.title.trim(), ingredients: r.ingredients.trim(), method: r.method.trim(), ...(r.image ? { image: r.image } : {}) }))
+      .filter((r) => r.title && r.method),
   }
 }
 
-function ItemCard({ item, onDone }) {
+function ItemCard({ item, photoAi, onPhotoUsed, onDone }) {
   const [form, setForm] = useState(() => toForm(item))
   const [issues, setIssues] = useState(item.issues)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
   const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
   const fresh = item.category !== '가공품'
+  const setRecipe = (n) => (next) => setForm((prev) => ({ ...prev, recipes: prev.recipes.map((r, i) => (i === n ? next : r)) }))
+  const busyFor = (on) => { setBusy(on); if (!on) onPhotoUsed() }
+
+  // [AI로 빈 칸 채우기]: 비어 있는 칸만 초안으로 채우고, 새 레시피는 사진까지 만든다. 저장은 관리자가 읽고 고친 뒤에
+  async function draft() {
+    setError('')
+    setMessage('AI가 초안을 쓰는 중이에요… (30초쯤)')
+    setBusy(true)
+    try {
+      const { draft: d, flagged, photos } = await adminApi(`/items/${item.item_code}/draft`, { method: 'POST', timeoutMs: 90_000 })
+      const recipes = d.recipes?.length && form.recipes.length === 0 ? d.recipes.map((r) => ({ ...emptyRecipe(), ...r })) : null
+      setForm((prev) => ({
+        ...prev,
+        storage_method: prev.storage_method || d.storage_method || '',
+        stage1_state: prev.stage1_state || d.stage1_state || '',
+        stage2_state: prev.stage2_state || d.stage2_state || '',
+        opened_note: prev.opened_note || d.opened_note || '',
+        danger_signs: prev.danger_signs || (d.danger_signs ?? []).join('\n'),
+        recipes: recipes ?? prev.recipes,
+      }))
+      const note = flagged.length ? ` (금지어·근거 없는 문장 ${flagged.length}개는 뺐어요)` : ''
+      if (recipes && photos) {
+        const made = []
+        for (const [n, r] of recipes.entries()) {
+          setMessage(`초안을 채웠어요${note}. 레시피 사진 만드는 중 ${n + 1}/${recipes.length}…`)
+          try {
+            const { url } = await adminApi('/recipe-photo/generate', { method: 'POST', body: { item_code: item.item_code, ...r }, timeoutMs: 90_000 })
+            made.push(n)
+            setForm((prev) => ({ ...prev, recipes: prev.recipes.map((x, i) => (i === n && x.title === r.title ? { ...x, image: url } : x)) }))
+          } catch (err) {
+            setError(`레시피 ${n + 1} 사진: ${err.message}`)
+            if (err.status === 429) break
+          }
+        }
+        setMessage(`초안과 레시피 사진 ${made.length}장을 채웠어요${note}. 출처와 대조해 고친 뒤 [저장]을 눌러 주세요.`)
+      } else {
+        setMessage(`초안을 채웠어요${note}. 출처와 대조해 고친 뒤 [저장]을 눌러 주세요.`)
+      }
+    } catch (e) {
+      setMessage('')
+      setError(e.message)
+    } finally {
+      busyFor(false)
+    }
+  }
 
   async function save() {
     setError('')
@@ -93,9 +198,10 @@ function ItemCard({ item, onDone }) {
       <p className="muted">
         이 품목을 쓰는 상품: {item.products.length ? item.products.map((p) => `${p.name}(${p.status === 'active' ? '판매 중' : p.status === 'pending' ? '검토 대기' : '임시 저장'})`).join(', ') : '없음'}
       </p>
-      {!item.storage_method && !item.danger_signs.length && (
-        <p className="muted">아직 비어 있어요. 판매자가 상품 화면에서 [AI로 채우기]를 누르면 초안이 채워져요. 관리자가 직접 적어도 돼요.</p>
-      )}
+      <div className="actions">
+        <button type="button" className="button ghost" onClick={draft} disabled={busy}>AI로 빈 칸 채우기{photoAi.enabled ? ' (레시피 사진 포함)' : ''}</button>
+        <span className="muted">비어 있는 칸만 채워요. 이미 적힌 내용은 바꾸지 않아요.</span>
+      </div>
 
       <div className="issues">
         <strong>1차 검사 (자동)</strong> {errors.length ? <span className="error">고칠 것 {errors.length}개</span> : <span className="success">막는 문제 없음</span>}
@@ -145,14 +251,28 @@ function ItemCard({ item, onDone }) {
       {form.show_brix && <p className="muted">판매자가 이 범위 밖의 당도를 적으면 저장이 막혀요. 근거 없이 정하지 말고 출처에 나온 값으로 적어 주세요.</p>}
       <label>알레르기 안내 문장 (선택)<input value={form.allergen_note} onChange={set('allergen_note')} maxLength={300} placeholder="예: 다른 원료가 들어간 제품은 라벨을 확인해 주세요" /></label>
       <label>카페 메뉴 비율 (선택, 시험 제조 제안값이면 그렇게 적기)<input value={form.cafe_note} onChange={set('cafe_note')} maxLength={400} /></label>
-      <label>레시피 (한 줄에 하나: 제목: 재료: 방법, 카드 사진은 끝에 : /recipe-photos/kiwi-yogurt.webp — 없으면 기본 그림)<textarea rows={3} value={form.recipes} onChange={set('recipes')} placeholder="수박 화채: 수박·사이다: 깍둑썰어 사이다를 붓기" /></label>
+      <fieldset className="recipe-editor">
+        <legend>레시피 ({form.recipes.length}/{MAX_RECIPES}) <span className="muted">
+          {photoAi.enabled ? `· AI 사진은 오늘 ${photoAi.left}장 더 만들 수 있어요` : '· AI 사진 만들기는 꺼져 있어요 (.env 에 Cloudflare 키가 없음). 사진을 직접 올리거나 기본 그림을 써요'}
+        </span></legend>
+        {form.recipes.map((r, n) => (
+          <RecipeRow
+            key={n} recipe={r} number={n + 1} itemCode={item.item_code} photoAi={photoAi} busy={busy}
+            onChange={setRecipe(n)} onBusy={busyFor}
+            onRemove={() => setForm((prev) => ({ ...prev, recipes: prev.recipes.filter((_, i) => i !== n) }))}
+          />
+        ))}
+        {form.recipes.length < MAX_RECIPES && (
+          <button type="button" className="button ghost small" onClick={() => setForm((prev) => ({ ...prev, recipes: [...prev.recipes, emptyRecipe()] }))}>+ 레시피 더하기</button>
+        )}
+      </fieldset>
       <label>출처* (확인한 자료의 기관·제목·주소)<textarea rows={2} value={form.source} onChange={set('source')} maxLength={1000} placeholder="예: 농촌진흥청 농사로 「수박 보관법」 https://..." /></label>
 
       {message && <p className="success">{message}</p>}
       {error && <p className="error">{error}</p>}
       <div className="actions">
-        <button type="button" className="button ghost" onClick={save}>저장</button>
-        {item.status === 'pending' && <button type="button" className="button" onClick={approve}>검수 완료</button>}
+        <button type="button" className="button ghost" onClick={save} disabled={busy}>저장</button>
+        {item.status === 'pending' && <button type="button" className="button" onClick={approve} disabled={busy}>검수 완료</button>}
       </div>
     </div>
   )
@@ -164,11 +284,14 @@ export function ItemReview({ onCount }) {
   const [open, setOpen] = useState(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [photoAi, setPhotoAi] = useState({ enabled: false, left: 0 })
 
   const load = useCallback(() => adminApi(`/items/review${all ? '?all=1' : ''}`)
     .then((rows) => { setList(rows); onCount?.(rows.filter((r) => r.status === 'pending').length) })
     .catch((e) => setError(e.message)), [all, onCount])
+  const loadPhotoAi = useCallback(() => adminApi('/recipe-photo/status').then(setPhotoAi).catch(() => {}), [])
   useEffect(() => { load() }, [load])
+  useEffect(() => { loadPhotoAi() }, [loadPhotoAi])
 
   if (!list) return error ? <p className="error">{error}</p> : <p className="muted">불러오는 중…</p>
   return (
@@ -179,7 +302,7 @@ export function ItemReview({ onCount }) {
       <label className="check"><input type="checkbox" checked={all} onChange={(e) => { setAll(e.target.checked); setOpen(null) }} /> 검수 끝난 품목도 보기 (보관법·보통 당도 범위 고치기)</label>
       {list.filter((i) => i.status === 'pending').length === 0 && <p className="box muted">검수 기다리는 품목이 없어요.</p>}
       {list.map((item) => (item.status === 'pending' || open === item.item_code
-        ? <ItemCard key={item.item_code} item={item} onDone={(text) => { setMessage(text); load() }} />
+        ? <ItemCard key={item.item_code} item={item} photoAi={photoAi} onPhotoUsed={loadPhotoAi} onDone={(text) => { setMessage(text); load() }} />
         : (
           <p key={item.item_code} className="box">
             <button type="button" className="link" onClick={() => setOpen(item.item_code)}>{item.category} · {item.name}</button>

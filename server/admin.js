@@ -6,7 +6,9 @@ import express from 'express'
 import sharp from 'sharp'
 import { requireAdmin } from './auth.js'
 import { findBanned } from './banned.js'
-import { fillItem, listTemplates, productDraft } from './content.js'
+import { fillItem, itemDraft, listTemplates, productDraft } from './content.js'
+import { createLimiter } from './limit.js'
+import { generateRecipePhoto, imageKeyLoaded, imagesLeftToday, saveRecipePhoto } from './imagegen.js'
 import { pool } from './db.js'
 import { approveItem, listReview, requestItem, saveItem } from './items.js'
 import { noticeMissing } from './notice.js'
@@ -149,6 +151,7 @@ export async function updateProduct(code, product) {
 adminRouter.get('/ai/templates', listTemplates)
 adminRouter.post('/ai/product-draft', productDraft)
 adminRouter.post('/items/:code/fill', fillItem)
+adminRouter.post('/items/:code/draft', itemDraft)
 // 새 품목 요청 · 검수 (items.js)
 adminRouter.post('/items/request', requestItem)
 adminRouter.get('/items/review', listReview)
@@ -289,4 +292,37 @@ export async function removeImage(req, res) {
 }
 
 adminRouter.post('/products/:code/image', rawImage, storeImage)
+// 레시피 카드 사진 (품목 검수 화면): 올리기 · AI로 만들기(Cloudflare 키가 있을 때) · 오늘 남은 장 수
+const tooManyPhotos = createLimiter({ limit: 30, windowMs: 60 * 60_000, key: (req) => `recipe-photo:${req.admin.loginId}` })
+adminRouter.get('/recipe-photo/status', (req, res) => res.json({ enabled: imageKeyLoaded(), left: imagesLeftToday() }))
+adminRouter.post('/recipe-photo', rawImage, async (req, res) => {
+  const type = req.headers['content-type']
+  if (!IMAGE_TYPES[type] || !Buffer.isBuffer(req.body) || !req.body.length || !looksLike(type, req.body)) {
+    return res.status(400).json({ error: '사진은 jpg, png, webp 파일만 올릴 수 있어요. (2MB 이하)' })
+  }
+  try {
+    const url = await saveRecipePhoto(req.body)
+    console.log(`[items] ${req.admin.loginId} 레시피 사진 올림 ${url}`)
+    res.status(201).json({ url })
+  } catch {
+    res.status(400).json({ error: '사진을 읽지 못했어요. 다른 사진으로 올려 주세요.' })
+  }
+})
+adminRouter.post('/recipe-photo/generate', async (req, res) => {
+  const b = req.body ?? {}
+  const pick = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
+  const recipe = { title: pick(b.title, 30), ingredients: pick(b.ingredients, 60), method: pick(b.method, 120), photo: pick(b.photo, 400) }
+  if (!recipe.title || !recipe.method) return res.status(400).json({ error: '레시피 제목과 방법을 먼저 적어 주세요.' })
+  const item = await pool.query('SELECT name FROM items WHERE item_code = $1', [pick(b.item_code, 64)])
+  if (!item.rowCount) return res.status(404).json({ error: '품목을 찾지 못했어요.' })
+  if (tooManyPhotos(req)) return res.status(429).json({ error: '사진을 너무 많이 만들었어요. 1시간 뒤에 다시 해 주세요.' })
+  try {
+    const url = await generateRecipePhoto(recipe, item.rows[0].name)
+    console.log(`[items] ${req.admin.loginId} 레시피 사진 AI로 만듦 ${url}`)
+    res.status(201).json({ url, left: imagesLeftToday() })
+  } catch (error) {
+    const status = { NO_KEY: 503, DAILY_LIMIT: 429 }[error.code] ?? 502
+    res.status(status).json({ error: error.code === 'NO_KEY' ? 'AI 사진 만들기가 꺼져 있어요. 사진을 직접 올려 주세요.' : error.message })
+  }
+})
 adminRouter.delete('/products/:code/image', removeImage)

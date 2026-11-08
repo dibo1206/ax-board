@@ -213,6 +213,13 @@ flowchart TD
 
 농가가 목록에 없는 품목(예: 수박)을 요청하면 품목이 `pending`(검수 대기)으로 생긴다. 공식 당도 규격이 있는 품목은 기준이 바로 붙는다. 관리자 **[품목 검수]** 에서 보관·안전 정보의 출처를 확인하고 검수해야 손님 화면과 상담에 그 정보가 나온다. 그전까지 그 품목 상품은 자동 판매되지 않는다(조건 2).
 
+**레시피와 카드 사진 (2026-11-08)**: [품목 검수]에서 레시피를 한 칸씩 고치고, 레시피마다 카드 사진을 붙인다. 코드나 파일 주소를 몰라도 된다.
+
+- **[AI로 빈 칸 채우기]**: 비어 있는 보관법·먹으면 안 되는 신호·레시피 3개의 초안을 채운다. 이미 적힌 칸은 바꾸지 않는다. 레시피가 새로 생기면 **사진도 이어서 만든다**(아래 키가 있을 때). 초안은 화면에만 채워지고 관리자가 [저장]해야 반영된다
+- 판매자가 상품 등록 중 [AI로 채우기]로 새 품목의 레시피를 채워도, 서버가 뒤에서 레시피마다 사진을 만들어 붙인다
+- 레시피마다 **[사진 올리기]**(jpg·png·webp 2MB 이하 → 720×900 WebP, 위치 정보 삭제) · **[AI로 사진 만들기]** · [사진 빼기]. 사진이 없으면 손님 화면은 요리 종류별 기본 그림
+- AI 사진은 Cloudflare Workers AI(FLUX.1 schnell, `server/imagegen.js`). `.env`에 `CLOUDFLARE_ACCOUNT_ID`·`CLOUDFLARE_AI_TOKEN`이 없으면 버튼이 숨고 올리기만 된다. 하루 장 수 상한 `IMAGE_DAILY_LIMIT`(기본 30), 관리자 1명당 1시간 30장
+
 ### 5-7. 상품 검토 (회사 관리자가 하는 일)
 
 관리자 **[상품 관리]** 에서 '검토 대기'가 맨 위에 온다.
@@ -524,6 +531,7 @@ npm run admin-2fa -- farm_admin                             # 2단계 인증 등
 | `SMTP_HOST` · `SMTP_PORT` · `SMTP_SECURE` · `SMTP_USER` · `SMTP_PASS` · `MAIL_FROM` · `ADMIN_EMAIL` | 메일 (비우면 보내지 않고 기록만) |
 | `KAKAO_CLIENT_ID` · `KAKAO_CLIENT_SECRET` · `NAVER_CLIENT_ID` · `NAVER_CLIENT_SECRET` | 간편 로그인 |
 | `OAUTH_MOCK` | 1이면 개발용 시험 로그인 (공개 서버에는 쓰지 않기) |
+| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_TOKEN`, `IMAGE_DAILY_LIMIT` | 레시피 사진 AI로 만들기 (Cloudflare Workers AI). 비우면 사진 올리기만 |
 
 ### 시험과 시뮬레이션
 
