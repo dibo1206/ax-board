@@ -26,7 +26,8 @@ import { orderingOpen, paymentMode } from './payments.js'
 import { encryptExisting } from './pii.js'
 import { buildNotice } from './notice.js'
 import { ACTIVE_OPTIONS_SQL } from './options.js'
-import { adminOrderRouter, memberOrderRouter, publicOrderRouter, sellerOrderRouter, startOrderSweeper } from './orders.js'
+import { adminOrderRouter, KOREA_TODAY, memberOrderRouter, publicOrderRouter, sellerOrderRouter, startOrderSweeper } from './orders.js'
+import { SHIPPING } from './policy.js'
 import { recommendRouter } from './recommend.js'
 import { restockRouter, sweepRestock } from './restock.js'
 import { searchWhere, searchWords } from './search.js'
@@ -232,12 +233,13 @@ const SORTS = {
   new: 'x.created_at DESC, x.name',
   rating: 'x.rating DESC NULLS LAST, x.review_count DESC, x.name',
   brix: 'x.brix_rank DESC NULLS LAST, x.brix DESC NULLS LAST, x.name', // 품종마다 기준이 달라 등급 먼저, 같은 등급은 측정값
+  reviews: 'x.review_count DESC, x.rating DESC NULLS LAST, x.name',
 }
 
 app.get('/api/catalog', async (req, res) => {
   const q = String(req.query.q ?? '').trim().slice(0, 50)
   const sort = Object.hasOwn(SORTS, req.query.sort) ? req.query.sort : 'recommended'
-  const size = Math.min(48, Math.max(1, Number(req.query.size) || 12))
+  const size = Math.min(60, Math.max(1, Number(req.query.size) || 12))
   const page = Math.min(1000, Math.max(1, Number(req.query.page) || 1))
   const params = []
   let where = ''
@@ -250,6 +252,21 @@ app.get('/api/catalog', async (req, res) => {
   if (group) where += ` AND ${group}`
   const highBrix = req.query.brix === 'high' // 높은 당도 이상만
   if (highBrix) where += ' AND p.brix >= std.high'
+  // 상품 화면(/products) 걸러 보기: 품목, 1개만 사도 무료배송, 품절 제외, 예약 상품, 가격대. 정해 둔 조건만 SQL에 넣고 값은 $n 으로
+  const filters = []
+  const itemCode = String(req.query.item ?? '')
+  if (/^[a-z][a-z0-9_]{0,39}$/.test(itemCode)) {
+    params.push(itemCode)
+    where += ` AND p.item_code = $${params.length}`
+    filters.push(`item=${itemCode}`)
+  }
+  if (req.query.free === '1') { where += ` AND p.price >= ${Number(SHIPPING.freeOver)}`; filters.push('free') }
+  if (req.query.instock === '1') { where += ' AND p.stock > 0'; filters.push('instock') }
+  if (req.query.preorder === '1') { where += ` AND p.ship_from > ${KOREA_TODAY}`; filters.push('preorder') }
+  const money = (v) => Math.max(0, Math.min(10_000_000, Math.floor(Number(v) || 0)))
+  const [minPrice, maxPrice] = [money(req.query.min), money(req.query.max)]
+  if (minPrice) { params.push(minPrice); where += ` AND p.price >= $${params.length}`; filters.push(`min=${minPrice}`) }
+  if (maxPrice) { params.push(maxPrice); where += ` AND p.price <= $${params.length}`; filters.push(`max=${maxPrice}`) }
   // 검색어: 띄어쓰기 무시·다른 말·카테고리 말까지 (server/search.js). 단어가 모두 맞는 상품이 없으면 하나라도 맞는 상품을 보여 준다
   const words = searchWords(q)
   const run = (mode) => {
@@ -258,7 +275,7 @@ app.get('/api/catalog', async (req, res) => {
     all.push(size, (page - 1) * size)
     // 같은 검색·정렬·페이지는 15초 동안 DB를 다시 읽지 않는다 (재고는 주문할 때 서버가 다시 확인)
     // 기억 이름은 손님이 보낸 짧은 값으로만 만든다 (늘린 검색 조건 배열을 통째로 넣으면 이름 하나가 커진다)
-    return cached(`catalog:${JSON.stringify([words, req.query.category ?? '', size, page])}:${sort}:${group ? req.query.group : ''}:${highBrix}:${mode}`, 15_000, async () => {
+    return cached(`catalog:${JSON.stringify([words, req.query.category ?? '', size, page, filters])}:${sort}:${group ? req.query.group : ''}:${highBrix}:${mode}`, 15_000, async () => {
       const { rows } = await pool.query(
         `SELECT x.*, count(*) OVER () AS total FROM (${PRODUCT_SELECT} ${filter}) x
          ORDER BY (x.stock = 0), ${SORTS[sort]} LIMIT $${all.length - 1} OFFSET $${all.length}`,
