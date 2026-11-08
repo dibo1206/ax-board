@@ -14,7 +14,7 @@ import { ALL_OPTIONS_SQL, currentOptions, optionPriceChanges, saveOptions } from
 import { validateProduct } from './validate.js'
 
 export const UPLOAD_DIR = new URL('../uploads/', import.meta.url)
-const IMAGE_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
+export const IMAGE_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024
 
 export const adminRouter = express.Router()
@@ -204,7 +204,7 @@ adminRouter.patch('/products/:code', async (req, res) => {
 })
 
 // 형식마다 파일 맨 앞에 오는 고정된 바이트
-function looksLike(type, b) {
+export function looksLike(type, b) {
   if (type === 'image/jpeg') return b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff
   if (type === 'image/png') return b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
   if (type === 'image/webp') return b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP'

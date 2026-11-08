@@ -1190,3 +1190,7 @@
 .shop .sitemap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; }
 .shop .sitemap h3 { margin: 0 0 8px; font-size: 16px; }
 .shop .sitemap ul { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+
+/* 관리자·판매자로 쇼핑몰을 볼 때 맨 위 막대 */
+.shop .staff-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 16px; padding: 7px 16px; background: #1f3a2a; color: #f4f1e8; font-size: 13px; }
+.shop .staff-bar a { color: #e9d9a6; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }

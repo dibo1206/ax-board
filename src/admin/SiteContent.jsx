@@ -1,0 +1,232 @@
+import { useEffect, useState } from 'react'
+import { DEFAULTS, FAQ, HERO, SEASON, STORY } from '../shop/home/content.js'
+import { adminApi } from './api.js'
+
+// 관리자 [홈페이지 관리]: 첫 화면의 큰 배너·이야기 배너·제철 달력·자주 묻는 질문을 고친다 (server/siteContent.js).
+// 저장하면 손님 화면에 바로(최대 30초) 나오고, [기본값으로]를 누르면 코드에 적힌 처음 내용으로 돌아간다
+const SECTIONS = [['hero', '큰 배너'], ['story', '이야기 배너'], ['season', '제철 달력'], ['faq', '자주 묻는 질문']]
+const LIVE = { hero: HERO, story: STORY, season: SEASON, faq: FAQ }
+const clone = (v) => JSON.parse(JSON.stringify(v))
+const POSITIONS = [['center 50%', '가운데'], ['center 30%', '위쪽'], ['center 70%', '아래쪽'], ['left center', '왼쪽'], ['right center', '오른쪽']]
+
+// 고칠 수 있는 칸만 골라 편집용 사본을 만든다
+function editable(key, v) {
+  const c = clone(v)
+  if (key === 'hero') return { eyebrow: c.eyebrow ?? '', title: c.title ?? [''], lead: c.lead ?? '', cta: c.cta ?? '', interval: c.interval ?? 5000, slides: (c.slides ?? []).map(({ src, alt, position, cover, scrim }) => ({ src, alt, position: position ?? 'center 50%', cover: !!cover, scrim: !!scrim })) }
+  if (key === 'story') return { label: c.label ?? '', interval: c.interval ?? 7000, slides: (c.slides ?? []).map((s) => ({ title: s.title ?? ['', ''], text: s.text ?? '', photo: { src: s.photo?.src ?? '', alt: s.photo?.alt ?? '', position: s.photo?.position ?? 'center 50%' }, links: s.links ?? [] })) }
+  if (key === 'season') return { items: (c.items ?? []).map((i) => ({ name: i.name, search: i.search ?? '', months: i.months ?? [] })), note: c.note ?? '' }
+  return { lead: c.lead ?? '', items: (c.items ?? []).map(({ tag, q, a, action }) => ({ tag, q, a, action })), note: c.note ?? '' }
+}
+
+// 목록 줄 하나의 위·아래·빼기 버튼
+function RowTools({ index, count, onMove, onRemove }) {
+  return (
+    <span className="site-row-tools">
+      <button type="button" disabled={index === 0} onClick={() => onMove(index, -1)} aria-label="위로">↑</button>
+      <button type="button" disabled={index === count - 1} onClick={() => onMove(index, 1)} aria-label="아래로">↓</button>
+      <button type="button" onClick={() => onRemove(index)}>빼기</button>
+    </span>
+  )
+}
+
+function PhotoField({ value, onChange, label }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  async function upload(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setBusy(true)
+    setError('')
+    try {
+      const { url } = await adminApi('/site-content/image', { method: 'POST', body: file, headers: { 'Content-Type': file.type } })
+      onChange({ ...value, src: url })
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="site-photo">
+      {value.src ? <img src={value.src} alt="" /> : <span className="site-photo-empty">사진 없음</span>}
+      <div className="site-photo-fields">
+        <label>{label} 사진<input type="file" accept="image/jpeg,image/png,image/webp" onChange={upload} disabled={busy} /></label>
+        {busy && <span className="muted">올리는 중…</span>}
+        {error && <span className="error">{error}</span>}
+        <label>사진 설명 <span className="muted">(화면 낭독기가 읽어요)</span><input value={value.alt} onChange={(e) => onChange({ ...value, alt: e.target.value })} maxLength={100} /></label>
+        <label>화면이 좁을 때 남길 쪽<select value={value.position} onChange={(e) => onChange({ ...value, position: e.target.value })}>
+          {POSITIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select></label>
+      </div>
+    </div>
+  )
+}
+
+export function SiteContent() {
+  const [section, setSection] = useState(() => {
+    const k = new URLSearchParams(window.location.search).get('part')
+    return SECTIONS.some(([key]) => key === k) ? k : 'hero'
+  })
+  const [info, setInfo] = useState({})
+  const [draft, setDraft] = useState(() => editable(section, LIVE[section]))
+  const [errors, setErrors] = useState([])
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => { adminApi('/site-content').then(setInfo).catch((e) => setErrors([e.message])) }, [])
+
+  const open = (key) => { setSection(key); setDraft(editable(key, LIVE[key])); setErrors([]); setMessage('') }
+  const put = (patch) => setDraft((d) => ({ ...d, ...patch }))
+  const listOps = (field) => ({
+    set: (i, v) => setDraft((d) => ({ ...d, [field]: d[field].map((x, j) => (j === i ? v : x)) })),
+    move: (i, dir) => setDraft((d) => { const a = [...d[field]]; [a[i], a[i + dir]] = [a[i + dir], a[i]]; return { ...d, [field]: a } }),
+    remove: (i) => setDraft((d) => ({ ...d, [field]: d[field].filter((_, j) => j !== i) })),
+    add: (v) => setDraft((d) => ({ ...d, [field]: [...d[field], v] })),
+  })
+
+  async function save() {
+    setBusy(true)
+    setErrors([])
+    setMessage('')
+    try {
+      const row = await adminApi(`/site-content/${section}`, { method: 'PUT', body: draft })
+      Object.assign(LIVE[section], row.value)
+      setInfo((i) => ({ ...i, [section]: row }))
+      setDraft(editable(section, row.value))
+      setMessage('저장했어요. 손님 화면에는 30초 안에 바뀌어요.')
+    } catch (e) {
+      setErrors(e.errors ?? [e.message])
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function reset() {
+    if (!window.confirm('이 칸을 처음(코드에 적힌) 내용으로 되돌릴까요? 저장한 내용은 지워져요.')) return
+    try {
+      await adminApi(`/site-content/${section}`, { method: 'DELETE' })
+      Object.assign(LIVE[section], clone(DEFAULTS[section]))
+      setInfo((i) => { const n = { ...i }; delete n[section]; return n })
+      setDraft(editable(section, DEFAULTS[section]))
+      setMessage('처음 내용으로 되돌렸어요.')
+    } catch (e) {
+      setErrors([e.message])
+    }
+  }
+
+  const saved = info[section]
+  const slides = listOps('slides')
+  const items = listOps('items')
+  return (
+    <section className="site-editor">
+      <div className="admin-head">
+        <h2>홈페이지 관리</h2>
+        <a className="button ghost" href="/" target="_blank" rel="noreferrer">홈페이지 보기 ↗</a>
+      </div>
+      <p className="muted">첫 화면의 글과 사진을 고쳐요. 회사 소개·공지는 [공지·언론], 상품은 [상품 관리]에서 고쳐요.</p>
+      <nav className="tabs">
+        {SECTIONS.map(([key, label]) => (
+          <button key={key} type="button" className={key === section ? 'on' : ''} onClick={() => open(key)}>{label}{info[key] && ' · 고침'}</button>
+        ))}
+      </nav>
+      <p className="muted">{saved ? `마지막 저장: ${new Date(saved.updated_at).toLocaleString('ko-KR')} · ${saved.updated_by}` : '지금은 처음(코드에 적힌) 내용이에요.'}</p>
+
+      <div className="box form">
+        {section === 'hero' && (
+          <>
+            <label>작은 제목<input value={draft.eyebrow} onChange={(e) => put({ eyebrow: e.target.value })} maxLength={60} /></label>
+            {[0, 1, 2].map((i) => (
+              <label key={i}>큰 제목 {i + 1}줄{i === 0 && <em className="req">*</em>}<input value={draft.title[i] ?? ''} maxLength={20}
+                onChange={(e) => { const t = [...draft.title]; t[i] = e.target.value; put({ title: t }) }} /></label>
+            ))}
+            <label>소개 글<em className="req">*</em><textarea value={draft.lead} onChange={(e) => put({ lead: e.target.value })} rows={2} maxLength={200} /></label>
+            <label>버튼 글<em className="req">*</em><input value={draft.cta} onChange={(e) => put({ cta: e.target.value })} maxLength={30} /></label>
+            <label>사진 넘어가는 간격(초)<input type="number" min={3} max={15} value={Math.round(draft.interval / 1000)} onChange={(e) => put({ interval: Number(e.target.value) * 1000 })} /></label>
+            <h3>배너 사진 <span className="muted">가로로 긴 사진(2400×720 정도), 왼쪽 40%는 글씨 자리</span></h3>
+            {draft.slides.map((s, i) => (
+              <div key={i} className="site-row">
+                <p className="site-row-head"><b>사진 {i + 1}</b><RowTools index={i} count={draft.slides.length} onMove={slides.move} onRemove={slides.remove} /></p>
+                <PhotoField label={`배너 ${i + 1}`} value={s} onChange={(v) => slides.set(i, { ...s, ...v })} />
+                <label className="check"><input type="checkbox" checked={s.cover} onChange={(e) => slides.set(i, { ...s, cover: e.target.checked })} />배너를 꽉 채우기 (위아래를 잘라 크게)</label>
+                <label className="check"><input type="checkbox" checked={s.scrim} onChange={(e) => slides.set(i, { ...s, scrim: e.target.checked })} />글씨가 잘 보이게 왼쪽을 옅게 덮기</label>
+              </div>
+            ))}
+            {draft.slides.length < 8 && <button type="button" className="button ghost" onClick={() => slides.add({ src: '', alt: '', position: 'center 50%', cover: false, scrim: false })}>사진 더하기</button>}
+          </>
+        )}
+
+        {section === 'story' && (
+          <>
+            <label>칸 이름<input value={draft.label} onChange={(e) => put({ label: e.target.value })} maxLength={20} /></label>
+            <label>넘어가는 간격(초)<input type="number" min={3} max={15} value={Math.round(draft.interval / 1000)} onChange={(e) => put({ interval: Number(e.target.value) * 1000 })} /></label>
+            {draft.slides.map((s, i) => (
+              <div key={i} className="site-row">
+                <p className="site-row-head"><b>이야기 {i + 1}</b><RowTools index={i} count={draft.slides.length} onMove={slides.move} onRemove={slides.remove} /></p>
+                {[0, 1].map((j) => (
+                  <label key={j}>제목 {j + 1}줄<input value={s.title[j] ?? ''} maxLength={20} onChange={(e) => { const t = [...s.title]; t[j] = e.target.value; slides.set(i, { ...s, title: t }) }} /></label>
+                ))}
+                <label>글<textarea value={s.text} rows={3} maxLength={300} onChange={(e) => slides.set(i, { ...s, text: e.target.value })} /></label>
+                <PhotoField label={`이야기 ${i + 1}`} value={s.photo} onChange={(v) => slides.set(i, { ...s, photo: v })} />
+                {[0, 1].map((j) => (
+                  <div key={j} className="row">
+                    <label>버튼 {j + 1} 글<input value={s.links[j]?.label ?? ''} maxLength={20} onChange={(e) => { const l = [...s.links]; l[j] = { href: l[j]?.href ?? '', label: e.target.value }; slides.set(i, { ...s, links: l.filter((x) => x && (x.label || x.href)) }) }} /></label>
+                    <label>주소 <span className="muted">#products · /about · https://…</span><input value={s.links[j]?.href ?? ''} onChange={(e) => { const l = [...s.links]; l[j] = { label: l[j]?.label ?? '', href: e.target.value }; slides.set(i, { ...s, links: l.filter((x) => x && (x.label || x.href)) }) }} /></label>
+                  </div>
+                ))}
+              </div>
+            ))}
+            {draft.slides.length < 5 && <button type="button" className="button ghost" onClick={() => slides.add({ title: ['', ''], text: '', photo: { src: '', alt: '', position: 'center 50%' }, links: [] })}>이야기 더하기</button>}
+          </>
+        )}
+
+        {section === 'season' && (
+          <>
+            <p className="muted">달을 누르면 그 달에 제철인 품목이 카드로 나와요. 사진·가격은 그 이름으로 찾은 판매 중 상품에서 가져와요.</p>
+            {draft.items.map((it, i) => (
+              <div key={i} className="site-row">
+                <p className="site-row-head"><b>{it.name || `품목 ${i + 1}`}</b><RowTools index={i} count={draft.items.length} onMove={items.move} onRemove={items.remove} /></p>
+                <div className="row">
+                  <label>이름<input value={it.name} maxLength={12} onChange={(e) => items.set(i, { ...it, name: e.target.value })} /></label>
+                  <label>찾을 말 <span className="muted">(이름과 다를 때만)</span><input value={it.search} maxLength={20} onChange={(e) => items.set(i, { ...it, search: e.target.value })} /></label>
+                </div>
+                <div className="site-months" role="group" aria-label="제철 달">
+                  {Array.from({ length: 12 }, (_, m) => m + 1).map((m) => (
+                    <label key={m} className={it.months.includes(m) ? 'on' : ''}>
+                      <input type="checkbox" checked={it.months.includes(m)} onChange={(e) => items.set(i, { ...it, months: e.target.checked ? [...it.months, m].sort((a, b) => a - b) : it.months.filter((x) => x !== m) })} />{m}월
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <button type="button" className="button ghost" onClick={() => items.add({ name: '', search: '', months: [] })}>품목 더하기</button>
+            <label>아래 안내<input value={draft.note} onChange={(e) => put({ note: e.target.value })} maxLength={200} /></label>
+          </>
+        )}
+
+        {section === 'faq' && (
+          <>
+            <label>위쪽 안내<input value={draft.lead} onChange={(e) => put({ lead: e.target.value })} maxLength={200} /></label>
+            <p className="muted">답에 {'{출고}'} · {'{배송비}'} · {'{무료배송}'}을 적으면 배송 정책 값으로 바뀌어요.</p>
+            {draft.items.map((it, i) => (
+              <div key={i} className="site-row">
+                <p className="site-row-head"><b>질문 {i + 1}</b><RowTools index={i} count={draft.items.length} onMove={items.move} onRemove={items.remove} /></p>
+                <label>질문<input value={it.q} maxLength={100} onChange={(e) => items.set(i, { ...it, q: e.target.value })} /></label>
+                <label>답<textarea value={it.a} rows={3} maxLength={600} onChange={(e) => items.set(i, { ...it, a: e.target.value })} /></label>
+              </div>
+            ))}
+            {draft.items.length < 20 && <button type="button" className="button ghost" onClick={() => items.add({ q: '', a: '' })}>질문 더하기</button>}
+            <label>아래 안내<input value={draft.note} onChange={(e) => put({ note: e.target.value })} maxLength={200} /></label>
+          </>
+        )}
+
+        {errors.length > 0 && <ul className="error">{errors.map((e) => <li key={e}>{e}</li>)}</ul>}
+        {message && <p className="success">{message}</p>}
+        <div className="actions">
+          {saved && <button type="button" className="button ghost" onClick={reset}>기본값으로</button>}
+          <button type="button" className="button" onClick={save} disabled={busy}>{busy ? '저장 중…' : '저장'}</button>
+        </div>
+      </div>
+    </section>
+  )
+}

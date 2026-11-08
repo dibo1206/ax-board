@@ -407,7 +407,7 @@ function App() {
       <div className="console">
         <header className="console-bar">
           <a className="brand-mark" href="/admin">YOONJU MARKET<small>관리자</small></a>
-          <span className="bar-note">개발 중 · <a href="/">쇼핑몰 보기</a></span>
+          <span className="bar-note">개발 중 · <a href="/">홈페이지 보기</a> (위에 관리자 막대가 떠요)</span>
         </header>
         <main className="console-main"><Suspense fallback={loading}><Admin /></Suspense></main>
       </div>

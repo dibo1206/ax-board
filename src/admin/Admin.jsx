@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { adminApi } from './api.js'
 import { BannedWords } from './BannedWords.jsx'
 import { ChatLogs } from './ChatLogs.jsx'
 import { AdminPosts } from './Posts.jsx'
+import { SiteContent } from './SiteContent.jsx'
 import { ItemReview } from './ItemReview.jsx'
 import { SellerApproval } from './SellerApproval.jsx'
 import { Inbox } from './Inbox.jsx'
@@ -66,7 +67,11 @@ function Admin() {
   const [editing, setEditing] = useState(null) // null: 목록, 'new': 새 상품, 객체: 수정
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const [tab, setTab] = useState('dashboard')
+  // ?tab=site 처럼 주소로 바로 열 수 있다 (쇼핑몰 맨 위 관리자 막대에서 들어올 때)
+  const [tab, setTab] = useState(() => {
+    const t = new URLSearchParams(window.location.search).get('tab')
+    return ['dashboard', 'orders', 'returns', 'products', 'items', 'sellers', 'inbox', 'reviews', 'chat', 'site', 'posts', 'mail', 'access', 'banned'].includes(t) ? t : 'dashboard'
+  })
   const [productFilter, setProductFilter] = useState('all')
   const [productQuery, setProductQuery] = useState('')
   const [counts, setCounts] = useState(null)
@@ -82,6 +87,15 @@ function Admin() {
       .then(([list, opts, summary]) => { setProducts(list); setOptions(opts); setCounts(summary) })
       .catch((e) => (e.status === 401 ? setMe(null) : setError(e.message)))
   }, [me])
+
+  const editFromLink = useRef(new URLSearchParams(window.location.search).get('edit'))
+  useEffect(() => {
+    const code = editFromLink.current
+    if (!code || !products) return
+    editFromLink.current = null
+    const found = products.find((p) => p.product_code === code)
+    if (found) { setTab('products'); setEditing(found) }
+  }, [products])
 
   // 새 주문 알림: 1분마다 확인해서 늘었으면 화면 위에 알리고 탭 제목에 개수를 붙인다
   const [alert, setAlert] = useState('')
@@ -165,7 +179,8 @@ function Admin() {
   const NAV = [
     ['운영', [['dashboard', '매출·할 일', 0], ['orders', '주문', newOrders], ['returns', '반품', counts?.returns_requested ?? 0]]],
     ['상품', [['products', '상품 관리', pending + (counts?.auto_unchecked ?? 0)], ['items', '품목 검수', counts?.pending_items ?? 0], ['sellers', '판매자 승인', counts?.pending_sellers ?? 0]]],
-    ['손님', [['inbox', '문의함', waiting], ['reviews', '후기', 0], ['chat', '상담 기록', 0], ['posts', '공지·언론', 0]]],
+    ['손님', [['inbox', '문의함', waiting], ['reviews', '후기', 0], ['chat', '상담 기록', 0]]],
+    ['홈페이지', [['site', '홈페이지 관리', 0], ['posts', '공지·언론', 0]]],
     ['기록·설정', [['mail', '알림 기록', 0], ['access', '접속 기록', 0], ['banned', '금지어', 0]]],
   ]
 
@@ -211,6 +226,8 @@ function Admin() {
         <AccessLogs />
       ) : tab === 'posts' ? (
         <AdminPosts />
+      ) : tab === 'site' ? (
+        <SiteContent />
       ) : tab === 'chat' ? (
         <ChatLogs />
       ) : editing && options ? (
