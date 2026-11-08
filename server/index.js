@@ -101,6 +101,12 @@ app.use((req, res, next) => {
 })
 
 app.use(express.json({ limit: '100kb' }))
+// JSON 이 아닌 몸통(text/plain 폼 등)이나 몸통 없이 오면 req.body 가 비어 있어서, req.body.loginId 를 읽다 500 이 났다 (2026-11-08 보안 점검).
+// 빈 객체로 두면 각 주소의 입력 검사가 400·401 로 답한다. 사진 올리기는 주소마다 붙은 express.raw 가 다시 채운다
+app.use((req, res, next) => {
+  if (req.body === undefined) req.body = {}
+  next()
+})
 
 // PostgreSQL 글자 칸에는 NUL 문자(\u0000)를 넣을 수 없어서, 주소나 보낸 내용에 섞여 오면 DB가 거절하고 500이 났다 (2026-11-07 보안 점검).
 // 들어올 때 400으로 막는다. 깊게 중첩된 JSON에도 재귀가 터지지 않게 스택으로 훑고, 사진(Buffer)은 보지 않는다
