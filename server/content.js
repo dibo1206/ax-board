@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto'
 import { complete, describeAiError, keyLoaded } from './ai.js'
 import { findBanned } from './banned.js'
 import { pool } from './db.js'
+import { generateRecipePhoto, imageKeyLoaded } from './imagegen.js'
 import { createLimiter } from './limit.js'
 
 // 상세페이지 패턴: 많이 쓰는 상세페이지 순서를 몇 가지로 정리 (멘토 피드백: 패턴을 고르면 일관되게)
@@ -83,6 +84,19 @@ function cleanText(value, allowedText, flagged, max, checkNumbers = true) {
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, max)
 }
 
+// 레시피 초안 하나. photo 는 사진 만들기에 쓸 영어 설명 (저장하지 않고 사진을 만들 때만 쓴다)
+const PHOTO_HINT = /^[\x20-\x7E]{20,400}$/
+function draftRecipe(r, allowed, flagged) {
+  const photo = typeof r?.photo === 'string' ? r.photo.replace(/[\r\n<>{}[\]`]/g, ' ').trim().slice(0, 400) : ''
+  return {
+    title: cleanText(r?.title, allowed, flagged, 30, false),
+    ingredients: cleanText(r?.ingredients, allowed, flagged, 60, false),
+    method: cleanText(r?.method, allowed, flagged, 120, false),
+    ...(PHOTO_HINT.test(photo) ? { photo } : {}),
+  }
+}
+const RECIPE_FORMAT = '{"title": "", "ingredients": "재료·재료", "method": "한 문장", "photo": "완성된 요리가 식탁에 놓인 모습을 영어 한 문장으로 (그릇, 색, 곁들임)"}'
+
 function parseDraft(raw, input, flagged) {
   const json = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1))
   const allowed = input.facts.map(([, v]) => v).join(' ').replace(/,/g, '') + ' 1 2 3 4 5'
@@ -102,7 +116,7 @@ function parseDraft(raw, input, flagged) {
       opened_note: empty(input.item.opened_note) ? cleanText(it.opened_note, allowed, flagged, 200, false) : null,
       danger_signs: empty(input.item.danger_signs) && Array.isArray(it.danger_signs) ? it.danger_signs.slice(0, 5).map((s) => cleanText(s, allowed, flagged, 30, false)).filter(Boolean) : null,
       recipes: empty(input.item.recipes) && Array.isArray(it.recipes)
-        ? it.recipes.slice(0, 3).map((r) => ({ title: cleanText(r?.title, allowed, flagged, 30, false), ingredients: cleanText(r?.ingredients, allowed, flagged, 60, false), method: cleanText(r?.method, allowed, flagged, 120, false) })).filter((r) => r.title && r.method)
+        ? it.recipes.slice(0, 3).map((r) => draftRecipe(r, allowed, flagged)).filter((r) => r.title && r.method)
         : null,
     }
   }
@@ -125,7 +139,7 @@ export async function productDraft(req, res) {
   const input = await buildInput(req.body, sellerCode)
   if (input.error) return res.status(400).json({ error: input.error })
 
-  const key = createHash('sha256').update(`content-v1\n${template}\n${JSON.stringify(input.facts)}\n${input.needItem}`).digest('hex')
+  const key = createHash('sha256').update(`content-v2\n${template}\n${JSON.stringify(input.facts)}\n${input.needItem}`).digest('hex')
   const saved = await readCache(key)
   if (saved) return res.json({ ...saved.reply, template, aiCalls: 0, model: `cache:${saved.model}` })
   if (!keyLoaded()) return res.status(503).json({ error: 'AI 키가 없어 초안을 만들 수 없어요. 직접 적어 주세요.' })
@@ -139,7 +153,7 @@ export async function productDraft(req, res) {
     ...input.facts.map(([k, v]) => `- ${k}: ${v}`),
     input.needItem ? '[품목 정보 필요] 이 원물의 보관 방법·개봉 후 안내·먹지 말아야 할 상태·레시피(2~3개)가 비어 있다. 일반적인 내용으로 item 에 채운다.' : '',
     '[출력 형식] {"summary": "한 줄 소개 40자 이내", "description": "■ 제목\\n문장…\\n\\n■ 제목\\n문장…", "faq": [{"q": "질문", "a": "답"}] (3개, 보관·배송·활용·구성 위주, 답은 1~2문장)'
-      + (input.needItem ? ', "item": {"storage_method": "", "opened_note": "", "danger_signs": [""], "recipes": [{"title": "", "ingredients": "", "method": ""}]}' : '') + '}',
+      + (input.needItem ? `, "item": {"storage_method": "", "opened_note": "", "danger_signs": [""], "recipes": [${RECIPE_FORMAT}]}` : '') + '}',
   ].filter(Boolean).join('\n')
 
   // 상품당 한 번이라 상담과 달리 무료 모델을 모두 차례로 시도한다 (한 모델이 붐벼도 초안은 나오게)
@@ -190,15 +204,82 @@ export async function fillItem(req, res) {
   if (empty(item.storage_method) && text(b.storage_method, 200)) add('storage_method', text(b.storage_method, 200))
   if (empty(item.opened_note) && text(b.opened_note, 200)) add('opened_note', text(b.opened_note, 200))
   if (empty(item.danger_signs) && Array.isArray(b.danger_signs)) add('danger_signs', b.danger_signs.slice(0, 5).map((s) => text(s, 30)).filter(Boolean))
+  let newRecipes = []
   if (empty(item.recipes) && Array.isArray(b.recipes)) {
-    add('recipes', JSON.stringify(b.recipes.slice(0, 3).map((r) => ({ title: text(r?.title, 30), ingredients: text(r?.ingredients, 60), method: text(r?.method, 120) })).filter((r) => r.title && r.method)))
+    newRecipes = b.recipes.slice(0, 3).map((r) => ({ title: text(r?.title, 30), ingredients: text(r?.ingredients, 60), method: text(r?.method, 120), photo: text(r?.photo, 400) })).filter((r) => r.title && r.method)
+    add('recipes', JSON.stringify(newRecipes.map(({ photo: _photo, ...r }) => r)))
   }
   const banned = findBanned(JSON.stringify(params.slice(1)))
   if (banned.length) return res.status(400).json({ error: `효능 표현은 쓰지 않아요: ${banned.join(', ')}` })
   if (!sets.length) return res.json({ filled: 0, item })
   const updated = await pool.query(`UPDATE items SET ${sets.join(', ')} WHERE item_code = $1 RETURNING *`, params)
   console.log(`[content] ${(req.admin ?? req.seller).loginId} 품목 ${item.item_code} 빈 칸 ${sets.length}개 채움`)
-  res.json({ filled: sets.length, item: updated.rows[0] })
+  // 레시피가 새로 생기면 사진도 만든다 (한 장에 몇 초라 응답은 기다리지 않고 뒤에서. 키가 없으면 기본 그림 그대로)
+  if (newRecipes.length && imageKeyLoaded()) photosInBackground(item.item_code, item.name, newRecipes)
+  res.json({ filled: sets.length, item: updated.rows[0], photos: newRecipes.length && imageKeyLoaded() ? 'making' : 'off' })
+}
+
+// 사진이 없는 레시피마다 사진을 만들어 붙인다. 그 사이 관리자가 레시피를 고쳤으면(제목이 다르면) 그 칸은 건드리지 않는다
+export async function photosInBackground(itemCode, itemName, recipes) {
+  for (const [n, recipe] of recipes.entries()) {
+    if (recipe.image) continue
+    let url
+    try {
+      url = await generateRecipePhoto(recipe, itemName)
+    } catch (error) {
+      console.warn(`[imagegen] ${itemCode} 레시피 ${n + 1} 사진 못 만듦: ${error.message}`)
+      if (error.code === 'DAILY_LIMIT' || error.code === 'NO_KEY') return
+      continue
+    }
+    await pool.query(
+      `UPDATE items SET recipes = jsonb_set(recipes, $3::text[], to_jsonb($4::text))
+       WHERE item_code = $1 AND recipes -> $2::int ->> 'title' = $5 AND NOT (recipes -> $2::int ? 'image')`,
+      [itemCode, n, `{${n},image}`, url, recipe.title],
+    ).catch((e) => console.warn(`[imagegen] ${itemCode} 사진 저장 실패 ${e.message}`))
+    console.log(`[imagegen] ${itemCode} 레시피 ${n + 1} 사진 ${url}`)
+  }
+}
+
+// POST /items/:code/draft (관리자) — 품목 검수 화면의 [AI로 빈 칸 채우기]. 비어 있는 보관·안전·레시피 칸의 초안만 돌려준다 (저장은 관리자가)
+export async function itemDraft(req, res) {
+  const { rows } = await pool.query('SELECT * FROM items WHERE item_code = $1', [req.params.code])
+  const item = rows[0]
+  if (!item) return res.status(404).json({ error: '품목을 찾지 못했어요.' })
+  if (!keyLoaded()) return res.status(503).json({ error: 'AI 키가 없어 초안을 만들 수 없어요. 직접 적어 주세요.' })
+  if (tooMany(req)) return res.status(429).json({ error: 'AI 초안을 너무 많이 만들었어요. 1시간 뒤에 다시 해 주세요.' })
+  const fresh = item.category !== '가공품'
+  const prompt = [
+    `[품목] ${item.name} (${item.category})`,
+    '이 원물의 일반적인 보관 방법, 먹으면 안 되는 상태(신호), 레시피 3개를 쓴다. 숫자(기간·온도)는 꼭 필요할 때만, 일반적인 값으로.',
+    `[출력 형식] {"storage_method": "", ${fresh ? '"stage1_state": "신선한 상태", "stage2_state": "품질이 떨어졌지만 부패 징후는 없는 상태", ' : '"opened_note": "개봉 후", '}"danger_signs": ["", ""], "recipes": [${RECIPE_FORMAT}]}`,
+  ].join('\n')
+  let result
+  try {
+    result = await complete([{ role: 'system', content: RULES }, { role: 'user', content: prompt }], { maxTokens: 2000, timeoutMs: 60_000, lightThinking: true })
+  } catch (error) {
+    if (error.code === 'DAILY_LIMIT') return res.status(429).json({ error: '오늘 AI 사용 한도에 닿았어요. 내일 다시 하거나 직접 적어 주세요.' })
+    describeAiError(error)
+    return res.status(503).json({ error: '지금은 AI 모델이 모두 붐벼요. 잠시 뒤 다시 눌러 주세요.' })
+  }
+  const flagged = []
+  let json
+  try {
+    json = JSON.parse(result.text.slice(result.text.indexOf('{'), result.text.lastIndexOf('}') + 1))
+  } catch {
+    return res.status(502).json({ error: 'AI 초안 형식이 맞지 않았어요. 한 번 더 눌러 주세요.' })
+  }
+  const allowed = ''
+  const one = (v, max) => cleanText(v, allowed, flagged, max, false)
+  const draft = {
+    storage_method: empty(item.storage_method) ? one(json.storage_method, 400) : null,
+    stage1_state: fresh && empty(item.stage1_state) ? one(json.stage1_state, 200) : null,
+    stage2_state: fresh && empty(item.stage2_state) ? one(json.stage2_state, 200) : null,
+    opened_note: !fresh && empty(item.opened_note) ? one(json.opened_note, 200) : null,
+    danger_signs: empty(item.danger_signs) && Array.isArray(json.danger_signs) ? json.danger_signs.slice(0, 6).map((s) => one(s, 80)).filter(Boolean) : null,
+    recipes: empty(item.recipes) && Array.isArray(json.recipes) ? json.recipes.slice(0, 3).map((r) => draftRecipe(r, allowed, flagged)).filter((r) => r.title && r.method) : null,
+  }
+  console.log(`[content] ${req.admin.loginId} 품목 ${item.name} AI 초안 · 뺀 문장 ${flagged.length}`)
+  res.json({ draft, flagged, model: result.model, photos: imageKeyLoaded() })
 }
 
 export const listTemplates = (req, res) => res.json(Object.entries(TEMPLATES).map(([key, t]) => ({ key, ...t })))
