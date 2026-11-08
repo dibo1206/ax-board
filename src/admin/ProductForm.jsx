@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { thumbUrl, todayKst, unitPrice } from '../shop/shared.js'
 import { AiDraft } from './AiDraft.jsx'
 import { adminApi } from './api.js'
+import { Help } from './ui.jsx'
 
 const EMPTY = {
   product_code: '', seller_code: '', item_code: '', name: '', price: '', unit: '', stock: '',
@@ -150,6 +151,8 @@ const STEPS = [
   ['notice', '고시·확인', '법으로 보여 줘야 하는 정보를 적고, 마지막으로 확인한 뒤 판매를 요청해요.'],
 ]
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
+// 관리자 화면 탭 이름 (판매자 단계와 같은 칸 묶음)
+const ADMIN_TABS = { item: '기본 정보', price: '가격·옵션', harvest: '수확·당도', photos: '사진', intro: '소개·태그', notice: '법정 고시' }
 
 // mode: 'admin'(회사 관리자) 또는 'seller'(농가 판매자). 판매자는 농가를 고르지 않고, 새 상품은 검토 요청으로 올린다
 const SAVED ={ draft: '임시 저장했어요 (소비자 화면에는 안 보여요)', pending: '검토를 요청했어요. 회사 관리자가 승인하면 판매돼요', active: '저장했어요' }
@@ -387,7 +390,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
         <label>수확일<input type="date" value={form.harvest_date} onChange={set('harvest_date')} /></label>
       )}
       {item && (
-        <label>출고 시작일 <span className="muted">(예약 판매일 때만) 아직 수확·제조 전이라 나중에 보낼 상품이면, 보내기 시작하는 날을 적어요. 그날까지 손님 화면에 [예약]으로 보이고 주문 안내도 이 날짜로 나가요</span>
+        <label>출고 시작일 <span className="muted">(예약 판매일 때만)</span> <Help label="출고 시작일 도움말">아직 수확·제조 전이라 나중에 보낼 상품이면, 보내기 시작하는 날을 적어요. 그날까지 손님 화면에 [예약]으로 보이고 주문 안내도 이 날짜로 나가요.</Help>
           <input type="date" value={form.ship_from} min={todayKst()} onChange={set('ship_from')} />
           {form.ship_from && <button type="button" className="link" onClick={() => setForm((prev) => ({ ...prev, ship_from: '' }))}>예약 판매 끄기</button>}
         </label>
@@ -477,23 +480,32 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
   )
 
   const errorList = errors.length > 0 && <ul className="error">{errors.map((e) => <li key={e}>{e}</li>)}</ul>
+  const blocks = { item: itemBlock, price: priceBlock, harvest: harvestBlock, photos: photosBlock, intro: introBlock, notice: noticeBlock }
 
-  // 관리자: 지금처럼 한 화면에 모두
+  // 관리자 (2026-11-08 정리 2차): 한 장으로 길던 화면을 탭으로 나누고, 저장 버튼은 화면 아래에 늘 떠 있게.
+  // 탭을 오가도 적은 내용은 그대로이고, 꼭 적을 칸이 빈 탭에는 [!]를 붙인다
   if (!seller) {
     return (
-      <div className="box form">
+      <div className="box form admin-form">
         {header}
-        {itemBlock}
-        {priceBlock}
-        {harvestBlock}
-        {noticeBlock}
-        {introBlock}
-        {photosBlock}
-        {errorList}
-        <div className="actions">
-          <button type="button" className="button ghost" onClick={onCancel} disabled={saving}>취소</button>
-          <button type="button" className="button ghost" onClick={() => save('draft')} disabled={saving}>임시 저장</button>
-          <button type="button" className="button" onClick={() => save('active')} disabled={saving}>{saving ? '저장 중…' : product?.status === 'pending' ? '승인하고 판매' : '저장하고 판매'}</button>
+        <nav className="form-tabs" aria-label="상품 정보 나눠 보기">
+          {STEPS.map(([k], i) => {
+            const need = stepProblems(k)
+            return (
+              <button key={k} type="button" className={i === step ? 'on' : ''} aria-current={i === step ? 'true' : undefined} onClick={() => setStep(i)}>
+                {ADMIN_TABS[k]}{need.length > 0 && <span className="tab-need" title={need.join(' ')} aria-label="채울 칸 있음">!</span>}
+              </button>
+            )
+          })}
+        </nav>
+        <div className="form-tab-body">{blocks[STEPS[step][0]]}</div>
+        <div className="form-savebar">
+          {errorList}
+          <div className="actions">
+            <button type="button" className="button ghost" onClick={onCancel} disabled={saving}>취소</button>
+            <button type="button" className="button ghost" onClick={() => save('draft')} disabled={saving}>임시 저장</button>
+            <button type="button" className="button" onClick={() => save('active')} disabled={saving}>{saving ? '저장 중…' : product?.status === 'pending' ? '승인하고 판매' : '저장하고 판매'}</button>
+          </div>
         </div>
       </div>
     )
@@ -502,7 +514,6 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
   // 판매자: 단계별로 한 화면씩. 위의 단계 표시를 누르면 바로 그 단계로 가고, 어느 단계에서든 임시 저장할 수 있다
   const [key, title, guide] = STEPS[step]
   const last = step === STEPS.length - 1
-  const blocks = { item: itemBlock, price: priceBlock, harvest: harvestBlock, photos: photosBlock, intro: introBlock, notice: noticeBlock }
   const fix = (index) => <button type="button" className="link" onClick={() => goStep(index)}>고치기</button>
   return (
     <div className="box form product-steps" ref={top}>

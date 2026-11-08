@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ABOUT, DEFAULTS, FAQ, HERO, SEASON, STORY } from '../shop/home/content.js'
 import { adminApi } from './api.js'
+import { Help } from './ui.jsx'
 
 // 관리자 [홈페이지 관리]: 첫 화면의 큰 배너·이야기 배너·제철 달력·자주 묻는 질문과 회사 소개(/about)를 고친다 (server/siteContent.js).
 // 저장하면 손님 화면에 바로(최대 30초) 나오고, [기본값으로]를 누르면 코드에 적힌 처음 내용으로 돌아간다
@@ -149,11 +150,11 @@ export function SiteContent() {
   const items = listOps('items')
   return (
     <section className="site-editor">
-      <div className="admin-head">
-        <h2>홈페이지 관리</h2>
+      {/* 제목은 위쪽 큰 메뉴 머리(홈페이지 › 홈페이지 관리)가 보여 주니 여기서는 빼고, 설명은 [?] 안에 */}
+      <div className="site-top">
+        <p className="muted">첫 화면과 회사 소개의 글·사진 <Help label="홈페이지 관리 도움말">첫 화면과 회사 소개(/about)의 글과 사진을 고쳐요. 공지·언론보도는 [공지·언론], 상품은 [상품 관리], 품목 레시피는 [품목 검수]에서 고쳐요.</Help></p>
         <a className="button ghost" href="/" target="_blank" rel="noreferrer">홈페이지 보기 ↗</a>
       </div>
-      <p className="muted">첫 화면과 회사 소개(/about)의 글과 사진을 고쳐요. 공지·언론보도는 [공지·언론], 상품은 [상품 관리], 품목 레시피는 [품목 검수]에서 고쳐요.</p>
       <nav className="tabs">
         {SECTIONS.map(([key, label]) => (
           <button key={key} type="button" className={key === section ? 'on' : ''} onClick={() => open(key)}>{label}{info[key] && ' · 고침'}</button>
@@ -236,7 +237,7 @@ export function SiteContent() {
         {section === 'faq' && (
           <>
             <label>위쪽 안내<input value={draft.lead} onChange={(e) => put({ lead: e.target.value })} maxLength={200} /></label>
-            <p className="muted">답에 {'{출고}'} · {'{배송비}'} · {'{무료배송}'} · {'{전화}'} · {'{업무시간}'}을 적으면 [쇼핑몰 설정] 값으로 바뀌어요.</p>
+            <p className="muted">질문과 답을 고쳐요 <Help label="자동으로 바뀌는 말">답에 {'{출고}'} · {'{배송비}'} · {'{무료배송}'} · {'{전화}'} · {'{업무시간}'}을 적으면 [쇼핑몰 설정] 값으로 바뀌어요.</Help></p>
             {draft.items.map((it, i) => (
               <div key={i} className="site-row">
                 <p className="site-row-head"><b>질문 {i + 1}</b><RowTools index={i} count={draft.items.length} onMove={items.move} onRemove={items.remove} /></p>
@@ -251,7 +252,7 @@ export function SiteContent() {
 
         {section === 'about' && (
           <>
-            <p className="muted">회사 소개 화면(<a href="/about" target="_blank" rel="noreferrer">/about ↗</a>)의 글과 사진이에요. 오시는 길(주소·전화·이메일)은 사업자 정보와 같은 값이라 [쇼핑몰 설정]에서 고쳐요. 제목에 {'{개수}'}를 쓰면 목록 개수로 바뀌어요.</p>
+            <p className="muted">회사 소개 화면(<a href="/about" target="_blank" rel="noreferrer">/about ↗</a>)의 글과 사진이에요 <Help label="회사 소개 도움말">오시는 길(주소·전화·이메일)은 사업자 정보와 같은 값이라 [쇼핑몰 설정]에서 고쳐요. 제목에 {'{개수}'}를 쓰면 목록 개수로 바뀌어요.</Help></p>
             <h3>맨 위</h3>
             <label>작은 제목<input value={draft.eyebrow} onChange={(e) => put({ eyebrow: e.target.value })} maxLength={60} /></label>
             <label>회사 이름<em className="req">*</em><input value={draft.name} onChange={(e) => put({ name: e.target.value })} maxLength={40} /></label>
@@ -294,11 +295,14 @@ export function SiteContent() {
           </>
         )}
 
-        {errors.length > 0 && <ul className="error">{errors.map((e) => <li key={e}>{e}</li>)}</ul>}
-        {message && <p className="success">{message}</p>}
-        <div className="actions">
-          {saved && <button type="button" className="button ghost" onClick={reset}>기본값으로</button>}
-          <button type="button" className="button" onClick={save} disabled={busy}>{busy ? '저장 중…' : '저장'}</button>
+        {/* 저장 막대는 화면 아래에 늘 떠 있다 (긴 칸을 다 내리지 않아도 저장) */}
+        <div className="form-savebar">
+          {errors.length > 0 && <ul className="error">{errors.map((e) => <li key={e}>{e}</li>)}</ul>}
+          {message && <p className="success">{message}</p>}
+          <div className="actions">
+            {saved && <button type="button" className="button ghost" onClick={reset}>기본값으로</button>}
+            <button type="button" className="button" onClick={save} disabled={busy}>{busy ? '저장 중…' : '저장'}</button>
+          </div>
         </div>
       </div>
     </section>
