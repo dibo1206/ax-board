@@ -11,7 +11,7 @@ import { pool } from './db.js'
 
 const SHOP_NAME = 'YOONJU MARKET'
 const PRIVATE_PAGES = /^\/(admin|seller|account|cart|checkout|order|restock)(\/|$)/ // restock: 재입고 알림 취소 화면
-const PUBLIC_PAGES = ['/', '/policy/terms', '/policy/privacy', '/policy/refund']
+const PUBLIC_PAGES = ['/', '/about', '/notice', '/press', '/sitemap', '/policy/terms', '/policy/privacy', '/policy/refund', '/policy/noemail']
 const CODE = /^[A-Za-z0-9_-]{1,64}$/
 // 화면에서 불러도 되는 곳: 우리 서버, 토스페이먼츠(결제창), 다음 우편번호(주소 검색 창), 구글·jsDelivr 글꼴. 나머지 스크립트·틀(iframe)은 막는다
 const CSP = [
@@ -102,7 +102,7 @@ async function pageHead(req, html) {
   const url = base + req.path
   const defaults = { title: SHOP_NAME, description: html.match(/<meta name="description" content="([^"]*)"/)?.[1] ?? SHOP_NAME, url }
   if (PRIVATE_PAGES.test(req.path)) return { status: 200, head: { ...defaults, noindex: true } }
-  if (!req.path.startsWith('/p/')) return { status: PUBLIC_PAGES.includes(req.path) || req.path.startsWith('/policy/') ? 200 : 404, head: { ...defaults, url: base + (PUBLIC_PAGES.includes(req.path) ? req.path : '/') } }
+  if (!req.path.startsWith('/p/')) return { status: PUBLIC_PAGES.includes(req.path) || req.path.startsWith('/policy/') || /^\/(notice|press)\/\d{1,9}$/.test(req.path) ? 200 : 404, head: { ...defaults, url: base + (PUBLIC_PAGES.includes(req.path) ? req.path : '/') } }
 
   let code = ''
   try {

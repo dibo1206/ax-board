@@ -1,0 +1,522 @@
+{
+ "note": "회사 홈페이지(yunjufarm.co.kr) 2026-11-08 확인. 가격·재고는 [예시]. npm run company-content 로 DB에 넣는다 (여러 번 해도 같다)",
+ "seller": {
+  "seller_code": "company",
+  "name": "윤주(주)농업회사법인",
+  "region": "충남 천안시",
+  "intro": "충남지역에서 재배되는 친환경 농산물을 가공, 유통, 판매하여 소비자에게 정직하게 전달하는 로컬푸드 전문기업입니다.",
+  "story": "지역농가와의 상생을 가장 중요한 가치로 삼고, 농가와의 계약재배를 통해 생산부터 유통까지 모든 과정을 관리합니다. 누구나 안심하고 먹을 수 있는 건강한 먹거리 문화를 만들기 위해 노력하고 있습니다."
+ },
+ "item": {
+  "item_code": "fruit_base",
+  "name": "과일 농축액 베이스",
+  "category": "가공품",
+  "storage_method": "직사광선을 피해 서늘한 곳에 실온 보관 (제품 라벨)",
+  "opened_note": "개봉한 뒤에는 냉장 보관하고 빨리 드세요. 희석용이라 반드시 물이나 탄산수에 희석해 드세요 (제품 라벨).",
+  "danger_signs": [
+   "표면 곰팡이",
+   "시큼한 발효 냄새, 술 냄새",
+   "용기가 부풀어 있음"
+  ],
+  "allergen_note": "같은 제조시설에서 난류, 우유, 메밀, 땅콩, 고등어, 게, 새우, 돼지고기, 복숭아, 토마토를 쓰는 제품을 만들어요 (라벨 표시). 복숭아 베이스에는 복숭아가 들어 있어요.",
+  "cafe_note": "1.9kg 대용량, 범용 과육 펌프(1회 30ml) 호환 (회사 상세페이지)",
+  "recipes": [
+   {
+    "title": "과일 에이드",
+    "ingredients": "베이스·탄산수·얼음",
+    "method": "베이스를 탄산수에 희석하기 (비율은 제품 라벨 확인)"
+   },
+   {
+    "title": "과일차",
+    "ingredients": "베이스·뜨거운 물",
+    "method": "뜨거운 물에 희석하기 (비율은 제품 라벨 확인)"
+   }
+  ],
+  "source": "[검수 필요] 회사 제품 라벨·상세페이지(yunjufarm.co.kr, 2026-11-08) + 먹으면 안 되는 신호는 Claude 초안"
+ },
+ "products": [
+  {
+   "product_code": "yj_base_peach",
+   "item_code": "fruit_base",
+   "name": "[윤주톡톡] 복숭아베이스 1.9kg",
+   "price": 18000,
+   "unit": "1.9kg 1통",
+   "stock": 200,
+   "summary": "과육이 많고 향이 진한 복숭아 음료 베이스. 1.9kg 대용량이라 카페·행사용으로 좋아요",
+   "description": "■ 제품 소개\n높은 과육 함량과 천연 향료 사용으로 복숭아 본연의 풍미가 풍부하며, 대용량 제조가 가능해 카페나 행사에서 활용하기 좋습니다. HACCP 인증을 받은 철저한 관리 시스템으로 건강한 먹거리를 제공합니다. (회사 소개 글)\n\n■ 이렇게 써요\n복숭아청, 복숭아에이드, 복숭아차 원액. 희석용이라 반드시 물이나 탄산수에 희석해서 드세요. 1.9kg 대용량이라 범용 과육 펌프(1회 30ml)를 함께 쓰면 편해요 (펌프는 따로 구매).\n\n■ 보관과 주의\n직사광선을 피해 서늘한 곳에 보관하고, 개봉한 뒤에는 냉장 보관해 빨리 드세요. 과일을 넣어 만들어 씨앗·껍질이 보일 수 있지만 이물질이 아니에요.\n\n■ 주문·배송 (회사 안내)\n평일 오후 2시까지 결제하면 그날 보내요 (판매자 사정에 따라 달라질 수 있어요). 택배가 파손되어 왔다면 받은 상자와 내용물을 버리지 말고 사진을 찍어 대표전화 041-544-2566으로 알려 주세요.\n\n■ 표시 정보\n품목보고번호 2016046103751 · 소비기한 제조일로부터 18개월. 아래 [상품정보 제공 고시]에 원재료와 영양성분이 있어요.\n\n※ 가격·재고는 [예시]예요. 회사가 확인한 뒤 바꿔요.",
+   "tags": [
+    "cafe",
+    "drink",
+    "keep_long",
+    "sweet"
+   ],
+   "image_url": "/product-photos/yj_base_peach.webp",
+   "images": [
+    "/product-photos/yj_base_peach-1.webp",
+    "/product-photos/yj_base_peach-2.webp"
+   ],
+   "detail_images": [
+    "/product-photos/yj_base_peach-3.webp",
+    "/product-photos/yj_base_peach-4.webp",
+    "/product-photos/yj_base_peach-5.webp",
+    "/product-photos/yj_base_peach-6.webp"
+   ],
+   "notice": {
+    "food_type": "음료베이스",
+    "address": "판매원 충남 천안시 서북구 동서대로 163 · 제조원 쏘울코리아팜 주식회사농업회사법인 (소재지는 회사 확인 필요)",
+    "packed": "용기에 따로 표시",
+    "expiry": "제조일로부터 18개월",
+    "ingredients": "백설탕, 냉동복숭아(35%), 복숭아농축액(10%), 복숭아향(0.5%), 카복시메틸셀룰로오스, 비타민C, 구연산, 식용색소적색제2호, 안식향산나트륨, 수크랄로스, 정제수 [원산지: 국산(충청남도 아산시), 회사 홈페이지 표시]",
+    "nutrition": "총 내용량 1,900g · 100g당 217kcal · 나트륨 56mg(3%) · 탄수화물 53g(16%) · 당류 49g(49%) · 지방 0g · 트랜스지방 0g · 포화지방 0g · 콜레스테롤 0mg · 단백질 1.0g(2%) (괄호는 1일 영양성분 기준치에 대한 비율)",
+    "imported": false
+   },
+   "options": []
+  },
+  {
+   "product_code": "yj_base_grapefruit",
+   "item_code": "fruit_base",
+   "name": "[윤주톡톡] 자몽베이스 1.9kg",
+   "price": 18000,
+   "unit": "1.9kg 1통",
+   "stock": 200,
+   "summary": "과육이 많고 향이 진한 자몽 음료 베이스. 1.9kg 대용량이라 카페·행사용으로 좋아요",
+   "description": "■ 제품 소개\n높은 과육 함량과 천연 향료 사용으로 자몽 본연의 풍미가 풍부하며, 대용량 제조가 가능해 카페나 행사에서 활용하기 좋습니다. HACCP 인증을 받은 철저한 관리 시스템으로 건강한 먹거리를 제공합니다. (회사 소개 글)\n\n■ 이렇게 써요\n자몽청, 자몽에이드, 자몽차 원액. 희석용이라 반드시 물이나 탄산수에 희석해서 드세요. 1.9kg 대용량이라 범용 과육 펌프(1회 30ml)를 함께 쓰면 편해요 (펌프는 따로 구매).\n\n■ 보관과 주의\n직사광선을 피해 서늘한 곳에 보관하고, 개봉한 뒤에는 냉장 보관해 빨리 드세요. 과일을 넣어 만들어 씨앗·껍질이 보일 수 있지만 이물질이 아니에요.\n\n■ 주문·배송 (회사 안내)\n평일 오후 2시까지 결제하면 그날 보내요 (판매자 사정에 따라 달라질 수 있어요). 택배가 파손되어 왔다면 받은 상자와 내용물을 버리지 말고 사진을 찍어 대표전화 041-544-2566으로 알려 주세요.\n\n■ 표시 정보\n품목보고번호 2016046103738 · 소비기한 제조일로부터 18개월. 아래 [상품정보 제공 고시]에 원재료와 영양성분이 있어요.\n\n※ 가격·재고는 [예시]예요. 회사가 확인한 뒤 바꿔요.",
+   "tags": [
+    "cafe",
+    "drink",
+    "keep_long",
+    "sour"
+   ],
+   "image_url": "/product-photos/yj_base_grapefruit.webp",
+   "images": [
+    "/product-photos/yj_base_grapefruit-1.webp",
+    "/product-photos/yj_base_grapefruit-2.webp"
+   ],
+   "detail_images": [
+    "/product-photos/yj_base_grapefruit-3.webp",
+    "/product-photos/yj_base_grapefruit-4.webp",
+    "/product-photos/yj_base_grapefruit-5.webp",
+    "/product-photos/yj_base_grapefruit-6.webp"
+   ],
+   "notice": {
+    "food_type": "음료베이스",
+    "address": "판매원 충남 천안시 서북구 동서대로 163 · 제조원 쏘울코리아팜 주식회사농업회사법인 (소재지는 회사 확인 필요)",
+    "packed": "용기에 따로 표시",
+    "expiry": "제조일로부터 18개월",
+    "ingredients": "레드자몽농축액(47.91%), 자몽열매펄프(23%), 액상과당, 백설탕, 합성향료, 비타민C, 식용색소적색제2호, 안식향산나트륨, 수크랄로스",
+    "nutrition": "총 내용량 1,900g · 100g당 221kcal · 나트륨 57mg(3%) · 탄수화물 53g(16%) · 당류 46g(46%) · 지방 0g · 트랜스지방 0g · 포화지방 0g · 콜레스테롤 0mg · 단백질 2g(3%) (괄호는 1일 영양성분 기준치에 대한 비율)",
+    "imported": false
+   },
+   "options": []
+  },
+  {
+   "product_code": "yj_base_yuja",
+   "item_code": "fruit_base",
+   "name": "[윤주톡톡] 유자베이스 1.9kg",
+   "price": 18000,
+   "unit": "1.9kg 1통",
+   "stock": 200,
+   "summary": "과육이 많고 향이 진한 유자 음료 베이스. 1.9kg 대용량이라 카페·행사용으로 좋아요",
+   "description": "■ 제품 소개\n높은 과육 함량과 천연 향료 사용으로 유자 본연의 풍미가 풍부하며, 대용량 제조가 가능해 카페나 행사에서 활용하기 좋습니다. HACCP 인증을 받은 철저한 관리 시스템으로 건강한 먹거리를 제공합니다. (회사 소개 글)\n\n■ 이렇게 써요\n유자청, 유자차, 유자에이드 원액. 희석용이라 반드시 물이나 탄산수에 희석해서 드세요. 1.9kg 대용량이라 범용 과육 펌프(1회 30ml)를 함께 쓰면 편해요 (펌프는 따로 구매).\n\n■ 보관과 주의\n직사광선을 피해 서늘한 곳에 보관하고, 개봉한 뒤에는 냉장 보관해 빨리 드세요. 과일을 넣어 만들어 씨앗·껍질이 보일 수 있지만 이물질이 아니에요.\n\n■ 주문·배송 (회사 안내)\n평일 오후 2시까지 결제하면 그날 보내요 (판매자 사정에 따라 달라질 수 있어요). 택배가 파손되어 왔다면 받은 상자와 내용물을 버리지 말고 사진을 찍어 대표전화 041-544-2566으로 알려 주세요.\n\n■ 표시 정보\n품목보고번호 2016046103740 · 소비기한 제조일로부터 18개월. 아래 [상품정보 제공 고시]에 원재료와 영양성분이 있어요.\n\n※ 가격·재고는 [예시]예요. 회사가 확인한 뒤 바꿔요.",
+   "tags": [
+    "cafe",
+    "drink",
+    "keep_long",
+    "sour"
+   ],
+   "image_url": "/product-photos/yj_base_yuja.webp",
+   "images": [
+    "/product-photos/yj_base_yuja-1.webp",
+    "/product-photos/yj_base_yuja-2.webp"
+   ],
+   "detail_images": [
+    "/product-photos/yj_base_yuja-3.webp",
+    "/product-photos/yj_base_yuja-4.webp",
+    "/product-photos/yj_base_yuja-5.webp",
+    "/product-photos/yj_base_yuja-6.webp"
+   ],
+   "notice": {
+    "food_type": "음료베이스",
+    "address": "판매원 충남 천안시 서북구 동서대로 163 · 제조원 쏘울코리아팜 주식회사농업회사법인 (소재지는 회사 확인 필요)",
+    "packed": "용기에 따로 표시",
+    "expiry": "제조일로부터 18개월",
+    "ingredients": "유자절임(45%), 유자과즙(20%), 액상과당, 백설탕, 구연산, 비타민C, 유자향(0.8%), 카르복시메틸셀룰로오스, 수크랄로스, 식용색소황색제4호, 안식향산나트륨, 정제수 [원산지: 국산(충청남도 아산시), 회사 홈페이지 표시]",
+    "nutrition": "총 내용량 1,900g · 100g당 219kcal · 나트륨 38mg(2%) · 탄수화물 54g(17%) · 당류 46g(46%) · 지방 0g · 트랜스지방 0g · 포화지방 0g · 콜레스테롤 0mg · 단백질 1.0g(2%) (괄호는 1일 영양성분 기준치에 대한 비율)",
+    "imported": false
+   },
+   "options": []
+  },
+  {
+   "product_code": "yj_base_lemon",
+   "item_code": "fruit_base",
+   "name": "[윤주톡톡] 레몬베이스 1.9kg",
+   "price": 18000,
+   "unit": "1.9kg 1통",
+   "stock": 200,
+   "summary": "과육이 많고 향이 진한 레몬 음료 베이스. 1.9kg 대용량이라 카페·행사용으로 좋아요",
+   "description": "■ 제품 소개\n높은 과육 함량과 천연 향료 사용으로 레몬 본연의 풍미가 풍부하며, 대용량 제조가 가능해 카페나 행사에서 활용하기 좋습니다. HACCP 인증을 받은 철저한 관리 시스템으로 건강한 먹거리를 제공합니다. (회사 소개 글)\n\n■ 이렇게 써요\n레몬청, 레몬에이드, 레몬차 원액. 희석용이라 반드시 물이나 탄산수에 희석해서 드세요. 1.9kg 대용량이라 범용 과육 펌프(1회 30ml)를 함께 쓰면 편해요 (펌프는 따로 구매).\n\n■ 보관과 주의\n직사광선을 피해 서늘한 곳에 보관하고, 개봉한 뒤에는 냉장 보관해 빨리 드세요. 과일을 넣어 만들어 씨앗·껍질이 보일 수 있지만 이물질이 아니에요.\n\n■ 주문·배송 (회사 안내)\n평일 오후 2시까지 결제하면 그날 보내요 (판매자 사정에 따라 달라질 수 있어요). 택배가 파손되어 왔다면 받은 상자와 내용물을 버리지 말고 사진을 찍어 대표전화 041-544-2566으로 알려 주세요.\n\n■ 표시 정보\n품목보고번호 2016046103737 · 소비기한 제조일로부터 18개월. 아래 [상품정보 제공 고시]에 원재료와 영양성분이 있어요.\n\n※ 가격·재고는 [예시]예요. 회사가 확인한 뒤 바꿔요.",
+   "tags": [
+    "cafe",
+    "drink",
+    "keep_long",
+    "sour"
+   ],
+   "image_url": "/product-photos/yj_base_lemon.webp",
+   "images": [
+    "/product-photos/yj_base_lemon-1.webp",
+    "/product-photos/yj_base_lemon-2.webp"
+   ],
+   "detail_images": [
+    "/product-photos/yj_base_lemon-3.webp",
+    "/product-photos/yj_base_lemon-4.webp",
+    "/product-photos/yj_base_lemon-5.webp",
+    "/product-photos/yj_base_lemon-6.webp"
+   ],
+   "notice": {
+    "food_type": "음료베이스",
+    "address": "판매원 충남 천안시 서북구 동서대로 163 · 제조원 쏘울코리아팜 주식회사농업회사법인 (소재지는 회사 확인 필요)",
+    "packed": "용기에 따로 표시",
+    "expiry": "제조일로부터 18개월",
+    "ingredients": "백설탕, 레몬농축액(33%), 레몬과육(13%), 액상과당, 레몬향(0.7%), 비타민C, 안식향산나트륨, 식용색소황색제4호, 수크랄로스, 정제수 [원산지: 국산(충청남도 아산시), 회사 홈페이지 표시]",
+    "nutrition": "총 내용량 1,900g · 100g당 272kcal · 나트륨 39mg(2%) · 탄수화물 67g(21%) · 당류 58g(58%) · 지방 0g · 트랜스지방 0g · 포화지방 0g · 콜레스테롤 0mg · 단백질 1.0g(1%) (괄호는 1일 영양성분 기준치에 대한 비율)",
+    "imported": false
+   },
+   "options": []
+  },
+  {
+   "product_code": "yj_base_passionfruit",
+   "item_code": "fruit_base",
+   "name": "[윤주톡톡] 패션후르츠베이스 1.9kg",
+   "price": 18000,
+   "unit": "1.9kg 1통",
+   "stock": 200,
+   "summary": "과육이 많고 향이 진한 패션후르츠 음료 베이스. 1.9kg 대용량이라 카페·행사용으로 좋아요",
+   "description": "■ 제품 소개\n높은 과육 함량과 천연 향료 사용으로 패션후르츠 본연의 풍미가 풍부하며, 대용량 제조가 가능해 카페나 행사에서 활용하기 좋습니다. HACCP 인증을 받은 철저한 관리 시스템으로 건강한 먹거리를 제공합니다. (회사 소개 글)\n\n■ 이렇게 써요\n패션후르츠청 에이드 원액 (카페용). 희석용이라 반드시 물이나 탄산수에 희석해서 드세요. 1.9kg 대용량이라 범용 과육 펌프(1회 30ml)를 함께 쓰면 편해요 (펌프는 따로 구매).\n\n■ 보관과 주의\n직사광선을 피해 서늘한 곳에 보관하고, 개봉한 뒤에는 냉장 보관해 빨리 드세요. 과일을 넣어 만들어 씨앗·껍질이 보일 수 있지만 이물질이 아니에요.\n\n■ 주문·배송 (회사 안내)\n평일 오후 2시까지 결제하면 그날 보내요 (판매자 사정에 따라 달라질 수 있어요). 택배가 파손되어 왔다면 받은 상자와 내용물을 버리지 말고 사진을 찍어 대표전화 041-544-2566으로 알려 주세요.\n\n■ 표시 정보\n품목보고번호 2016046103752 · 소비기한 제조일로부터 18개월. 아래 [상품정보 제공 고시]에 원재료와 영양성분이 있어요.\n\n※ 가격·재고는 [예시]예요. 회사가 확인한 뒤 바꿔요.",
+   "tags": [
+    "cafe",
+    "drink",
+    "keep_long",
+    "sour"
+   ],
+   "image_url": "/product-photos/yj_base_passionfruit.webp",
+   "images": [
+    "/product-photos/yj_base_passionfruit-1.webp",
+    "/product-photos/yj_base_passionfruit-2.webp"
+   ],
+   "detail_images": [
+    "/product-photos/yj_base_passionfruit-3.webp",
+    "/product-photos/yj_base_passionfruit-4.webp",
+    "/product-photos/yj_base_passionfruit-5.webp",
+    "/product-photos/yj_base_passionfruit-6.webp"
+   ],
+   "notice": {
+    "food_type": "음료베이스",
+    "address": "판매원 충남 천안시 서북구 동서대로 163 · 제조원 쏘울코리아팜 주식회사농업회사법인 (소재지는 회사 확인 필요)",
+    "packed": "용기에 따로 표시",
+    "expiry": "제조일로부터 18개월",
+    "ingredients": "패션후르츠농축액(70%), 백설탕, D-소비톨, 카르복시메틸셀룰로오스, 패션후르츠향(0.25%), 아세설팜칼륨, 안식향산나트륨, 구연산삼나트륨, 수크랄로스, 정제수 [원산지: 국산(충청남도 아산시), 회사 홈페이지 표시]",
+    "nutrition": "총 내용량 1,900g · 100g당 230kcal · 나트륨 47.88mg(2%) · 탄수화물 44.64g(21%) · 당류 33.69g(58%) · 지방 1.61g(0%) · 트랜스지방 0g · 포화지방 0.16g(0%) · 콜레스테롤 0mg · 단백질 1.0g(1%) (괄호는 1일 영양성분 기준치에 대한 비율)",
+    "imported": false
+   },
+   "options": []
+  },
+  {
+   "product_code": "yj_base_greengrape",
+   "item_code": "fruit_base",
+   "name": "청포도 베이스 1.9kg",
+   "price": 18000,
+   "unit": "1.9kg 1통",
+   "stock": 200,
+   "summary": "과육이 많고 향이 진한 청포도 음료 베이스. 1.9kg 대용량이라 카페·행사용으로 좋아요",
+   "description": "■ 제품 소개\n높은 과육 함량과 천연 향료 사용으로 청포도 본연의 풍미가 풍부하며, 대용량 제조가 가능해 카페나 행사에서 활용하기 좋습니다. HACCP 인증을 받은 철저한 관리 시스템으로 건강한 먹거리를 제공합니다. (회사 소개 글)\n\n■ 이렇게 써요\n청포도 에이드·음료 원액. 희석용이라 반드시 물이나 탄산수에 희석해서 드세요. 1.9kg 대용량이라 범용 과육 펌프(1회 30ml)를 함께 쓰면 편해요 (펌프는 따로 구매).\n\n■ 보관과 주의\n직사광선을 피해 서늘한 곳에 보관하고, 개봉한 뒤에는 냉장 보관해 빨리 드세요. 과일을 넣어 만들어 씨앗·껍질이 보일 수 있지만 이물질이 아니에요.\n\n■ 주문·배송 (회사 안내)\n평일 오후 2시까지 결제하면 그날 보내요 (판매자 사정에 따라 달라질 수 있어요). 택배가 파손되어 왔다면 받은 상자와 내용물을 버리지 말고 사진을 찍어 대표전화 041-544-2566으로 알려 주세요.\n\n■ 표시 정보\n원재료·영양성분 같은 라벨 정보는 회사 확인 후 채워요.\n\n※ 가격·재고는 [예시]예요. 회사가 확인한 뒤 바꿔요.",
+   "tags": [
+    "cafe",
+    "drink",
+    "keep_long",
+    "sweet"
+   ],
+   "image_url": "/product-photos/yj_base_greengrape.webp",
+   "images": [
+    "/product-photos/yj_base_greengrape-1.webp",
+    "/product-photos/yj_base_greengrape-2.webp"
+   ],
+   "detail_images": [
+    "/product-photos/yj_base_greengrape-3.webp"
+   ],
+   "notice": {
+    "food_type": "[예시] 음료베이스 (회사 확인 필요)",
+    "address": "판매원 충남 천안시 서북구 동서대로 163 · 제조원 쏘울코리아팜 주식회사농업회사법인 (소재지는 회사 확인 필요)",
+    "packed": "용기에 따로 표시",
+    "expiry": "[예시] 회사 확인 필요",
+    "ingredients": "[예시] 회사 확인 필요",
+    "nutrition": "[예시] 회사 확인 필요",
+    "imported": false
+   },
+   "options": []
+  },
+  {
+   "product_code": "yj_base_strawberry",
+   "item_code": "fruit_base",
+   "name": "딸기 베이스 1.9kg",
+   "price": 18000,
+   "unit": "1.9kg 1통",
+   "stock": 200,
+   "summary": "과육이 많고 향이 진한 딸기 음료 베이스. 1.9kg 대용량이라 카페·행사용으로 좋아요",
+   "description": "■ 제품 소개\n높은 과육 함량과 천연 향료 사용으로 딸기 본연의 풍미가 풍부하며, 대용량 제조가 가능해 카페나 행사에서 활용하기 좋습니다. HACCP 인증을 받은 철저한 관리 시스템으로 건강한 먹거리를 제공합니다. (회사 소개 글)\n\n■ 이렇게 써요\n딸기 에이드·라떼·음료 원액. 희석용이라 반드시 물이나 탄산수에 희석해서 드세요. 1.9kg 대용량이라 범용 과육 펌프(1회 30ml)를 함께 쓰면 편해요 (펌프는 따로 구매).\n\n■ 보관과 주의\n직사광선을 피해 서늘한 곳에 보관하고, 개봉한 뒤에는 냉장 보관해 빨리 드세요. 과일을 넣어 만들어 씨앗·껍질이 보일 수 있지만 이물질이 아니에요.\n\n■ 주문·배송 (회사 안내)\n평일 오후 2시까지 결제하면 그날 보내요 (판매자 사정에 따라 달라질 수 있어요). 택배가 파손되어 왔다면 받은 상자와 내용물을 버리지 말고 사진을 찍어 대표전화 041-544-2566으로 알려 주세요.\n\n■ 표시 정보\n원재료·영양성분 같은 라벨 정보는 회사 확인 후 채워요.\n\n※ 가격·재고는 [예시]예요. 회사가 확인한 뒤 바꿔요.",
+   "tags": [
+    "cafe",
+    "drink",
+    "keep_long",
+    "sweet"
+   ],
+   "image_url": "/product-photos/yj_base_strawberry.webp",
+   "images": [
+    "/product-photos/yj_base_strawberry-1.webp",
+    "/product-photos/yj_base_strawberry-2.webp"
+   ],
+   "detail_images": [
+    "/product-photos/yj_base_strawberry-3.webp"
+   ],
+   "notice": {
+    "food_type": "[예시] 음료베이스 (회사 확인 필요)",
+    "address": "판매원 충남 천안시 서북구 동서대로 163 · 제조원 쏘울코리아팜 주식회사농업회사법인 (소재지는 회사 확인 필요)",
+    "packed": "용기에 따로 표시",
+    "expiry": "[예시] 회사 확인 필요",
+    "ingredients": "[예시] 회사 확인 필요",
+    "nutrition": "[예시] 회사 확인 필요",
+    "imported": false
+   },
+   "options": []
+  },
+  {
+   "product_code": "yj_pear_set",
+   "item_code": "pear",
+   "name": "천안 성환 배 세트",
+   "price": 45000,
+   "unit": "5kg 1상자",
+   "stock": 0,
+   "summary": "1909년부터 배를 키운 천안 성환의 명품 배 선물 세트",
+   "description": "■ 제품 소개\n1909년부터 배 재배가 시작된 천안 성환은 황토질 토양, 깨끗한 해풍, 큰 일교차까지 배가 자라기에 좋은 자연조건을 갖췄습니다. 성환에서 자란 배는 과즙이 풍부하고 당도가 높아 전국은 물론 해외 시장에서도 품질을 인정받고 있습니다. (회사 소개 글)\n\n■ 주문·배송 (회사 안내)\n평일 오후 2시까지 결제하면 그날 보내요 (판매자 사정에 따라 달라질 수 있어요). 택배가 파손되어 왔다면 받은 상자와 내용물을 버리지 말고 사진을 찍어 대표전화 041-544-2566으로 알려 주세요.\n\n※ 가격·재고는 [예시]예요. 회사가 확인한 뒤 바꿔요.",
+   "tags": [
+    "gift",
+    "raw",
+    "sweet",
+    "season"
+   ],
+   "image_url": "/product-photos/yj_pear_set.webp",
+   "images": [
+    "/product-photos/yj_pear_set-1.webp",
+    "/product-photos/yj_pear_set-2.webp"
+   ],
+   "detail_images": [
+    "/product-photos/yj_pear_set-3.webp"
+   ],
+   "notice": {
+    "origin": "국산 (충청남도 천안시 성환)",
+    "expiry": "[예시] 받은 뒤 냉장 보관, 회사 확인 필요",
+    "composition": "성환 배 5kg / 7.5kg / 15kg 중 선택",
+    "packed": "[예시] 수확 후 선별·포장, 회사 확인 필요"
+   },
+   "options": [
+    {
+     "name": "5kg 1상자",
+     "price": 45000,
+     "stock": 40
+    },
+    {
+     "name": "7.5kg 1상자",
+     "price": 63000,
+     "stock": 30
+    },
+    {
+     "name": "15kg 1상자",
+     "price": 115000,
+     "stock": 15
+    }
+   ]
+  },
+  {
+   "product_code": "yj_mixed_set",
+   "item_code": "pear",
+   "name": "과일 혼합 세트 (성환 배·천안 사과)",
+   "price": 55000,
+   "unit": "혼합 1상자",
+   "stock": 30,
+   "summary": "성환 배와 천안 사과를 한 상자에 담은 명품 혼합 세트",
+   "description": "■ 제품 소개\n과즙이 풍부한 성환 배와 선홍색 빛깔에 영양까지 풍부한 천안 사과를 한 번에 즐길 수 있는 혼합 과일세트로, 천안 지역을 대표하는 신선한 제철 과일들을 특별하게 구성했습니다. (회사 소개 글)\n\n■ 구성\n배·사과 개수와 무게는 회사 확인 후 채워요.\n\n■ 주문·배송 (회사 안내)\n평일 오후 2시까지 결제하면 그날 보내요 (판매자 사정에 따라 달라질 수 있어요). 택배가 파손되어 왔다면 받은 상자와 내용물을 버리지 말고 사진을 찍어 대표전화 041-544-2566으로 알려 주세요.\n\n※ 가격·재고는 [예시]예요. 회사가 확인한 뒤 바꿔요.",
+   "tags": [
+    "gift",
+    "raw",
+    "sweet"
+   ],
+   "image_url": "/product-photos/yj_mixed_set.webp",
+   "images": [
+    "/product-photos/yj_mixed_set-1.webp",
+    "/product-photos/yj_mixed_set-2.webp"
+   ],
+   "detail_images": [
+    "/product-photos/yj_mixed_set-3.webp"
+   ],
+   "notice": {
+    "origin": "국산 (충청남도 천안시: 성환 배, 천안 사과)",
+    "expiry": "[예시] 받은 뒤 냉장 보관, 회사 확인 필요",
+    "composition": "성환 배와 천안 사과 혼합 1상자 (개수·무게는 회사 확인 필요)",
+    "packed": "[예시] 수확 후 선별·포장, 회사 확인 필요"
+   },
+   "options": []
+  },
+  {
+   "product_code": "yj_apple_set",
+   "item_code": "apple",
+   "name": "명품 사과세트",
+   "price": 33000,
+   "unit": "3kg 1상자",
+   "stock": 0,
+   "summary": "일조량 좋은 산지에서 고른 상급 사과 선물 세트",
+   "description": "■ 제품 소개\n사과 재배에 적합한 기후와 토양에서 일정한 일조량을 받고 자란 사과는 선홍색 빛을 띠며 비타민 C와 무기 염류가 많고 당도가 높아 맛이 뛰어납니다. 충남 지역을 중심으로 안동 등 상급 품질의 사과만을 선별해 구성합니다. (회사 소개 글)\n\n■ 주문·배송 (회사 안내)\n평일 오후 2시까지 결제하면 그날 보내요 (판매자 사정에 따라 달라질 수 있어요). 택배가 파손되어 왔다면 받은 상자와 내용물을 버리지 말고 사진을 찍어 대표전화 041-544-2566으로 알려 주세요.\n\n※ 가격·재고는 [예시]예요. 회사가 확인한 뒤 바꿔요.",
+   "tags": [
+    "gift",
+    "raw",
+    "sweet",
+    "season"
+   ],
+   "image_url": "/product-photos/yj_apple_set.webp",
+   "images": [
+    "/product-photos/yj_apple_set-1.webp",
+    "/product-photos/yj_apple_set-2.webp"
+   ],
+   "detail_images": [
+    "/product-photos/yj_apple_set-3.webp"
+   ],
+   "notice": {
+    "origin": "국산 (충남 지역 중심, 경북 안동 등에서 선별)",
+    "expiry": "[예시] 받은 뒤 냉장 보관, 회사 확인 필요",
+    "composition": "사과 3kg / 5kg 중 선택",
+    "packed": "[예시] 수확 후 선별·포장, 회사 확인 필요"
+   },
+   "options": [
+    {
+     "name": "3kg 1상자",
+     "price": 33000,
+     "stock": 40
+    },
+    {
+     "name": "5kg 1상자",
+     "price": 49000,
+     "stock": 40
+    }
+   ]
+  },
+  {
+   "product_code": "yj_pear_juice_set",
+   "item_code": "pear_juice",
+   "name": "프리미엄 도라지 배즙 선물 세트",
+   "price": 29000,
+   "unit": "25포",
+   "stock": 0,
+   "summary": "천안 성환 배를 착즙하고 친환경 도라지를 더한 배즙",
+   "description": "■ 제품 소개\n천안 성환에서 자란 명품 배로 만든 배즙 그대로의 건강한 맛. 황토질 토양과 깨끗한 해풍, 큰 일교차 속에서 자란 당도 높은 성환 배로 착즙해 만들었습니다. 친환경 도라지를 더했고, 색소와 인공 감미료 없이 자연 그대로의 달콤함과 신선함을 담았습니다. (회사 소개 글)\n\n■ 표시 정보\n식품 유형·원재료 함량·소비기한은 회사 확인 후 채워요.\n\n■ 주문·배송 (회사 안내)\n평일 오후 2시까지 결제하면 그날 보내요 (판매자 사정에 따라 달라질 수 있어요). 택배가 파손되어 왔다면 받은 상자와 내용물을 버리지 말고 사진을 찍어 대표전화 041-544-2566으로 알려 주세요.\n\n※ 가격·재고는 [예시]예요. 회사가 확인한 뒤 바꿔요.",
+   "tags": [
+    "gift",
+    "drink",
+    "keep_long"
+   ],
+   "image_url": "/product-photos/yj_pear_juice_set.webp",
+   "images": [
+    "/product-photos/yj_pear_juice_set-1.webp",
+    "/product-photos/yj_pear_juice_set-2.webp"
+   ],
+   "detail_images": [
+    "/product-photos/yj_pear_juice_set-3.webp"
+   ],
+   "notice": {
+    "food_type": "[예시] 과·채음료 (회사 확인 필요)",
+    "address": "충남 천안시 서북구 동서대로 163 (제조원은 회사 확인 필요)",
+    "packed": "[예시] 포장에 표시",
+    "expiry": "[예시] 회사 확인 필요",
+    "ingredients": "천안 성환 배, 친환경 도라지 (함량은 회사 확인 필요) · 색소·인공 감미료 없음",
+    "nutrition": "[예시] 회사 확인 필요",
+    "imported": false
+   },
+   "options": [
+    {
+     "name": "25포",
+     "price": 29000,
+     "stock": 50
+    },
+    {
+     "name": "50포",
+     "price": 52000,
+     "stock": 40
+    },
+    {
+     "name": "100포",
+     "price": 98000,
+     "stock": 20
+    }
+   ]
+  }
+ ],
+ "posts": [
+  {
+   "seed_key": "yunju-notice-29",
+   "kind": "notice",
+   "created_at": "2025-08-19T08:42:00+09:00",
+   "pinned": true,
+   "title": "2025 충남여성기업인대회 기업홍보판촉전",
+   "body": "제4회 여성기업주간 충남여성기업인대회\n충남 여성기업홍보판촉전 / (재)여성기업종합지원센터 BI 입주업체\n#충청남도 #한국여성경제인협회 #윤주(주)",
+   "link_url": "https://youtu.be/iD0lcdigUG8",
+   "image_url": "/posts/notice-2025-fair.webp"
+  },
+  {
+   "seed_key": "yunju-notice-30",
+   "kind": "notice",
+   "created_at": "2025-12-23T10:55:00+09:00",
+   "title": "따뜻하고 행복한 크리스마스 보내세요",
+   "body": "2025년 한 해 동안 윤주법인을 아껴 주시고 사랑해 주셔서 진심으로 감사합니다.\n여러분의 관심과 응원이 큰 힘이 되었습니다.\n따뜻하고 행복한 크리스마스 보내세요.\n윤주법인 드림",
+   "image_url": "/posts/notice-2025-christmas.webp"
+  },
+  {
+   "seed_key": "yunju-notice-31",
+   "kind": "notice",
+   "created_at": "2025-12-26T10:56:38+09:00",
+   "title": "올 한 해 함께해줘서 고마워요",
+   "body": "올 한 해 함께해줘서 고마워요\n다가오는 새해도 함께 걸어가요\n윤주법인 드림",
+   "image_url": "/posts/notice-2025-thanks.webp"
+  },
+  {
+   "seed_key": "yunju-notice-32",
+   "kind": "notice",
+   "created_at": "2025-12-31T17:09:49+09:00",
+   "title": "새해 복 많이 받으세요!!",
+   "body": "새해 복 많이 받으세요!!\n2026 HAPPY NEW YEAR\n윤주법인 드림",
+   "image_url": "/posts/notice-2026-newyear.webp"
+  },
+  {
+   "seed_key": "yunju-notice-33",
+   "kind": "notice",
+   "created_at": "2026-09-22T15:26:58+09:00",
+   "title": "풍요롭고 넉넉한 한가위 보내세요",
+   "body": "안녕하세요. 윤주법인입니다.\n가을빛이 깊어가는 한가위입니다.\n윤주법인을 아껴주시고 응원해 주시는 모든 분들께 감사드립니다.\n보름달이 밤하늘을 환하게 비추듯, 여러분의 마음에도 따뜻한 기쁨과 평안이 가득하시기를 바랍니다.\n가족과 함께 정을 나누고, 잠시 쉬어가며 마음의 여백을 채우는 풍성한 명절 보내세요.\n건강하고 행복한 한가위 되시길 기원합니다.\n감사합니다.\n- 윤주법인 드림 -",
+   "image_url": "/posts/notice-2026-chuseok.webp"
+  },
+  {
+   "seed_key": "yunju-press-30",
+   "kind": "press",
+   "created_at": "2025-02-21T12:40:38+09:00",
+   "title": "[대전일보] 여경협 충남지회, 충청권 우수중소기업 로컬푸드 박람회 참가",
+   "body": "기사 원문은 아래 [기사 보러 가기]에서 볼 수 있어요.",
+   "link_url": "https://www.daejonilbo.com/news/articleView.html?idxno=2245075",
+   "image_url": "/posts/press-2025-fair.webp"
+  },
+  {
+   "seed_key": "yunju-press-31",
+   "kind": "press",
+   "created_at": "2025-08-19T07:40:00+09:00",
+   "title": "[충청일보] 한국여성경제인협회 충남지회 '충청권 우수중소기업 & 로컬푸드 박람회' 참가 회원사 격려",
+   "body": "기사 원문은 아래 [기사 보러 가기]에서 볼 수 있어요.",
+   "link_url": "https://www.ccdailynews.com/news/articleView.html?idxno=2385572",
+   "image_url": "/posts/press-2025-fair.webp"
+  }
+ ]
+}

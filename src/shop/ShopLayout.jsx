@@ -66,6 +66,8 @@ export function ShopLayout({ children }) {
           <nav className="site-menu" aria-label="메뉴">
             {MENU.map(([label, id]) => <a key={id} href={`/#${id}`} onClick={(e) => goSection(e, id)}>{label}</a>)}
             <a href="/#recommend" onClick={openQuiz}>추천받기</a>
+            <a href="/about">회사소개</a>
+            <a href="/notice">공지사항</a>
           </nav>
           <HeaderSearch />
           <div className="site-tools">
@@ -100,11 +102,17 @@ export function ShopLayout({ children }) {
             {BRAND.siteUrl && <a href={BRAND.siteUrl} target="_blank" rel="noopener noreferrer" className="underline">기업 소개 사이트</a>}
             <a href="/order/lookup" className="underline">주문 조회</a>
             <a href="/guide" className="underline">1분 사용 안내</a>
+            <a href="/about" className="underline">회사 소개</a>
+            <a href="/notice" className="underline">공지사항</a>
+            <a href="/press" className="underline">언론보도</a>
+            <a href="/about#location" className="underline">오시는 길</a>
+            <a href="/sitemap" className="underline">사이트맵</a>
           </div>
           <nav className="foot-links" aria-label="약관">
             <a href="/policy/terms">이용약관</a>
             <a href="/policy/privacy"><b>개인정보 처리방침</b></a>
             <a href="/policy/refund">교환·환불 정책</a>
+            <a href="/policy/noemail">이메일무단수집거부</a>
           </nav>
           {shop && (
             <p className="foot-biz">

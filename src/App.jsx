@@ -21,6 +21,11 @@ const Checkout = page(() => import('./shop/Checkout.jsx'), 'Checkout')
 const OrderSuccess = page(() => import('./shop/Orders.jsx'), 'OrderSuccess')
 const OrderFail = page(() => import('./shop/Orders.jsx'), 'OrderFail')
 const OrderLookup = page(() => import('./shop/Orders.jsx'), 'OrderLookup')
+const AboutPage = page(() => import('./shop/About.jsx'), 'AboutPage')
+const SitemapPage = page(() => import('./shop/About.jsx'), 'SitemapPage')
+const PostListPage = page(() => import('./shop/Posts.jsx'), 'PostListPage')
+const PostDetailPage = page(() => import('./shop/Posts.jsx'), 'PostDetailPage')
+const NoticePopup = page(() => import('./shop/Posts.jsx'), 'NoticePopup')
 const Policy = page(() => import('./shop/Orders.jsx'), 'Policy')
 const LoginPage = page(() => import('./account/Account.jsx'), 'LoginPage')
 const SignupPage = page(() => import('./account/Account.jsx'), 'SignupPage')
@@ -276,6 +281,13 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
 
       <div className="detail-body">
         <Description text={product.description} />
+        {/* 회사 상세페이지 이미지 (세로로 긴 이미지를 위에서 아래로 이어서) */}
+        {product.detail_images?.length > 0 && (
+          <section className="box detail-images">
+            <h3>상세 정보</h3>
+            {product.detail_images.map((src) => <img key={src} src={src} alt="" loading="lazy" />)}
+          </section>
+        )}
         {/* 순서 (2026-11-08 피드백): 즐기는 법 → 보관·섭취 → 농가 이야기 → 고시 → 자주 묻는 질문 → 후기·문의 */}
         <RecipeCards recipes={item.recipes} />
         <section className="box">
@@ -418,6 +430,11 @@ function innerPage(path) {
   if (path === '/order/fail') return <OrderFail />
   if (path === '/order/lookup') return <OrderLookup />
   if (path.startsWith('/policy/')) return <Policy kind={path.split('/')[2]} />
+  if (path === '/about') return <AboutPage />
+  if (path === '/sitemap') return <SitemapPage />
+  if (path === '/notice' || path === '/press') return <PostListPage kind={path.slice(1)} />
+  const post = path.match(/^\/(notice|press)\/(\d{1,9})$/)
+  if (post) return <PostDetailPage kind={post[1]} id={post[2]} />
   if (path === '/account/login') return <LoginPage />
   if (path === '/account/signup') return <SignupPage />
   if (path === '/account/find') return <FindPasswordPage />
@@ -604,6 +621,7 @@ function Storefront() {
         </>
       )}
       <QuizDialog open={quizOpen} onClose={closeQuiz} onOpen={open} />
+      {!loc.code && <Suspense fallback={null}><NoticePopup /></Suspense>}
       <Chat productCode={loc.code} onOpenProduct={open} />
     </>
   )
