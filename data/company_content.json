@@ -24,12 +24,20 @@
    {
     "title": "과일 에이드",
     "ingredients": "베이스·탄산수·얼음",
-    "method": "베이스를 탄산수에 희석하기 (비율은 제품 라벨 확인)"
+    "method": "베이스를 탄산수에 희석하기 (비율은 제품 라벨 확인)",
+    "image": "/recipe-photos/fruit_base-1.webp"
    },
    {
     "title": "과일차",
     "ingredients": "베이스·뜨거운 물",
-    "method": "뜨거운 물에 희석하기 (비율은 제품 라벨 확인)"
+    "method": "뜨거운 물에 희석하기 (비율은 제품 라벨 확인)",
+    "image": "/recipe-photos/fruit_base-2.webp"
+   },
+   {
+    "title": "요거트 스무디",
+    "ingredients": "베이스·플레인 요거트·얼음",
+    "method": "요거트·얼음과 함께 갈기 (비율은 제품 라벨 확인)",
+    "image": "/recipe-photos/fruit_base-3.webp"
    }
   ],
   "source": "[검수 필요] 회사 제품 라벨·상세페이지(yunjufarm.co.kr, 2026-11-08) + 먹으면 안 되는 신호는 Claude 초안"
