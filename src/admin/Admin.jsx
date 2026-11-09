@@ -11,6 +11,7 @@ import { SellerApproval } from './SellerApproval.jsx'
 import { Inbox } from './Inbox.jsx'
 import { AccessLogs } from './AccessLogs.jsx'
 import { Dashboard } from './Dashboard.jsx'
+import { FarmOverview } from './FarmOverview.jsx'
 import { Notifications } from './Notifications.jsx'
 import { AdminReviews } from './Reviews.jsx'
 import { Orders } from './Orders.jsx'
@@ -78,6 +79,9 @@ function Admin() {
   })
   const [productFilter, setProductFilter] = useState('all')
   const [productQuery, setProductQuery] = useState('')
+  // 상품 관리를 '상품으로 보기' / '농가별로 보기'로 (2026-11-09). farm: 한 농가 상품만 볼 때 그 농가 코드
+  const [productView, setProductView] = useState('list')
+  const [farm, setFarm] = useState('')
   const [counts, setCounts] = useState(null)
   const setItemCount = useCallback((n) => setCounts((c) => (c ? { ...c, pending_items: n } : c)), [])
 
@@ -102,10 +106,29 @@ function Admin() {
   }, [products])
 
   // 상품 목록은 걸러 보기·검색 뒤 20개씩 (훅이라 아래 return 들보다 먼저 부른다)
-  const shownProducts = products
+  const farmProducts = farm ? products.filter((p) => p.seller_code === farm) : products
+  const shownProducts = farmProducts
     .filter(ADMIN_FILTERS.find(([key]) => key === productFilter)?.[2] ?? (() => true))
     .filter((p) => !productQuery.trim() || `${p.name} ${p.seller_name} ${p.item_name}`.includes(productQuery.trim()))
-  const productPage = usePage(shownProducts, 20, `${productFilter}|${productQuery}`)
+  const productPage = usePage(shownProducts, 20, `${productFilter}|${productQuery}|${farm}`)
+  // 농가별 숫자: 상품이 없는 농가도 나오게 농가 목록(options.sellers)에서 시작해 상품을 한 번만 훑는다
+  const farmRows = (() => {
+    const blank = { total: 0, selling: 0, pending: 0, soldout: 0, check: 0, draft: 0 }
+    const by = new Map((options?.sellers ?? []).map((s) => [s.seller_code, { ...s, ...blank }]))
+    for (const p of products) {
+      if (!by.has(p.seller_code)) by.set(p.seller_code, { seller_code: p.seller_code, name: p.seller_name, region: '', ...blank })
+      const f = by.get(p.seller_code)
+      f.total += 1
+      if (p.status === 'pending') f.pending += 1
+      else if (p.status === 'draft') f.draft += 1
+      else if (p.sold_out) f.soldout += 1
+      else f.selling += 1
+      if (productFlags(p).some((x) => x.tone !== 'gray')) f.check += 1 // 수정 이력(회색)만 있는 건 '확인 필요'로 세지 않는다
+    }
+    return [...by.values()]
+  })()
+  const farmName = farmRows.find((f) => f.seller_code === farm)?.name ?? farm
+  const pickFarm = (code) => { setFarm(code); setProductView('list'); setProductFilter('all'); setProductQuery('') }
 
   // 새 주문 알림: 1분마다 확인해서 늘었으면 화면 위에 알리고 탭 제목에 개수를 붙인다
   const [alert, setAlert] = useState('')
@@ -272,10 +295,23 @@ function Admin() {
         />
       ) : (
         <>
+          <div className="view-switch" role="group" aria-label="보는 방식">
+            <button type="button" className={productView === 'list' ? 'on' : ''} aria-pressed={productView === 'list'} onClick={() => setProductView('list')}>상품으로 보기 <span>{products.length}</span></button>
+            <button type="button" className={productView === 'farms' ? 'on' : ''} aria-pressed={productView === 'farms'} onClick={() => setProductView('farms')}>농가별로 보기 <span>{farmRows.length}곳</span></button>
+          </div>
+          {productView === 'farms' ? <FarmOverview rows={farmRows} onPick={pickFarm} /> : (
+          <>
+          {farm && (
+            <p className="farm-picked">
+              <b>{farmName}</b> 상품 {farmProducts.length}개만 보는 중
+              <button type="button" className="link" onClick={() => setFarm('')}>× 모든 농가</button>
+              <button type="button" className="link" onClick={() => setProductView('farms')}>다른 농가 고르기</button>
+            </p>
+          )}
           <div className="toolbar">
-            <FilterChips value={productFilter} onChange={setProductFilter} items={ADMIN_FILTERS.map(([key, label, f]) => ({ key, label, count: products.filter(f).length }))} />
+            <FilterChips value={productFilter} onChange={setProductFilter} items={ADMIN_FILTERS.map(([key, label, f]) => ({ key, label, count: farmProducts.filter(f).length }))} />
             <div className="actions">
-              <input type="search" value={productQuery} onChange={(e) => setProductQuery(e.target.value)} placeholder="상품·농가 찾기" aria-label="상품 찾기" />
+              <input type="search" value={productQuery} onChange={(e) => setProductQuery(e.target.value)} placeholder={farm ? '이 농가 상품 찾기' : '상품·농가 찾기'} aria-label="상품 찾기" />
               <button type="button" className="button" onClick={() => { setEditing('new'); setMessage('') }}>+ 새 상품 등록</button>
             </div>
           </div>
@@ -290,7 +326,7 @@ function Admin() {
                 const edit = () => { setEditing(p); setMessage('') }
                 return (
                 <tr key={p.product_code} className={p.sold_out ? 'dim' : ''}>
-                  <td><div className="cell-product"><Thumb url={p.image_url} size={56} /><div><strong>{p.name}</strong><br /><span className="muted">{p.category} · {p.seller_name}</span>
+                  <td><div className="cell-product"><Thumb url={p.image_url} size={56} /><div><strong>{p.name}</strong><br /><span className="muted">{p.category} · </span>{farm ? <span className="muted">{p.seller_name}</span> : <button type="button" className="link farm-link" title="이 농가 상품만 보기" onClick={() => pickFarm(p.seller_code)}>{p.seller_name}</button>}
                     {p.status === 'pending' && p.review_reason && <><br /><span className="muted">{p.review_reason}</span></>}
                     {/* 표시는 가장 급한 하나만, 나머지는 개수로 (마우스를 올리면 전부) */}
                     {flags.length > 0 && (
@@ -325,6 +361,8 @@ function Admin() {
             </tbody>
           </table>
           <Pager paging={productPage} />
+          </>
+          )}
         </>
       )}
       </div>
