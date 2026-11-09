@@ -11,7 +11,8 @@ import { pool } from './db.js'
 
 const SHOP_NAME = 'YOONJU MARKET'
 const PRIVATE_PAGES = /^\/(admin|seller|account|cart|checkout|order|restock)(\/|$)/ // restock: 재입고 알림 취소 화면
-const PUBLIC_PAGES = ['/', '/about', '/notice', '/press', '/sitemap', '/policy/terms', '/policy/privacy', '/policy/refund', '/policy/noemail']
+// 손님이 여는 공개 화면 (여기 없는 주소는 404 + 화면은 '찾으시는 페이지가 없어요'). 화면 주소를 새로 만들면 여기에도 더한다
+const PUBLIC_PAGES = ['/', '/products', '/about', '/notice', '/press', '/guide', '/sitemap', '/policy/terms', '/policy/privacy', '/policy/refund', '/policy/noemail']
 const CODE = /^[A-Za-z0-9_-]{1,64}$/
 // 화면에서 불러도 되는 곳: 우리 서버, 토스페이먼츠(결제창), 다음 우편번호(주소 검색 창), 구글·jsDelivr 글꼴. 나머지 스크립트·틀(iframe)은 막는다
 const CSP = [
@@ -154,7 +155,8 @@ export async function serveDist(app) {
     throw new Error('dist/index.html 이 없어요. 먼저 npm run build 를 실행해 주세요.')
   }
   app.use('/assets', express.static(fileURLToPath(new URL('assets/', dist)), { immutable: true, maxAge: '1y', fallthrough: false }))
-  app.use(express.static(fileURLToPath(dist), { index: false, maxAge: '1h' }))
+  // redirect: false — dist/about/ 같은 사진 폴더와 화면 주소(/about)가 이름이 같으면, 기본값은 /about/ 로 넘겨서 404가 났다 (2026-11-09)
+  app.use(express.static(fileURLToPath(dist), { index: false, redirect: false, maxAge: '1h' }))
   app.use(async (req, res, next) => {
     if ((req.method !== 'GET' && req.method !== 'HEAD') || req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) return next()
     try {

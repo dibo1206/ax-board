@@ -7,6 +7,7 @@ import { Related } from './Recommend.jsx'
 import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
 import { addToCart, get, getPolicy, post, preorderNote, thumbUrl, unitPrice } from './shop/shared.js'
 import { Guide } from './shop/Guide.jsx'
+import { NotFound } from './shop/NotFound.jsx'
 import { RecipeCards } from './shop/RecipeCards.jsx'
 import { CategoryRows, Faq, Hero, ProductSection, QuizDialog, SeasonCalendar, Story } from './shop/home/Home.jsx'
 import { ShopLayout } from './shop/ShopLayout.jsx'
@@ -41,7 +42,8 @@ const loading = <p className="muted">불러오는 중…</p>
 async function api(path) {
   const response = await netFetch(`/api${path}`)
   const data = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(data.error || `요청이 실패했어요 (${response.status})`)
+  // status 를 붙여 둔다: 상품 상세는 404면 '내려간 상품' 안내 화면을 보여 준다
+  if (!response.ok) throw Object.assign(new Error(data.error || `요청이 실패했어요 (${response.status})`), { status: response.status })
   return data
 }
 
@@ -199,7 +201,8 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   const [myQuestions, setMyQuestions] = useState([]) // 내가 남긴 문의 (비밀글 내용 포함, 로그인했을 때만)
 
   useEffect(() => {
-    api(`/products/${code}`).then(setProduct).catch((e) => setError(e.message))
+    // 없는(내려간) 상품이면 한 줄 오류 대신 안내 화면 (NotFound)
+    api(`/products/${code}`).then(setProduct).catch((e) => setError(e.status === 404 ? 'not-found' : e.message))
     get(`/products/${code}/my-questions`).then(setMyQuestions).catch(() => {})
   }, [code])
 
@@ -220,6 +223,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
     }
   }, [product])
 
+  if (error === 'not-found') return <NotFound kind="product" onOpen={onOpen} />
   if (error) return <p className="error">{error}</p>
   if (!product) return <p className="muted">불러오는 중…</p>
   const { item, seller } = product
@@ -417,10 +421,13 @@ function App() {
   return <ShopLayout><Suspense fallback={loading}>{shopPage(window.location.pathname)}</Suspense></ShopLayout>
 }
 
-// 첫 화면(/, /p/상품코드)은 섹션마다 폭이 다르고, 나머지 화면은 가운데 좁은 칸에 그린다
+// 첫 화면(/, /p/상품코드)은 섹션마다 폭이 다르고, 나머지 화면은 가운데 좁은 칸에 그린다.
+// 그 밖의 모르는 주소는 첫 화면 대신 '찾으시는 페이지가 없어요' (2026-11-09)
 function shopPage(path) {
   const page = innerPage(path)
-  return page ? <div className="wrap page">{page}</div> : <Storefront />
+  if (page) return <div className="wrap page">{page}</div>
+  if (path === '/' || path === '/index.html' || path.startsWith('/p/')) return <Storefront />
+  return <div className="wrap page"><NotFound /></div>
 }
 
 function innerPage(path) {
