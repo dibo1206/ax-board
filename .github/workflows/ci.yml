@@ -1,0 +1,54 @@
+# 자동 검사 (2026-11-09): PR을 올리거나 main에 합칠 때마다 GitHub이 새 컴퓨터에서 저절로 돌린다.
+# 코드 검사 → 화면 빌드 → 빈 DB에 예시 데이터 → 결제 장애·환불·주문 제출 시험. 하나라도 실패하면 PR에 빨간 X가 뜬다.
+# 시험은 가짜 결제 서버와 백엔드 사본을 스스로 띄우므로 결제 키·AI 키는 필요 없다 (Codespaces 처음 준비와 같은 순서)
+name: 검사
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: farm_mall
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/farm_mall
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: 라이브러리 설치
+        run: npm ci
+      - name: 코드 검사 (oxlint)
+        run: npm run lint
+      - name: 화면 빌드
+        run: npm run build
+      - name: 설정 파일(.env) 만들기
+        run: npm run setup
+      - name: 빈 DB에 예시 데이터 넣기
+        run: npm run load-data
+      - name: 결제 장애 시험
+        run: npm run test-resilience
+      - name: 환불·판매자 시험
+        run: npm run test-refund
+      - name: 주문 제출 시험
+        run: npm run test-submit

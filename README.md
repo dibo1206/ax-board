@@ -579,6 +579,8 @@ npm run admin-2fa -- farm_admin                             # 2단계 인증 등
 
 ### 시험과 시뮬레이션
 
+PR을 올리거나 main에 합치면 GitHub이 아래 표의 코드 검사·빌드와 `test-resilience`·`test-refund`·`test-submit`을 빈 DB에서 저절로 돌린다 (`.github/workflows/ci.yml`, PR 화면의 초록 체크·빨간 X). 실패하면 합치기 전에 고친다.
+
 | 명령 | 무엇을 보나 | 최근 결과 |
 |---|---|---|
 | `npm run lint` · `npm run build` | 코드 검사 · 화면 빌드 | 0건 · 통과 |

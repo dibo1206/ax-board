@@ -210,9 +210,17 @@ export async function firstTwoFactor(req, res) {
   res.json({ loginId: row.login_id, role: row.role, sellerCode: row.seller_code, mfa: true })
 }
 
-export function logout(req, res) {
+// 로그아웃하면 쿠키를 지우는 것에 더해 그 로그인 표 자체를 서버에서 무효로 만든다 (2026-11-09 배포 전 정리).
+// 전에는 쿠키만 지워서, 누가 표를 몰래 복사해 갔다면 만료(SESSION_HOURS)까지 계속 쓸 수 있었다.
+// 비밀번호를 바꿀 때와 같은 session_version 을 올리므로 이 계정의 다른 기기 로그인도 함께 끊긴다
+export async function logout(req, res) {
   const account = currentAdmin(req)
-  if (account) writeAccessLog({ loginId: account.loginId, role: account.role, action: 'logout', ip: req.ip })
+  if (account) {
+    writeAccessLog({ loginId: account.loginId, role: account.role, action: 'logout', ip: req.ip })
+    // 표에 적힌 버전이 지금 버전일 때만 올린다 (이미 끊긴 옛 표로 로그아웃해도 다른 기기의 새 로그인은 그대로)
+    await pool.query('UPDATE admins SET session_version = session_version + 1 WHERE id = $1 AND session_version = $2', [account.id, account.sv])
+      .catch((error) => console.error(`[auth] 로그아웃 처리 실패 · ${error.message}`))
+  }
   setSessionCookie(res, '', 0)
   res.status(204).end()
 }

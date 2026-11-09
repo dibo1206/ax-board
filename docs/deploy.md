@@ -110,6 +110,20 @@ git pull && npm ci && npm run build
 sudo systemctl restart farm-mall      # DB 구조 변경(schema.sql)은 켤 때 자동으로 반영
 ```
 
+## 7-1. 서버가 멈추면 바로 알림 받기 (감시)
+
+서버나 DB가 멈춰도 손님이 연락하기 전까지는 알 방법이 없다. 바깥 감시 서비스가 몇 분마다 상태 확인 주소를 불러 보고, 응답이 없으면 알려 준다.
+상태 확인 주소는 이미 있다: `https://도메인/api/health` → 정상이면 `200 {"ok":true,"db":true}`, DB가 끊기면 `503`.
+
+1. [UptimeRobot](https://uptimerobot.com) (무료: 5분 간격·50개까지)에 회사 메일로 가입한다
+2. **Add New Monitor** → 종류 `HTTP(s)` → 주소 `https://shop.yunjufarm.co.kr/api/health` → 간격 5분
+3. **Alert Contacts**에 담당자 메일(가능하면 2명)을 넣는다. 휴대폰 앱을 깔면 푸시 알림도 받는다
+4. (선택) 같은 방법으로 첫 화면 `https://shop.yunjufarm.co.kr/` 도 등록해 nginx·인증서 문제도 잡는다
+5. 시험: `sudo systemctl stop farm-mall` → 5~10분 안에 알림이 오는지 → `sudo systemctl start farm-mall` 뒤 '다시 켜짐' 알림 확인
+
+알림이 오면: `systemctl status farm-mall`, `journalctl -u farm-mall -n 100` 으로 원인을 보고, DB 문제면 `sudo systemctl status postgresql`.
+서버는 죽어도 3초 뒤 저절로 다시 켜지므로(4번 systemd), 알림이 계속 온다면 디스크 가득 참·DB 꺼짐·인증서 만료를 먼저 의심한다.
+
 ## 8. 열기 전 점검
 
 - [ ] `https://도메인` 접속, 자물쇠 표시, `http://` 는 https로 넘어감
@@ -123,3 +137,4 @@ sudo systemctl restart farm-mall      # DB 구조 변경(schema.sql)은 켤 때 
 - [ ] 토스 라이브 키로 바꾸고 소액 실결제 → 환불 확인
 - [ ] 테스트 키로 두 농가 주문 → 한 농가만 취소(부분 취소) → 토스 개발자센터에서 부분 취소 금액 확인, 반품 신청 → 승인 → 환불까지 (결제 수단마다 부분 취소가 되는지도)
 - [ ] 백업 파일이 생기고, 다른 서버에서 복원해 봄 (`pg_restore -d farm_mall db-날짜.dump`)
+- [ ] 감시 서비스에 `/api/health` 등록, 서버를 잠깐 꺼서 알림이 오는지 확인 (7-1)
