@@ -323,6 +323,38 @@ app.get('/api/season-items', async (req, res) => {
   }))
 })
 
+// ---------- 농가별로 보기 (손님, 2026-11-09) ----------
+// 판매 중 상품이 있는 활동 중 농가만. 농가 표의 대표자·연락처·사업자번호·이메일은 보내지 않는다 (이름·지역·소개·이야기만)
+const FARM_CODE = /^[a-z0-9_-]{1,40}$/i
+app.get('/api/farms', async (req, res) => {
+  res.json(await cached('farms', 60_000, async () => (await pool.query(`
+    SELECT s.seller_code, s.name, s.region, s.intro, s.is_company,
+           count(*)::int AS products,
+           count(*) FILTER (WHERE p.stock > 0)::int AS in_stock,
+           min(p.price)::int AS min_price,
+           max(p.created_at) AS newest_at,
+           (array_agg(p.image_url ORDER BY (p.stock = 0), p.created_at DESC) FILTER (WHERE p.image_url IS NOT NULL))[1] AS image_url,
+           (array_agg(DISTINCT i.name))[1:6] AS items
+    FROM sellers s
+    JOIN products p ON p.seller_code = s.seller_code AND p.status = 'active'
+    JOIN items i ON i.item_code = p.item_code
+    WHERE s.status = 'active'
+    GROUP BY s.seller_code
+    ORDER BY s.is_company DESC, count(*) DESC, s.name`)).rows))
+})
+
+app.get('/api/farms/:code', async (req, res) => {
+  const code = req.params.code
+  const farm = FARM_CODE.test(code) ? await cached(`farm:${code}`, 15_000, async () => {
+    const { rows } = await pool.query("SELECT seller_code, name, region, intro, story, is_company FROM sellers WHERE seller_code = $1 AND status = 'active'", [code])
+    if (!rows.length) return null
+    const products = await pool.query(`${PRODUCT_SELECT} AND p.seller_code = $1 ORDER BY (p.stock = 0), p.created_at DESC, p.name`, [code])
+    return { ...rows[0], products: products.rows.map(publicProduct) }
+  }) : null
+  if (!farm) return res.status(404).json({ error: '농가를 찾지 못했어요.' })
+  res.json(farm)
+})
+
 app.get('/api/products/:code', async (req, res) => {
   const detail = await cached(`product:${req.params.code}`, 15_000, () => loadProductDetail(req.params.code))
   if (!detail) return res.status(404).json({ error: '상품을 찾지 못했어요.' })
