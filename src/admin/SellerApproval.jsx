@@ -1,13 +1,24 @@
 import { useCallback, useEffect, useState } from 'react'
 import { adminApi } from './api.js'
+import { usePage } from './paging.js'
+import { FilterChips, Pager } from './ui.jsx'
 
 // 판매자 승인: 스스로 가입한 농가의 정보를 확인하고 승인·반려한다. 승인해야 상품을 올릴 수 있다
 const LABEL = { pending: '승인 대기', active: '활동 중', rejected: '반려' }
+// 농가가 많아져도 (2026-11-09): 상태로 걸러 보기 + 이름·지역·대표자·아이디 찾기 + 20곳씩
+const VIEWS = [['all', '전체'], ['pending', '승인 대기'], ['active', '활동 중'], ['rejected', '반려']]
 
 export function SellerApproval({ onCount }) {
   const [list, setList] = useState(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [view, setView] = useState('all')
+  const [query, setQuery] = useState('')
+  const q = query.trim()
+  const shown = (list ?? [])
+    .filter((x) => view === 'all' || x.status === view)
+    .filter((x) => !q || `${x.name} ${x.region ?? ''} ${x.owner_name ?? ''} ${x.login_ids ?? ''}`.includes(q))
+  const paging = usePage(shown, 20, `${view}|${q}`)
 
   const load = useCallback(() => adminApi('/sellers').then(setList).catch((e) => setError(e.message)), [])
   useEffect(() => { load() }, [load])
@@ -32,10 +43,17 @@ export function SellerApproval({ onCount }) {
       <p className="muted">사업자등록번호 같은 신청 정보를 확인한 뒤 승인해 주세요. 승인하면 상품을 올릴 수 있어요.</p>
       {message && <p className="success">{message}</p>}
       {error && <p className="error">{error}</p>}
+      <div className="toolbar">
+        <FilterChips value={view} onChange={setView} items={VIEWS.map(([key, label]) => ({ key, label, count: key === 'all' ? list.length : list.filter((x) => x.status === key).length }))} />
+        <div className="actions">
+          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="농가·지역·대표자·아이디 찾기" aria-label="농가 찾기" />
+        </div>
+      </div>
+      {shown.length === 0 && <p className="muted">맞는 농가가 없어요.</p>}
       <table className="table">
         <thead><tr><th>농가</th><th>대표자·연락처</th><th>사업자등록번호</th><th>상태</th><th></th></tr></thead>
         <tbody>
-          {list.map((s) => (
+          {paging.rows.map((s) => (
             <tr key={s.seller_code}>
               <td><strong>{s.name}</strong><br /><span className="muted">{s.region} · 아이디 {s.login_ids ?? '-'} · 상품 {s.products}개</span></td>
               <td>{s.owner_name ?? '-'}<br /><span className="muted">{s.phone ?? ''} {s.email ?? ''}</span></td>
@@ -50,6 +68,7 @@ export function SellerApproval({ onCount }) {
           ))}
         </tbody>
       </table>
+      <Pager paging={paging} />
     </section>
   )
 }

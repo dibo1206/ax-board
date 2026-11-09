@@ -318,3 +318,17 @@ input.invalid { border-color: #b3261e; }
 .help-pop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; display: block; width: max-content; max-width: min(360px, 80vw); padding: 10px 12px; font-size: 0.85rem; font-weight: 400; line-height: 1.55; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 24px rgb(0 0 0 / 0.14); white-space: normal; }
 .site-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .site-top p { margin: 0; }
+
+/* ---------- 2026-11-09 상품 관리 › 농가별로 보기 ---------- */
+.view-switch { display: inline-flex; gap: 4px; margin: 0 0 14px; padding: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; }
+.view-switch button { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; font: inherit; font-size: 0.92rem; color: var(--muted); background: none; border: 0; border-radius: 9px; cursor: pointer; }
+.view-switch button span { font-size: 0.8rem; color: var(--muted); }
+.view-switch button.on { background: var(--surface); color: var(--text); font-weight: 700; box-shadow: 0 1px 3px rgb(0 0 0 / 0.1); }
+.farm-picked { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 0 0 12px; padding: 10px 14px; border-radius: 12px; background: var(--c-green-bg); color: var(--c-green); }
+.farm-picked b { color: var(--text); }
+.farm-link { font-size: inherit; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+.farm-link:hover { color: var(--c-green); }
+.farm-table td:not(:first-child), .farm-table th:not(:first-child) { text-align: center; white-space: nowrap; }
+.farm-row { cursor: pointer; }
+.farm-row:hover td { background: var(--bg); }
+.toolbar select { padding: 9px 12px; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
