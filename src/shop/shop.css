@@ -1296,8 +1296,8 @@
 @media (max-width: 640px) { .shop .notfound-popular ul { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* 레이아웃 정리 (2026-11-10): 색·글꼴·모양은 그대로, 정렬과 여백만 손본다 */
-/* 1) 헤더 오른쪽: 주문조회·마이페이지·장바구니·로그인·회원가입을 한 줄에서 세로 가운데로 */
-@media (min-width: 861px) {
+/* 1) 헤더 오른쪽(로그인·회원가입이 보이는 761px 이상): 주문조회·마이페이지·장바구니·로그인·회원가입을 한 줄에서 세로 가운데로 */
+@media (min-width: 761px) {
   .shop .site-head-inner .site-tools { flex-direction: row; align-items: center; justify-content: flex-end; flex-wrap: nowrap; gap: 20px; }
   .shop .site-head-inner .site-tools > * { flex: none; }
   .shop .tools-main, .shop .tools-auth { align-items: center; white-space: nowrap; }
