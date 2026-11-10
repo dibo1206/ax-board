@@ -329,6 +329,34 @@ app.get('/api/products/:code', async (req, res) => {
   res.json(detail)
 })
 
+// 농가별로 모아 보기 [가설: PRD에 아직 없는 실험 기능 — 팀원 제안]. 공개해도 되는 칸(이름·지역·소개·이야기)만 보낸다.
+// 대표자·연락처·사업자번호는 농가 표에 있어도 여기서는 고르지 않는다
+app.get('/api/farms', async (req, res) => {
+  res.json(await cached('farms', 15_000, async () => (await pool.query(
+    `SELECT s.seller_code, s.name, s.region, s.intro, s.is_company, count(p.*)::int AS product_count,
+            (array_agg(p.image_url ORDER BY (p.stock = 0), p.name) FILTER (WHERE p.image_url IS NOT NULL))[1] AS image_url
+     FROM sellers s JOIN products p ON p.seller_code = s.seller_code AND p.status = 'active'
+     WHERE s.status = 'active'
+     GROUP BY s.seller_code, s.name, s.region, s.intro, s.is_company
+     ORDER BY s.is_company DESC, s.name`,
+  )).rows))
+})
+
+app.get('/api/farms/:code', async (req, res) => {
+  const code = String(req.params.code).slice(0, 60)
+  const farm = await cached(`farm:${code}`, 15_000, async () => {
+    const { rows } = await pool.query(
+      `SELECT seller_code, name, region, intro, story, is_company FROM sellers WHERE seller_code = $1 AND status = 'active'`,
+      [code],
+    )
+    if (rows.length === 0) return null
+    const products = await pool.query(`${PRODUCT_SELECT} AND p.seller_code = $1 ORDER BY (p.stock = 0), i.category, p.name`, [code])
+    return { ...rows[0], products: products.rows.map(publicProduct) }
+  })
+  if (!farm) return res.status(404).json({ error: '농가를 찾지 못했어요.' })
+  res.json(farm)
+})
+
 async function loadProductDetail(code) {
   const { rows } = await pool.query(`${PRODUCT_SELECT} AND p.product_code = $1`, [code])
   if (rows.length === 0) return null

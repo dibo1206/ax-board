@@ -150,7 +150,12 @@ export function ProductCard({ p, onOpen, rank = null }) {
           {p.sold_out && <span className="pcard-flag">품절</span>}
           {p.preorder && !p.sold_out && <span className="pcard-flag preorder">예약 · {shipDay(p.ship_from)}부터</span>}
         </span>
-        <span className="pcard-seller">{p.seller_name.replace(/\[예시\]\s*/g, '')}</span>
+        {/* 카드 전체가 상품 링크라 안에 또 링크를 넣을 수 없어서, 농가 이름은 링크처럼 동작하는 글씨로 둔다 (누르면 그 농가 상품 모음) */}
+        <span className="pcard-seller pcard-farm" role="link" tabIndex={0}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/farms/${encodeURIComponent(p.seller_code)}` }}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); window.location.href = `/farms/${encodeURIComponent(p.seller_code)}` } }}>
+          {p.seller_name.replace(/\[예시\]\s*/g, '')}
+        </span>
         <strong className="pcard-name">{p.name}</strong>
         {p.has_options
           ? <span className="pcard-price">{won(p.price)}부터 {p.options.length > 0 && <small>/ 옵션 {p.options.length}개</small>}</span>

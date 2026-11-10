@@ -24,6 +24,8 @@ const OrderFail = page(() => import('./shop/Orders.jsx'), 'OrderFail')
 const OrderLookup = page(() => import('./shop/Orders.jsx'), 'OrderLookup')
 const AboutPage = page(() => import('./shop/About.jsx'), 'AboutPage')
 const ProductsPage = page(() => import('./shop/ProductsPage.jsx'), 'ProductsPage')
+const FarmListPage = page(() => import('./shop/Farms.jsx'), 'FarmListPage')
+const FarmPage = page(() => import('./shop/Farms.jsx'), 'FarmPage')
 const SitemapPage = page(() => import('./shop/About.jsx'), 'SitemapPage')
 const PostListPage = page(() => import('./shop/Posts.jsx'), 'PostListPage')
 const PostDetailPage = page(() => import('./shop/Posts.jsx'), 'PostDetailPage')
@@ -272,7 +274,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {product.preorder && <><dt>출고 시작일</dt><dd>{product.ship_from.slice(0, 10)} <span className="muted">(예약 판매)</span></dd></>}
         {item.keep_period && <><dt>보관 참고</dt><dd>{item.keep_period}</dd></>}
         {product.info_answers >= 3 && <><dt>구매자 확인</dt><dd>표시와 맞았어요 {product.info_matched}/{product.info_answers}</dd></>}
-        <dt>판매 농가</dt><dd>{seller.name} · {seller.region}</dd>
+        <dt>판매 농가</dt><dd><a href={`/farms/${encodeURIComponent(seller.seller_code)}`}>{seller.name}</a> · {seller.region}</dd>
       </dl>
       <BuyBox product={product} option={option} onPick={setOptionId} onAsk={openAsk} />
       <div className="buy-aside">
@@ -440,6 +442,9 @@ function innerPage(path) {
   if (path.startsWith('/policy/')) return <Policy kind={path.split('/')[2]} />
   if (path === '/products') return <ProductsPage />
   if (path === '/about') return <AboutPage />
+  if (path === '/farms') return <FarmListPage />
+  const farm = path.match(/^\/farms\/([A-Za-z0-9_-]{1,60})$/)
+  if (farm) return <FarmPage code={farm[1]} />
   if (path === '/sitemap') return <SitemapPage />
   if (path === '/notice' || path === '/press') return <PostListPage kind={path.slice(1)} />
   const post = path.match(/^\/(notice|press)\/(\d{1,9})$/)
