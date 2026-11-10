@@ -1294,3 +1294,18 @@
 .shop .notfound-popular span { font-size: 14px; font-weight: 700; }
 .shop .notfound-popular a:hover strong { text-decoration: underline; text-underline-offset: 3px; }
 @media (max-width: 640px) { .shop .notfound-popular ul { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* 레이아웃 정리 (2026-11-10): 색·글꼴·모양은 그대로, 정렬과 여백만 손본다 */
+/* 1) 헤더 오른쪽: 주문조회·마이페이지·장바구니·로그인·회원가입을 한 줄에서 세로 가운데로 */
+@media (min-width: 861px) {
+  .shop .site-head-inner .site-tools { flex-direction: row; align-items: center; justify-content: flex-end; flex-wrap: nowrap; gap: 20px; }
+  .shop .site-head-inner .site-tools > * { flex: none; }
+  .shop .tools-main, .shop .tools-auth { align-items: center; white-space: nowrap; }
+  .shop .tools-auth { gap: 12px; line-height: 1; }
+  .shop .tools-auth a, .shop .tools-auth .link-btn { display: inline-flex; align-items: center; white-space: nowrap; }
+}
+/* 2) '상품' 제목이 위 요소에 붙지 않게 위쪽 여백 */
+.shop #products { padding-top: 56px; }
+/* 3) 상품 목록: 행 높이를 카드 내용만큼만(남는 공간을 늘려 잡지 않게) */
+.shop .pgrid { align-content: start; grid-auto-rows: auto; }
+.shop .pgrid > li { min-width: 0; }
