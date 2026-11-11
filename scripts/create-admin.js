@@ -40,8 +40,10 @@ if (sellerCode) {
 }
 const role = sellerCode ? 'seller' : 'admin'
 await pool.query(
-  `INSERT INTO admins (login_id, password_hash, role, seller_code) VALUES ($1, $2, $3, $4)
-   ON CONFLICT (login_id) DO UPDATE SET password_hash = $2, role = $3, seller_code = $4, session_version = admins.session_version + 1`, // 예전 로그인 끊기
+  // 2단계 인증 처음 등록 기간은 3일 (server/auth.js). 지나면 다른 관리자가 다시 열거나 npm run admin-2fa
+  `INSERT INTO admins (login_id, password_hash, role, seller_code, totp_enroll_until) VALUES ($1, $2, $3, $4, now() + interval '3 days')
+   ON CONFLICT (login_id) DO UPDATE SET password_hash = $2, role = $3, seller_code = $4, session_version = admins.session_version + 1,
+     totp_enroll_until = CASE WHEN admins.totp_secret_enc IS NULL THEN now() + interval '3 days' ELSE NULL END`, // 예전 로그인 끊기
   [loginId, await hashPassword(password), role, sellerCode ?? null],
 )
 console.log(sellerCode ? `판매자 "${loginId}"(${sellerCode})를 저장했어요. /seller 에서 로그인해요.` : `관리자 "${loginId}"를 저장했어요.`)

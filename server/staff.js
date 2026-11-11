@@ -10,6 +10,8 @@ import { decrypt, encrypt, newTotpSecret, otpauthUri, verifyTotp } from './crypt
 import { pool } from './db.js'
 
 const LOGIN_ID = /^[a-z0-9_]{3,20}$/
+// 2단계 인증을 처음 등록할 수 있는 기간 (계정을 만들거나 등록을 다시 연 뒤). server/auth.js 의 login 참고
+const ENROLL_WINDOW = "now() + interval '3 days'"
 
 // 새 비밀번호 규칙: 10자 이상, 영문·숫자·기호 중 두 가지 이상, 아이디가 들어가면 안 됨
 export function passwordProblem(password, loginId) {
@@ -21,7 +23,7 @@ export function passwordProblem(password, loginId) {
 }
 
 // 내 비밀번호 다시 확인 (틀리면 로그인 잠금과 같은 규칙으로 센다)
-async function confirmMe(req, res) {
+export async function confirmMe(req, res) {
   const password = typeof req.body?.myPassword === 'string' ? req.body.myPassword.slice(0, 200) : ''
   const key = `reauth:${req.admin.loginId}`
   if (!reserveAttempt(key, req.ip)) {
@@ -60,7 +62,7 @@ adminStaffRouter.post('/', async (req, res) => {
   if (problem) return res.status(400).json({ error: problem })
   if (!(await confirmMe(req, res))) return
   const hash = await hashPassword(req.body.password)
-  const { rowCount } = await pool.query("INSERT INTO admins (login_id, password_hash, role) VALUES ($1, $2, 'admin') ON CONFLICT (login_id) DO NOTHING", [loginId, hash])
+  const { rowCount } = await pool.query(`INSERT INTO admins (login_id, password_hash, role, totp_enroll_until) VALUES ($1, $2, 'admin', ${ENROLL_WINDOW}) ON CONFLICT (login_id) DO NOTHING`, [loginId, hash])
   if (!rowCount) return res.status(409).json({ error: '이미 있는 아이디예요.' })
   log(req, 'staff_add', loginId)
   console.log(`[staff] ${req.admin.loginId} 관리자 ${loginId} 추가`)
@@ -80,10 +82,16 @@ adminStaffRouter.post('/me/password', async (req, res) => {
   res.json({ ok: true })
 })
 
-// 내 2단계 인증 등록 1) 비밀값 만들기 {myPassword} → 키와 확인용 표(10분)
+// 내 2단계 인증 등록 1) 비밀값 만들기 {myPassword, code?} → 키와 확인용 표(10분)
+// 이미 등록돼 있으면 지금 인증 앱의 코드도 받는다: 비밀번호와 켜 둔 화면만으로 인증 앱을 바꿔치기 못 하게 (휴대폰을 잃어버렸으면 다른 관리자가 풀어 준다)
 adminStaffRouter.post('/me/2fa/start', async (req, res) => {
   const me = await confirmMe(req, res)
   if (!me) return
+  if (me.totp_secret_enc) {
+    const used = verifyTotp(decrypt(me.totp_secret_enc), String(req.body?.code ?? '').replace(/\s/g, ''), Number(me.totp_last_counter))
+    if (used === null) return res.status(400).json({ error: '지금 쓰는 인증 앱의 6자리 코드가 맞지 않아요. 휴대폰을 잃어버렸으면 다른 관리자에게 풀어 달라고 해 주세요.' })
+    await pool.query('UPDATE admins SET totp_last_counter = $2 WHERE id = $1', [me.id, used])
+  }
   const secret = newTotpSecret()
   const setup = signToken({ kind: 'totp_setup', id: me.id, sealed: encrypt(secret), exp: Date.now() + 10 * 60_000 })
   res.set('Cache-Control', 'no-store')
@@ -98,7 +106,7 @@ adminStaffRouter.post('/me/2fa/confirm', async (req, res) => {
   const counter = verifyTotp(secret, String(req.body?.code ?? '').replace(/\s/g, ''))
   if (counter === null) return res.status(400).json({ error: '코드가 맞지 않아요. 휴대폰 시간이 자동으로 맞춰져 있는지 보고, 새 코드로 다시 넣어 주세요.' })
   const { rows } = await pool.query(
-    'UPDATE admins SET totp_secret_enc = $2, totp_last_counter = $3, session_version = session_version + 1 WHERE id = $1 RETURNING *',
+    'UPDATE admins SET totp_secret_enc = $2, totp_last_counter = $3, totp_enroll_until = NULL, session_version = session_version + 1 WHERE id = $1 RETURNING *',
     [req.admin.id, encrypt(secret), counter],
   )
   issueStaffSession(res, rows[0])
@@ -137,17 +145,17 @@ adminStaffRouter.post('/:id/password', async (req, res) => {
   const problem = passwordProblem(req.body?.password, target.login_id)
   if (problem) return res.status(400).json({ error: problem })
   if (!(await confirmMe(req, res))) return
-  await pool.query('UPDATE admins SET password_hash = $2, session_version = session_version + 1 WHERE id = $1', [target.id, await hashPassword(req.body.password)])
+  await pool.query(`UPDATE admins SET password_hash = $2, session_version = session_version + 1, totp_enroll_until = CASE WHEN totp_secret_enc IS NULL THEN ${ENROLL_WINDOW} ELSE NULL END WHERE id = $1`, [target.id, await hashPassword(req.body.password)])
   log(req, 'staff_password_reset', target.login_id)
   res.json({ ok: true })
 })
 
-// 다른 관리자의 2단계 인증 풀기 {myPassword} (휴대폰을 잃어버렸을 때. 그 사람은 다음 로그인 뒤 다시 등록한다)
+// 다른 관리자의 2단계 인증 풀기·등록 다시 열기 {myPassword} (휴대폰을 잃어버렸을 때, 등록 기간이 지났을 때. 그 사람은 3일 안에 다시 등록한다)
 adminStaffRouter.post('/:id/2fa/reset', async (req, res) => {
   const target = await other(req, res)
   if (!target) return
   if (!(await confirmMe(req, res))) return
-  await pool.query('UPDATE admins SET totp_secret_enc = NULL, totp_last_counter = 0, session_version = session_version + 1 WHERE id = $1', [target.id])
+  await pool.query(`UPDATE admins SET totp_secret_enc = NULL, totp_last_counter = 0, totp_enroll_until = ${ENROLL_WINDOW}, session_version = session_version + 1 WHERE id = $1`, [target.id])
   log(req, 'staff_2fa_reset', target.login_id)
   res.json({ ok: true })
 })

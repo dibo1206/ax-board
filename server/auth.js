@@ -3,8 +3,9 @@
 import { createHmac, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
 import { writeAccessLog } from './accessLog.js'
-import { decrypt, encrypt, newTotpSecret, otpauthUri, verifyTotp } from './crypto.js'
+import { decrypt, encrypt, newTotpSecret, openText, otpauthUri, verifyTotp } from './crypto.js'
 import { pool } from './db.js'
+import { adminEmail, queueMail } from './mailer.js'
 
 const scrypt = promisify(scryptCb)
 const COOKIE = 'admin_session'
@@ -48,8 +49,9 @@ export function signToken(payload) {
 export function verifyToken(token) {
   const [body, mac] = (token || '').split('.')
   if (!body || !mac) return null
-  const expected = createHmac('sha256', secret()).update(body).digest('base64url')
-  if (mac.length !== expected.length || !timingSafeEqual(Buffer.from(mac), Buffer.from(expected))) return null
+  const expected = Buffer.from(createHmac('sha256', secret()).update(body).digest('base64url'))
+  const given = Buffer.from(mac) // 바이트 길이로 비교한다 (글자 수만 같은 한글 서명이면 timingSafeEqual 이 오류를 던져 500 이 났다, 2026-11-11 보안 점검)
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null
   const payload = JSON.parse(Buffer.from(body, 'base64url').toString())
   return payload.exp > Date.now() ? payload : null
 }
@@ -66,10 +68,16 @@ export function setCookie(res, name, value, maxAgeSeconds) {
 
 const setSessionCookie = (res, value, maxAgeSeconds) => setCookie(res, COOKIE, value, maxAgeSeconds)
 
-// 같은 아이디로 5번 틀리면 10분 동안 막는다. 아이디를 바꿔 가며 시도하는 것도 막으려고 같은 IP는 20번까지 (서버 메모리 기준)
+// 로그인 잠금 (서버 메모리 기준, 10분):
+//  - 같은 곳(IP)에서 같은 아이디를 5번 틀리면 그 곳에서만 막는다. 아이디만 세면 아무나 5번 틀려서 진짜 주인까지 잠글 수 있었다 (2026-11-11 보안 점검)
+//  - 아이디를 바꿔 가며 시도하는 것도 막으려고 같은 IP는 20번까지
+//  - 여러 곳에서 한 아이디를 노리는 공격은 아이디 합계 50번에서 막는다
 const fails = new Map()
+const accountFails = new Map()
 const ipFails = new Map()
 const MAX_IP_FAILS = 20
+const MAX_ACCOUNT_FAILS = 50
+const pair = (key, ip) => `${key}\n${ip}`
 
 function locked(map, key, max) {
   const record = map.get(key)
@@ -110,32 +118,44 @@ export const twoFactorRequired = () => process.env.REQUIRE_2FA === '1' || (proce
 // 손님 회원 로그인도 같은 잠금 규칙을 쓴다 (key 앞에 'c:'를 붙여 관리자 아이디와 섞이지 않게)
 // 비밀번호 확인(scrypt)은 느려서, 확인이 끝난 뒤에 실패를 세면 동시에 들어온 요청이 모두 '0번 틀림'을 보고 통과한다.
 // 그래서 확인하기 전에 이번 시도를 실패 1번으로 미리 센다(잠금 검사와 같은 순간, 사이에 await 없음).
-// 비밀번호가 맞으면 undoAttempt로 되돌린다. 잠겨 있으면 false
+// 비밀번호가 맞으면 undoAttempt로 되돌린다. 잠겨 있으면 false. key 가 null 이면 IP만 센다
 export function reserveAttempt(key, ip) {
-  if (locked(ipFails, ip, MAX_IP_FAILS) || locked(fails, key, MAX_FAILS)) return false
-  addFail(fails, key)
+  if (locked(ipFails, ip, MAX_IP_FAILS)) return false
+  if (key !== null && (locked(fails, pair(key, ip), MAX_FAILS) || locked(accountFails, key, MAX_ACCOUNT_FAILS))) return false
+  if (key !== null) {
+    addFail(fails, pair(key, ip))
+    addFail(accountFails, key)
+  }
   addFail(ipFails, ip)
   return true
 }
 export function undoAttempt(key, ip) {
-  undoFail(fails, key)
+  if (key !== null) {
+    undoFail(fails, pair(key, ip))
+    undoFail(accountFails, key)
+  }
   undoFail(ipFails, ip)
 }
-export const clearFails = (key) => fails.delete(key)
+export function clearFails(key) {
+  accountFails.delete(key)
+  for (const k of fails.keys()) if (k.startsWith(`${key}\n`)) fails.delete(k)
+}
 
 export async function login(req, res) {
   const loginId = typeof req.body.loginId === 'string' ? req.body.loginId.trim().slice(0, 40) : ''
   const password = typeof req.body.password === 'string' ? req.body.password.slice(0, 200) : ''
   const otp = typeof req.body.otp === 'string' ? req.body.otp.replace(/\s/g, '') : ''
   const log = (action, extra = {}) => writeAccessLog({ loginId, action, ip: req.ip, ...extra })
-  if (!reserveAttempt(loginId, req.ip)) {
+  const { rows } = await pool.query(
+    'SELECT id, login_id, password_hash, role, seller_code, totp_secret_enc, totp_last_counter, session_version, totp_enroll_until FROM admins WHERE login_id = $1',
+    [loginId],
+  )
+  // 허용 IP 밖에서 들어온 관리자 로그인은 IP 만 센다: 밖에서 틀려서 사무실의 관리자까지 잠그지 못하게 (2026-11-11 보안 점검)
+  const attemptKey = rows[0]?.role === 'admin' && !adminIpAllowed(req.ip) ? null : loginId
+  if (!reserveAttempt(attemptKey, req.ip)) {
     log('login_locked')
     return res.status(429).json({ error: `로그인을 여러 번 틀렸어요. ${LOCK_MINUTES}분 뒤에 다시 시도해 주세요.` })
   }
-  const { rows } = await pool.query(
-    'SELECT id, login_id, password_hash, role, seller_code, totp_secret_enc, totp_last_counter, session_version FROM admins WHERE login_id = $1',
-    [loginId],
-  )
   const ok = (await passwordMatches(password, rows[0]?.password_hash)) && rows.length === 1
   if (!ok) {
     log('login_fail') // 실패는 위에서 이미 셌다
@@ -143,8 +163,8 @@ export async function login(req, res) {
   }
   // 비밀번호는 맞았으니 미리 센 1번을 되돌린다. 아이디의 실패 기록은 2단계 인증까지 통과해야 지운다
   // (비밀번호를 아는 사람이 인증 코드를 계속 넣어 보지 못하게)
-  undoAttempt(loginId, req.ip)
-  const { id, login_id: account, role, seller_code: sellerCode, totp_secret_enc: sealed, totp_last_counter: lastCounter, session_version: sv } = rows[0]
+  undoAttempt(attemptKey, req.ip)
+  const { id, login_id: account, role, seller_code: sellerCode, totp_secret_enc: sealed, totp_last_counter: lastCounter, session_version: sv, totp_enroll_until: enrollUntil } = rows[0]
   if (role === 'admin' && !adminIpAllowed(req.ip)) {
     log('login_blocked_ip', { role })
     return res.status(403).json({ error: '허용된 곳에서만 관리자 로그인이 돼요.' })
@@ -153,7 +173,8 @@ export async function login(req, res) {
     if (!otp) return res.status(401).json({ error: '인증 앱에 나온 6자리 코드를 넣어 주세요.', needOtp: true })
     const counter = verifyTotp(decrypt(sealed), otp, Number(lastCounter))
     if (counter === null) {
-      addFail(fails, loginId)
+      addFail(fails, pair(loginId, req.ip))
+      addFail(accountFails, loginId)
       addFail(ipFails, req.ip)
       log('otp_fail', { role })
       return res.status(401).json({ error: '인증 코드가 맞지 않아요. 새 코드로 다시 넣어 주세요.', needOtp: true })
@@ -162,7 +183,11 @@ export async function login(req, res) {
   } else if (twoFactorRequired()) {
     // 2단계 인증이 필수인데 아직 등록하지 않은 계정(새로 만든 관리자·승인된 판매자): 비밀번호는 맞았으니 이 자리에서 등록하게 한다.
     // 로그인 쿠키는 주지 않고, 10분짜리 등록 표(비밀값은 암호화)만 준다 → 인증 앱 코드로 확인해야 로그인된다 (/api/admin/2fa-first)
+    // 등록은 열린 기간에만 된다 (계정을 만들거나 승인한 뒤 며칠). 비밀번호만 알아낸 사람이 나중에 자기 휴대폰을 먼저 등록하지 못하게 (2026-11-11 보안 점검)
     log('login_no_2fa', { role })
+    if (!enrollUntil || new Date(enrollUntil) <= new Date()) {
+      return res.status(403).json({ error: '2단계 인증 등록 기간이 지났어요. 회사 관리자에게 등록을 다시 열어 달라고 요청해 주세요.' })
+    }
     const secret = newTotpSecret()
     const setup = signToken({ kind: 'totp_first', id, sv, sealed: encrypt(secret), exp: Date.now() + 10 * 60_000 })
     res.set('Cache-Control', 'no-store')
@@ -171,7 +196,7 @@ export async function login(req, res) {
       needSetup2fa: true, setup, key: secret.match(/.{1,4}/g).join(' '), uri: otpauthUri(account, secret),
     })
   }
-  fails.delete(loginId)
+  clearFails(loginId)
   issueStaffSession(res, { id, session_version: sv, login_id: account, role, seller_code: sellerCode, totp_secret_enc: sealed })
   log('login_ok', { role })
   res.json({ loginId: account, role, sellerCode, mfa: Boolean(sealed) })
@@ -192,7 +217,7 @@ export async function firstTwoFactor(req, res) {
   const { rows } = await pool.query('SELECT * FROM admins WHERE id = $1', [token.id])
   const row = rows[0]
   // 그사이 비밀번호가 바뀌었거나(session_version) 다른 곳에서 이미 등록했으면 이 표는 쓸 수 없다
-  if (!row || row.session_version !== token.sv || row.totp_secret_enc) return res.status(400).json({ error: '등록 표가 더 이상 맞지 않아요. 다시 로그인해 주세요.' })
+  if (!row || row.session_version !== token.sv || row.totp_secret_enc || !row.totp_enroll_until || new Date(row.totp_enroll_until) <= new Date()) return res.status(400).json({ error: '등록 표가 더 이상 맞지 않아요. 다시 로그인해 주세요.' })
   if (row.role === 'admin' && !adminIpAllowed(req.ip)) return res.status(403).json({ error: '허용된 곳에서만 관리자 로그인이 돼요.' })
   const secret = decrypt(token.sealed)
   const counter = verifyTotp(secret, String(req.body?.code ?? '').replace(/\s/g, ''))
@@ -202,11 +227,17 @@ export async function firstTwoFactor(req, res) {
   }
   undoAttempt(key, req.ip)
   const updated = await pool.query(
-    'UPDATE admins SET totp_secret_enc = $2, totp_last_counter = $3, session_version = session_version + 1 WHERE id = $1 RETURNING *',
+    'UPDATE admins SET totp_secret_enc = $2, totp_last_counter = $3, totp_enroll_until = NULL, session_version = session_version + 1 WHERE id = $1 RETURNING *',
     [row.id, encrypt(secret), counter],
   )
   issueStaffSession(res, updated.rows[0])
   writeAccessLog({ loginId: row.login_id, role: row.role, action: 'login_ok_2fa_setup', ip: req.ip })
+  // 등록 사실을 주인에게 알린다: 본인이 한 게 아니면 바로 알아챌 수 있게
+  const seller = row.seller_code ? (await pool.query('SELECT email FROM sellers WHERE seller_code = $1', [row.seller_code])).rows[0] : null
+  queueMail({
+    kind: 'security_2fa_on', to: seller ? openText(seller.email) : adminEmail(), subject: '2단계 인증이 등록됐어요',
+    body: `계정 ${row.login_id}에 2단계 인증이 방금 등록됐어요. 직접 등록한 게 아니라면 바로 회사 관리자에게 알려 주세요.\n`,
+  })
   res.json({ loginId: row.login_id, role: row.role, sellerCode: row.seller_code, mfa: true })
 }
 
@@ -264,8 +295,8 @@ export async function requireSeller(req, res, next) {
   const account = await currentStaff(req)
   if (!account) return res.status(401).json({ error: '판매자 로그인이 필요해요.' })
   if (account.role !== 'seller' || !account.sellerCode) return res.status(403).json({ error: '판매자 계정만 쓸 수 있어요. 관리자는 관리자 화면(/admin)을 이용해 주세요.' })
-  // 승인 전 판매자는 내 상태(/me)만 볼 수 있다 (상품·주문은 승인 뒤에)
-  if (account.sellerStatus !== 'active' && req.path !== '/me') return res.status(403).json({ error: '판매자 승인 뒤에 쓸 수 있어요.', notApproved: true })
+  // 승인 전 판매자는 내 상태(/me)와 비밀번호 바꾸기만 쓸 수 있다 (상품·주문은 승인 뒤에)
+  if (account.sellerStatus !== 'active' && !['/me', '/password'].includes(req.path)) return res.status(403).json({ error: '판매자 승인 뒤에 쓸 수 있어요.', notApproved: true })
   req.seller = account
   next()
 }

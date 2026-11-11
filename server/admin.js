@@ -54,7 +54,7 @@ export async function itemRanges() {
 }
 
 // 판매 중인 상품의 가격·당도·수확일이 바뀌면 누가 언제 무엇을 바꿨는지 남긴다 (거짓 표시를 나중에 따져 볼 수 있게)
-const WATCHED = [['price', '가격'], ['brix', '당도'], ['variety', '품종'], ['brix_measured_at', '당도 잰 날'], ['harvest_date', '수확일'], ['ship_from', '출고 시작일'], ['notice.origin', '원산지'], ['notice.expiry', '소비기한']]
+const WATCHED = [['name', '상품 이름'], ['item_code', '품목'], ['unit', '판매 단위'], ['summary', '한 줄 소개'], ['description', '상품 설명'], ['price', '가격'], ['brix', '당도'], ['variety', '품종'], ['brix_measured_at', '당도 잰 날'], ['harvest_date', '수확일'], ['ship_from', '출고 시작일'], ['notice.origin', '원산지'], ['notice.expiry', '소비기한']]
 const watched = (product, key) => (key.startsWith('notice.') ? product.notice?.[key.slice(7)] : product[key])
 // optionChanges: 옵션이 있는 상품은 판매 중 옵션의 가격 변경을 옵션마다 남긴다 ([{ label, old, new }], options.js).
 // 이때 상품 가격은 옵션 최저가를 따라 바뀌는 값이라 따로 남기지 않는다
@@ -273,7 +273,7 @@ export async function storeImage(req, res) {
     ? await pool.query('UPDATE products SET images = array_append(images, $1), updated_at = now() WHERE product_code = $2 RETURNING *', [url, req.params.code])
     : await pool.query('UPDATE products SET image_url = $1, updated_at = now() WHERE product_code = $2 RETURNING *', [url, req.params.code])
   if (!gallery) await deleteFiles(req.params.code, current.rows[0].image_url) // 바꾼 대표 사진의 옛 파일 정리
-  res.json(rows[0])
+  res.json(req.afterPhoto ? await req.afterPhoto(rows[0]) : rows[0]) // 판매자가 판매 중 상품 사진을 바꾸면 다시 확인 (seller.js)
 }
 
 // 사진 지우기: { url } — 대표 사진이면 비우고, 상세 사진이면 목록에서 뺀다
@@ -288,7 +288,7 @@ export async function removeImage(req, res) {
   )
   if (!rows.length) return res.status(404).json({ error: '그 사진을 찾지 못했어요.' })
   await deleteFiles(req.params.code, url)
-  res.json(rows[0])
+  res.json(req.afterPhoto ? await req.afterPhoto(rows[0]) : rows[0])
 }
 
 adminRouter.post('/products/:code/image', rawImage, storeImage)

@@ -10,6 +10,8 @@ User=farm
 WorkingDirectory=/srv/farm-mall
 Environment=NODE_ENV=production
 Environment=PORT=3000
+# 앞단 nginx 한 단. 손님 실제 IP로 횟수 제한을 센다
+Environment=TRUST_PROXY_HOPS=1
 # .env 는 앱이 직접 읽는다 (WorkingDirectory 기준)
 ExecStart=/usr/bin/node server/index.js --serve
 Restart=always

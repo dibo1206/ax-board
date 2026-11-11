@@ -9,7 +9,7 @@ const TABLES = {
   customers: { key: 'id', columns: ['email', 'name', 'phone', 'zipcode', 'address1', 'address2'], hash: { email_hash: 'email' } },
   sellers: { key: 'seller_code', columns: ['owner_name', 'phone', 'business_no', 'email'], hash: { business_no_hash: 'business_no' } },
   b2b_inquiries: { key: 'id', columns: ['contact_name', 'contact'] },
-  questions: { key: 'id', columns: ['contact'] },
+  questions: { key: 'id', columns: ['contact', 'author'] }, // 회원은 작성자가 실명이라 암호화 (2026-11-11)
   reviews: { key: 'id', columns: ['author'] },
   email_outbox: { key: 'id', columns: ['to_email', 'body'] },
   order_returns: { key: 'id', columns: ['reason'] }, // 반품 사유 (손님이 쓴 글이라 연락처·주소가 들어갈 수 있다)

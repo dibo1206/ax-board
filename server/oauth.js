@@ -47,7 +47,7 @@ const PROVIDERS = {
 // 시험 로그인은 .env 에 OAUTH_MOCK=1 을 직접 적었을 때만 (운영이 아니어도 기본은 꺼짐).
 // 모든 사람이 같은 가짜 회원이 되므로, NODE_ENV 를 빠뜨린 공개 서버에서 켜지면 남의 계정에 들어가거나 연결할 수 있어서 (2026-11-07 보안 점검)
 export function oauthMode(provider) {
-  const p = PROVIDERS[provider]
+  const p = Object.hasOwn(PROVIDERS, provider) ? PROVIDERS[provider] : null
   if (!p) return null
   if (p.id() && (!p.needsSecret || p.secret())) return 'live'
   return process.env.NODE_ENV !== 'production' && process.env.OAUTH_MOCK === '1' ? 'mock' : null
@@ -179,7 +179,7 @@ oauthRouter.get('/pending', (req, res) => {
   res.json({ provider: p.provider, providerName: PROVIDERS[p.provider]?.name, email: p.email, emailLocked: p.verified === true, name: p.name, mock: oauthMode(p.provider) === 'mock' })
 })
 
-const isEmail = (v) => /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(v)
+const isEmail = (v) => v.length <= 254 && /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(v)
 const isMobile = (v) => /^01[016789]\d{7,8}$/.test(v)
 const tooManySignups = createLimiter({ limit: 5, windowMs: 60 * 60_000 })
 

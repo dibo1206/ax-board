@@ -3,6 +3,7 @@
 import { randomBytes } from 'node:crypto'
 import express from 'express'
 import { checkPassword } from './account.js'
+import { writeAccessLog } from './accessLog.js'
 import { hashPassword, requireAdmin } from './auth.js'
 import { findBanned } from './banned.js'
 import { lookupHash, sealText } from './crypto.js'
@@ -11,6 +12,7 @@ import { createLimiter } from './limit.js'
 import { adminEmail, publicUrl, queueMail } from './mailer.js'
 import { openSeller } from './pii.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
+import { confirmMe, passwordProblem } from './staff.js'
 
 const text = (v) => (typeof v === 'string' ? v.trim() : '')
 const digits = (v) => text(v).replace(/[^0-9]/g, '')
@@ -39,7 +41,7 @@ sellerSignupRouter.post('/', async (req, res) => {
   if (!ownerName || ownerName.length > 20) errors.push('대표자 이름을 20자 안으로 적어 주세요.')
   if (!/^0\d{8,10}$/.test(phone)) errors.push('연락처를 확인해 주세요.')
   if (businessNo.length !== 10) errors.push('사업자등록번호 10자리를 적어 주세요.')
-  if (!/^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(email)) errors.push('승인 결과를 받을 이메일을 확인해 주세요.')
+  if (email.length > 254 || !/^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(email)) errors.push('승인 결과를 받을 이메일을 확인해 주세요.')
   const bad = findBanned(farmName)
   if (bad.length) errors.push('농가·상호 이름에 쓸 수 없는 표현이 있어요.')
   const sensitive = findSensitive(farmName, region, ownerName)
@@ -111,6 +113,8 @@ async function decide(req, res, status, note) {
       [req.params.code, `판매자 활동 중지: ${note}`.slice(0, 300)],
     )
   }
+  // 승인하면 2단계 인증을 처음 등록할 수 있는 기간을 연다 (7일. 지나면 관리자가 다시 열어 준다)
+  if (status === 'active') await pool.query("UPDATE admins SET totp_enroll_until = now() + interval '7 days' WHERE seller_code = $1 AND totp_secret_enc IS NULL", [req.params.code])
   console.log(`[seller] ${req.admin.loginId} 판매자 ${rows[0].seller_code} → ${status}`)
   const [subject, body] = status === 'active'
     ? ['판매자 가입이 승인됐어요', `${rows[0].name}의 판매자 가입이 승인됐어요. 로그인해서 상품을 올려 주세요: ${publicUrl()}/account/login\n`]
@@ -125,6 +129,38 @@ adminSellerRouter.post('/:code/reject', (req, res) => {
   const note = text(req.body?.note)
   if (note.length < 2 || note.length > 300) return res.status(400).json({ error: '반려 사유를 2~300자로 적어 주세요. (판매자에게 보여요)' })
   return decide(req, res, 'rejected', note)
+})
+
+// 판매자 계정 지원: 비밀번호를 잊었거나 유출됐을 때, 휴대폰을 잃어버렸을 때 (2026-11-11 보안 점검). 내 비밀번호를 한 번 더 확인한다
+async function sellerAccount(req, res) {
+  const { rows } = await pool.query("SELECT id, login_id FROM admins WHERE seller_code = $1 AND role = 'seller' ORDER BY id", [req.params.code])
+  if (!rows.length) { res.status(404).json({ error: '이 농가의 판매자 계정을 찾지 못했어요.' }); return null }
+  if (rows.length > 1) { res.status(409).json({ error: '이 농가에 계정이 여러 개 있어요. 서버 명령어로 처리해 주세요.' }); return null }
+  return rows[0]
+}
+const logSeller = (req, action, target) => writeAccessLog({ loginId: req.admin.loginId, role: 'admin', action, path: `account:${target}`, ip: req.ip })
+
+adminSellerRouter.post('/:code/password', async (req, res) => {
+  const account = await sellerAccount(req, res)
+  if (!account) return
+  const problem = passwordProblem(req.body?.password, account.login_id)
+  if (problem) return res.status(400).json({ error: problem })
+  if (!(await confirmMe(req, res))) return
+  await pool.query(
+    "UPDATE admins SET password_hash = $2, session_version = session_version + 1, totp_enroll_until = CASE WHEN totp_secret_enc IS NULL THEN now() + interval '7 days' ELSE NULL END WHERE id = $1",
+    [account.id, await hashPassword(req.body.password)],
+  )
+  logSeller(req, 'seller_password_reset', account.login_id)
+  res.json({ ok: true, loginId: account.login_id })
+})
+
+adminSellerRouter.post('/:code/2fa/reset', async (req, res) => {
+  const account = await sellerAccount(req, res)
+  if (!account) return
+  if (!(await confirmMe(req, res))) return
+  await pool.query("UPDATE admins SET totp_secret_enc = NULL, totp_last_counter = 0, totp_enroll_until = now() + interval '7 days', session_version = session_version + 1 WHERE id = $1", [account.id])
+  logSeller(req, 'seller_2fa_reset', account.login_id)
+  res.json({ ok: true, loginId: account.login_id })
 })
 
 // ---------- 상품 자동 승인 ----------

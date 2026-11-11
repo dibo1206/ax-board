@@ -58,11 +58,11 @@ publicInquiryRouter.post('/products/:code/questions', async (req, res) => {
      VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (product_code, question) DO NOTHING
      RETURNING id, author, question, answer, created_at, is_private`,
-    [req.params.code, author, question, sealText(contact || null), customer?.id ?? null, isPrivate],
+    [req.params.code, sealText(author), question, sealText(contact || null), customer?.id ?? null, isPrivate],
   )
   if (!rows.length) return res.status(409).json({ error: '같은 질문이 이미 올라와 있어요.' })
   queueMail({ kind: 'admin_new_question', to: adminEmail(), subject: `[상품 문의] ${req.params.code}`, body: `새 상품 문의가 올라왔어요.${isPrivate ? ' (비밀글)' : ''}\n\n${question}\n\n답변하기: ${publicUrl()}/admin\n` })
-  res.status(201).json({ ...rows[0], author: maskName(rows[0].author), mine: Boolean(customer) })
+  res.status(201).json({ ...rows[0], author: maskName(author), mine: Boolean(customer) })
 })
 
 // 내가 이 상품에 남긴 질문 (비밀글 내용 포함). 로그인하지 않았으면 빈 목록
@@ -75,7 +75,7 @@ publicInquiryRouter.get('/products/:code/my-questions', async (req, res) => {
      WHERE product_code = $1 AND customer_id = $2 AND NOT hidden ORDER BY created_at DESC LIMIT 50`,
     [req.params.code, customer.id],
   )
-  res.json(rows.map((q) => ({ ...q, author: maskName(q.author), mine: true })))
+  res.json(rows.map(openQuestion).map((q) => ({ ...q, author: maskName(q.author), mine: true })))
 })
 
 // 첫 답변이 달리면 질문에 남긴 이메일로 한 번 알린다 (전화번호만 남겼으면 보내지 않음). 회원은 마이페이지·화면 위 숫자로도 본다
