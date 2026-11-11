@@ -138,7 +138,10 @@ export function ProductsPage() {
         {item && <><span aria-hidden="true">›</span><b>{item.name}</b></>}
         {list && <span className="muted">(총 {best ? Math.min(list.total, BEST_COUNT) : list.total}개)</span>}
       </nav>
-      <h2 className="plist-title">{title}</h2>
+      <div className="plist-head">
+        <h2 className="plist-title">{title}</h2>
+        <a className="plist-farms" href="/farms">농가별로 보기 →</a>
+      </div>
 
       <nav className="pcat" aria-label="상품 카테고리">
         {tabs.map((t) => {

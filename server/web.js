@@ -12,7 +12,7 @@ import { pool } from './db.js'
 const SHOP_NAME = 'YOONJU MARKET'
 const PRIVATE_PAGES = /^\/(admin|seller|account|cart|checkout|order|restock)(\/|$)/ // restock: 재입고 알림 취소 화면
 // 손님이 여는 공개 화면 (여기 없는 주소는 404 + 화면은 '찾으시는 페이지가 없어요'). 화면 주소를 새로 만들면 여기에도 더한다
-const PUBLIC_PAGES = ['/', '/products', '/about', '/notice', '/press', '/guide', '/sitemap', '/policy/terms', '/policy/privacy', '/policy/refund', '/policy/noemail']
+const PUBLIC_PAGES = ['/', '/products', '/farms', '/about', '/notice', '/press', '/guide', '/sitemap', '/policy/terms', '/policy/privacy', '/policy/refund', '/policy/noemail']
 const CODE = /^[A-Za-z0-9_-]{1,64}$/
 // 화면에서 불러도 되는 곳: 우리 서버, 토스페이먼츠(결제창), 다음 우편번호(주소 검색 창), 구글·jsDelivr 글꼴. 나머지 스크립트·틀(iframe)은 막는다
 const CSP = [
@@ -53,8 +53,12 @@ seoRouter.get('/sitemap.xml', async (req, res) => {
     const { rows } = await pool.query(
       "SELECT product_code, to_char(COALESCE(updated_at, created_at) AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD') AS day FROM products WHERE status = 'active' ORDER BY product_code",
     )
+    const farms = await pool.query(
+      "SELECT DISTINCT s.seller_code FROM sellers s JOIN products p ON p.seller_code = s.seller_code AND p.status = 'active' WHERE s.status = 'active' ORDER BY s.seller_code",
+    )
     const urls = [
       ...PUBLIC_PAGES.map((path) => `<url><loc>${esc(base + path)}</loc></url>`),
+      ...farms.rows.map((f) => `<url><loc>${esc(`${base}/farm/${encodeURIComponent(f.seller_code)}`)}</loc></url>`),
       ...rows.map((p) => `<url><loc>${esc(`${base}/p/${encodeURIComponent(p.product_code)}`)}</loc><lastmod>${p.day}</lastmod></url>`),
     ]
     return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n`
@@ -103,6 +107,7 @@ async function pageHead(req, html) {
   const url = base + req.path
   const defaults = { title: SHOP_NAME, description: html.match(/<meta name="description" content="([^"]*)"/)?.[1] ?? SHOP_NAME, url }
   if (PRIVATE_PAGES.test(req.path)) return { status: 200, head: { ...defaults, noindex: true } }
+  if (req.path.startsWith('/farm/')) return farmHead(req, defaults, base)
   if (!req.path.startsWith('/p/')) return { status: PUBLIC_PAGES.includes(req.path) || req.path.startsWith('/policy/') || /^\/(notice|press)\/\d{1,9}$/.test(req.path) ? 200 : 404, head: { ...defaults, url: base + (PUBLIC_PAGES.includes(req.path) ? req.path : '/') } }
 
   let code = ''
@@ -141,6 +146,31 @@ async function pageHead(req, html) {
         },
         aggregateRating: product.review_count > 0 ? { '@type': 'AggregateRating', ratingValue: product.rating, reviewCount: product.review_count } : undefined,
       },
+    },
+  }
+}
+
+// 농가 페이지 /farm/농가코드: 활동 중이고 판매 중 상품이 있는 농가면 제목·소개·대표 사진, 아니면 404 (2026-11-09)
+async function farmHead(req, defaults, base) {
+  let code = ''
+  try {
+    code = decodeURIComponent(req.path.slice(6))
+  } catch {
+    // 잘못된 주소는 아래에서 '없는 농가'로
+  }
+  const farm = /^[a-z0-9_-]{1,40}$/i.test(code) ? await cached(`farm-meta:${code}`, 60_000, async () => (await pool.query(
+    `SELECT s.seller_code, s.name, s.region, s.intro, count(p.*)::int AS products,
+            (array_agg(p.image_url ORDER BY p.created_at DESC) FILTER (WHERE p.image_url IS NOT NULL))[1] AS image_url
+     FROM sellers s JOIN products p ON p.seller_code = s.seller_code AND p.status = 'active'
+     WHERE s.seller_code = $1 AND s.status = 'active' GROUP BY s.seller_code`, [code])).rows[0] ?? null) : null
+  if (!farm) return { status: 404, head: { ...defaults, title: `농가를 찾지 못했어요 | ${SHOP_NAME}`, noindex: true } }
+  return {
+    status: 200,
+    head: {
+      title: `${farm.name} | ${SHOP_NAME}`,
+      description: clip(`${farm.region ? `${farm.region} · ` : ''}${farm.intro || `${farm.name}에서 보내는 농산물`} · 판매 중 ${farm.products}개`, 160),
+      url: `${base}/farm/${encodeURIComponent(farm.seller_code)}`,
+      image: farm.image_url ? base + farm.image_url : null,
     },
   }
 }

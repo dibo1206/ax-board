@@ -6,6 +6,7 @@ import { B2bForm, QuestionForm } from './Inquiry.jsx'
 import { Related } from './Recommend.jsx'
 import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
 import { addToCart, get, getPolicy, post, preorderNote, thumbUrl, unitPrice } from './shop/shared.js'
+import { FarmPage, FarmsPage } from './shop/Farms.jsx'
 import { Guide } from './shop/Guide.jsx'
 import { NotFound } from './shop/NotFound.jsx'
 import { RecipeCards } from './shop/RecipeCards.jsx'
@@ -272,7 +273,8 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {product.preorder && <><dt>출고 시작일</dt><dd>{product.ship_from.slice(0, 10)} <span className="muted">(예약 판매)</span></dd></>}
         {item.keep_period && <><dt>보관 참고</dt><dd>{item.keep_period}</dd></>}
         {product.info_answers >= 3 && <><dt>구매자 확인</dt><dd>표시와 맞았어요 {product.info_matched}/{product.info_answers}</dd></>}
-        <dt>판매 농가</dt><dd>{seller.name} · {seller.region}</dd>
+        {/* 농가 이름을 누르면 그 농가 페이지 (농가별로 보기, 2026-11-09) */}
+        <dt>판매 농가</dt><dd><a href={`/farm/${encodeURIComponent(seller.seller_code)}`} className="farm-name-link">{seller.name}</a> · {seller.region}</dd>
       </dl>
       <BuyBox product={product} option={option} onPick={setOptionId} onAsk={openAsk} />
       <div className="buy-aside">
@@ -323,6 +325,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         <section className="box">
           <h3>판매 농가 이야기</h3>
           <p>{seller.story}</p>
+          <a className="farm-more-link" href={`/farm/${encodeURIComponent(seller.seller_code)}`}>{seller.name.replace(/\[예시\]\s*/g, '')}의 다른 상품 모두 보기 →</a>
         </section>
         {product.notice_table && (
           <section className="box notice-box">
@@ -421,6 +424,14 @@ function App() {
   return <ShopLayout><Suspense fallback={loading}>{shopPage(window.location.pathname)}</Suspense></ShopLayout>
 }
 
+const safeDecode = (text) => {
+  try {
+    return decodeURIComponent(text)
+  } catch {
+    return text
+  }
+}
+
 // 첫 화면(/, /p/상품코드)은 섹션마다 폭이 다르고, 나머지 화면은 가운데 좁은 칸에 그린다.
 // 그 밖의 모르는 주소는 첫 화면 대신 '찾으시는 페이지가 없어요' (2026-11-09)
 function shopPage(path) {
@@ -439,6 +450,9 @@ function innerPage(path) {
   if (path === '/order/lookup') return <OrderLookup />
   if (path.startsWith('/policy/')) return <Policy kind={path.split('/')[2]} />
   if (path === '/products') return <ProductsPage />
+  if (path === '/farms') return <FarmsPage />
+  const farm = path.match(/^\/farm\/([^/]{1,80})$/)
+  if (farm) return <FarmPage code={safeDecode(farm[1])} />
   if (path === '/about') return <AboutPage />
   if (path === '/sitemap') return <SitemapPage />
   if (path === '/notice' || path === '/press') return <PostListPage kind={path.slice(1)} />

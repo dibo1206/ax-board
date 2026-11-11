@@ -6,7 +6,7 @@ import { BRAND } from './home/content.js'
 import { cartCount, get, getAccount, getPolicy, post, readCart, thumbUrl, won } from './shared.js'
 
 // 손님 화면 공통 틀 (디자인 시안): 위쪽 YOONJU MARKET · 가운데 메뉴 · 오른쪽 검색·로그인·장바구니, 아래쪽 회사 정보·약관
-const MENU = [['상품', '/products'], ['제철 달력', 'season'], ['이야기', 'story'], ['문의·FAQ', 'faq']] // /로 시작하면 다른 화면, 아니면 첫 화면의 칸
+const MENU = [['상품', '/products'], ['농가', '/farms'], ['제철 달력', 'season'], ['이야기', 'story'], ['문의·FAQ', 'faq']] // /로 시작하면 다른 화면, 아니면 첫 화면의 칸
 const onHome = () => window.location.pathname === '/'
 
 // 첫 화면이면 그 부분으로 부드럽게 내리고, 다른 화면이면 /#부분 으로 이동

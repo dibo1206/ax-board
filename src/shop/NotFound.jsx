@@ -7,6 +7,7 @@ import { get, thumbUrl, won } from './shared.js'
 const COPY = {
   page: ['찾으시는 페이지가 없어요', '주소가 바뀌었거나 잘못 입력됐을 수 있어요. 아래에서 찾아보세요.'],
   product: ['판매가 끝났거나 내려간 상품이에요', '같은 품목의 다른 상품이 있을 수 있어요. 아래에서 찾아보거나 지금 인기 있는 상품을 둘러보세요.'],
+  farm: ['찾으시는 농가가 없어요', '판매를 쉬고 있거나 주소가 바뀌었을 수 있어요. 농가 모아보기에서 다른 농가를 둘러보세요.'],
 }
 
 export function NotFound({ kind = 'page', onOpen }) {
@@ -45,7 +46,7 @@ export function NotFound({ kind = 'page', onOpen }) {
       </form>
       <div className="notfound-links">
         <a className="notfound-go" href="/">첫 화면으로</a>
-        <a className="notfound-ghost" href="/products">상품 전체 보기</a>
+        <a className="notfound-ghost" href={kind === 'farm' ? '/farms' : '/products'}>{kind === 'farm' ? '농가 모아보기' : '상품 전체 보기'}</a>
       </div>
       {popular.length > 0 && (
         <div className="notfound-popular">
