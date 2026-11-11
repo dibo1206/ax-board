@@ -20,7 +20,7 @@ export const OFFICIAL = {
   멜론: [{ varieties: [COMMON], high: 11, top: 13 }],
 }
 
-export const GRADE_LABEL = { 3: '매우높은 당도', 2: '높은 당도', 1: '보통 당도' }
+export const GRADE_LABEL = { 3: '매우 높음', 2: '높음', 1: '보통' }
 
 // 관리자가 넣은 기준을 다듬는다 (품종들·높은 당도·매우높은 당도가 모두 있는 줄만)
 export function readStandards(input) {
