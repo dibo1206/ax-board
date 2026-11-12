@@ -11,8 +11,8 @@ import { pool } from './db.js'
 import { lookupHash, sealText } from './crypto.js'
 import { createLimiter } from './limit.js'
 import { cancelPartial, cancelPayment, checkApproved, clientKey, confirmPayment, isTestPayment, lookupPayment, orderingOpen, paymentMode } from './payments.js'
-import { POLICIES, RETURNS, SHIPPING, SHOP, shippingFee } from './policy.js'
-import { adminEmail, publicUrl, queueMail, retryMails } from './mailer.js'
+import { POLICIES, RETURNS, SHIPPING, SHOP, shippingFee, splitShippingFee } from './policy.js'
+import { adminCc, adminEmail, publicUrl, queueMail, retryMails } from './mailer.js'
 import { sweepRestock } from './restock.js'
 import { lockProducts, syncOptionTotals } from './options.js'
 import { openOrder, openReturn } from './pii.js'
@@ -62,11 +62,15 @@ async function restoreStock(client, orderId, sellerCode = null) {
 }
 
 // ---------- 농가별 배송 ----------
-// 농가마다 따로 택배를 보낸다: 배송비는 농가별로 (그 농가 상품이 무료 배송 기준 이상이면 그 농가는 무료)
+// 농가마다 따로 택배를 보낸다. 배송비는 주문 한 번에 한 번 (주문 전체 상품 금액이 무료 배송 기준 이상이면 무료, 2026-11-12)
+// 받은 배송비는 상품 금액 비율로 농가 배송에 나눠 적는다 → 농가별 부분 취소는 그 몫을 돌려주고, 정산은 그 몫을 농가에 준다.
+// 한 농가를 취소해 남은 금액이 무료 기준 밑으로 내려가도 배송비를 더 받지 않는다 [가설: 회사가 정함]
 export function farmShipping(lines) {
   const farms = new Map()
   for (const l of lines) farms.set(l.seller_code, (farms.get(l.seller_code) ?? 0) + l.subtotal)
-  return [...farms].map(([sellerCode, itemsAmount]) => ({ sellerCode, itemsAmount, fee: shippingFee(itemsAmount) }))
+  const list = [...farms].map(([sellerCode, itemsAmount]) => ({ sellerCode, itemsAmount }))
+  const shares = splitShippingFee(list, shippingFee(list.reduce((sum, f) => sum + f.itemsAmount, 0)))
+  return list.map((f, i) => ({ ...f, fee: shares[i] }))
 }
 
 // 농가별 배송이 없는 주문(이 기능 전에 만든 주문·시험용으로 직접 넣은 주문)은 주문 상품의 농가로 만든다.
@@ -927,7 +931,7 @@ sellerOrderRouter.get('/settlement', async (req, res) => {
      WHERE oi.seller_code = $1 AND ${SETTLE_ORDER} AND sh.status = 'delivered'`,
     [req.seller.sellerCode],
   )
-  // 농가별로 받은 배송비도 그 농가 몫 (택배를 직접 보내니까)
+  // 농가 배송에 나눠 적은 배송비도 그 농가 몫 (택배를 직접 보내니까. 주문 배송비를 상품 금액 비율로 나눈 값, policy.js splitShippingFee)
   const fees = await pool.query(
     `SELECT COALESCE(sum(sh.shipping_fee) FILTER (WHERE o.confirmed_at >= date_trunc('month', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul'), 0)::int AS confirmed_shipping,
             COALESCE(sum(sh.shipping_fee) FILTER (WHERE o.confirmed_at IS NULL), 0)::int AS waiting_shipping
@@ -984,7 +988,7 @@ async function notifyOrder(orderNo, event, sellerCode = null) {
     if (!order) return
     const listOf = (items) => items.map((i) => `- ${i.name.replace(/\[예시\]\s*/g, '')}${i.option_name ? ` (${i.option_name})` : ''} × ${i.quantity}  ${i.subtotal.toLocaleString('ko-KR')}원`).join('\n')
     const lines = listOf(order.items)
-    const farms = order.shipments.length > 1 ? `\n농가 ${order.shipments.length}곳에서 따로 보내요 (배송비는 농가마다).` : ''
+    const farms = order.shipments.length > 1 ? `\n농가 ${order.shipments.length}곳에서 따로 보내요 (상자가 따로 도착할 수 있어요).` : ''
     const total = `합계 ${order.total_amount.toLocaleString('ko-KR')}원 (배송비 ${order.shipping_fee.toLocaleString('ko-KR')}원 포함)${farms}`
     const lookup = `${publicUrl()}/order/lookup`
     const sent = order.shipments.find((s) => s.seller_code === sellerCode) ?? order.shipments[0] ?? order
@@ -1009,7 +1013,7 @@ async function notifyOrder(orderNo, event, sellerCode = null) {
     const [subject, body] = mails[event]
     queueMail({ kind: `order_${event}`, to: order.buyer_email, subject, body })
     if (event === 'paid' && adminEmail()) {
-      queueMail({ kind: 'admin_new_order', to: adminEmail(), subject: `[새 주문] ${order.order_no} · ${order.total_amount.toLocaleString('ko-KR')}원${order.is_test ? ' (테스트)' : ''}`,
+      queueMail({ kind: 'admin_new_order', to: adminEmail(), cc: adminCc(), subject: `[새 주문] ${order.order_no} · ${order.total_amount.toLocaleString('ko-KR')}원${order.is_test ? ' (테스트)' : ''}`,
         body: `새 주문이 들어왔어요.\n\n${lines}\n${total}\n받는 분: ${order.receiver_name}\n관리자 화면: ${publicUrl()}/admin\n` })
     }
   } catch (error) {

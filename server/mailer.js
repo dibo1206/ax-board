@@ -4,6 +4,7 @@ import nodemailer from 'nodemailer'
 import { sealText } from './crypto.js'
 import { pool } from './db.js'
 import { openMail } from './pii.js'
+import { NOTIFY } from './policy.js'
 
 const MAX_ATTEMPTS = 5
 let transport
@@ -35,7 +36,7 @@ async function deliver(saved) {
     return
   }
   try {
-    await getTransport().sendMail({ from: process.env.MAIL_FROM, to: row.to_email, subject: row.subject, text: row.body })
+    await getTransport().sendMail({ from: process.env.MAIL_FROM, to: row.to_email, cc: row.cc_email || undefined, subject: row.subject, text: row.body })
     await pool.query("UPDATE email_outbox SET status = 'sent', sent_at = now(), attempts = attempts + 1, body = $2 WHERE id = $1", [row.id, sealText(redact(row.body))])
   } catch (error) {
     const giveUp = row.attempts + 1 >= MAX_ATTEMPTS
@@ -49,12 +50,14 @@ async function deliver(saved) {
 
 // 메일 넣기. 실패해도 주문·가입 같은 본래 일을 막지 않는다
 // 메일함(email_outbox)에 넣으면 true. 넣지 못하면 false (부르는 쪽이 다시 시도할 수 있게). 실제 발송 실패는 메일함이 다시 보낸다
-export async function queueMail({ kind, to, subject, body }) {
+// cc: 참조 메일 배열 (관리자 알림만. 손님·판매자 메일에는 넣지 않는다)
+export async function queueMail({ kind, to, cc = [], subject, body }) {
   if (!to) return false
+  const ccList = (Array.isArray(cc) ? cc : []).filter((s) => s && s !== to).join(', ')
   try {
     const { rows } = await pool.query(
-      'INSERT INTO email_outbox (kind, to_email, subject, body) VALUES ($1, $2, $3, $4) RETURNING *',
-      [kind, sealText(to), subject.slice(0, 200), sealText(body)],
+      'INSERT INTO email_outbox (kind, to_email, cc_email, subject, body) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [kind, sealText(to), sealText(ccList || null), subject.slice(0, 200), sealText(body)],
     )
     deliver(rows[0]).catch((e) => console.error(`[mail] ${e.message}`))
     return true
@@ -64,7 +67,9 @@ export async function queueMail({ kind, to, subject, body }) {
   }
 }
 
-export const adminEmail = () => process.env.ADMIN_EMAIL || null
+// 관리자 알림 받는 곳: [쇼핑몰 설정 > 알림 메일]에 저장한 값, 없으면 .env 의 ADMIN_EMAIL. 참조는 설정에 저장한 값만
+export const adminEmail = () => NOTIFY.to || process.env.ADMIN_EMAIL || null
+export const adminCc = () => (adminEmail() ? [...NOTIFY.cc] : [])
 export const publicUrl = () => (process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 3066}`).replace(/\/$/, '')
 
 // 정리할 때: 못 보낸 메일을 다시 보낸다
@@ -79,7 +84,7 @@ export async function retryMails() {
 // ---------- 관리자: 알림 기록 ----------
 export async function listMails() {
   const { rows } = await pool.query(
-    'SELECT id, kind, to_email, subject, body, status, attempts, last_error, created_at, sent_at FROM email_outbox ORDER BY id DESC LIMIT 200',
+    'SELECT id, kind, to_email, cc_email, subject, body, status, attempts, last_error, created_at, sent_at FROM email_outbox ORDER BY id DESC LIMIT 200',
   )
   // 비밀번호 찾기 메일은 보내기 전까지 링크가 살아 있어서 관리자 화면에도 본문을 보여 주지 않는다
   const safe = (m) => (m.kind === 'password_reset' || m.kind === 'restock_confirm' ? { ...m, body: '(취소·비밀번호 찾기 링크가 있어 내용을 숨겼어요)' } : m)

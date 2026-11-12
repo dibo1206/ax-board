@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from './api.js'
 
-// 관리자 [공지·언론]: 공지사항·언론보도 글 쓰기·고치기·숨기기·지우기, 공지 팝업 켜기 (server/posts.js)
-const KINDS = { notice: '공지사항', press: '언론보도' }
+// 관리자 [게시판]: 공지사항·자주 묻는 질문·언론보도 글 쓰기·고치기·숨기기·지우기, 공지 팝업 켜기 (server/posts.js)
+const KINDS = { notice: '공지사항', faq: '자주 묻는 질문', press: '언론보도' }
 const EMPTY = { kind: 'notice', title: '', body: '', link_url: '', image_url: '', pinned: false, popup: false, popup_until: '', hidden: false }
 const day = (t) => new Date(t).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })
 
@@ -32,8 +32,9 @@ function PostForm({ initial, onSaved, onCancel }) {
     <form className="box form" onSubmit={save}>
       <h3>{initial?.id ? '글 고치기' : '새 글'}</h3>
       <label>게시판<select value={form.kind} onChange={set('kind')}>{Object.entries(KINDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
-      <label>제목<em className="req" title="필수">*</em><input value={form.title} onChange={set('title')} maxLength={100} /></label>
-      <label>내용 <span className="muted">줄바꿈 그대로 보여요 (5000자까지)</span><textarea value={form.body} onChange={set('body')} rows={8} maxLength={5000} /></label>
+      {form.kind === 'faq' && <p className="muted">질문은 손님 말투로 짧게, 답은 1~3문장으로 적어 주세요. 저장하면 상담 챗봇도 이 답을 자료로 써요.</p>}
+      <label>{form.kind === 'faq' ? '질문' : '제목'}<em className="req" title="필수">*</em><input value={form.title} onChange={set('title')} maxLength={100} placeholder={form.kind === 'faq' ? '예: 배송비는 얼마예요?' : undefined} /></label>
+      <label>{form.kind === 'faq' ? '답' : '내용'} <span className="muted">줄바꿈 그대로 보여요 (5000자까지)</span><textarea value={form.body} onChange={set('body')} rows={8} maxLength={5000} /></label>
       <label>링크 <span className="muted">(선택) 기사·영상 주소, https:// 로 시작</span><input value={form.link_url} onChange={set('link_url')} placeholder="https://" /></label>
       <label>사진 주소 <span className="muted">(선택) 서버 public/posts 폴더의 파일, 예: /posts/notice-2026-chuseok.webp</span><input value={form.image_url} onChange={set('image_url')} /></label>
       <label className="check"><input type="checkbox" checked={form.pinned} onChange={set('pinned')} />목록 맨 위에 고정</label>
@@ -78,10 +79,10 @@ export function AdminPosts() {
   return (
     <section>
       <div className="admin-head">
-        <h2>공지사항·언론보도</h2>
+        <h2>게시판 (공지사항·자주 묻는 질문·언론보도)</h2>
         <button type="button" className="button" onClick={() => { setMessage(''); setEditing('new') }}>새 글 쓰기</button>
       </div>
-      <p className="muted">손님 화면 /notice · /press 에 보여요. 공지는 [첫 화면 팝업]으로 띄울 수 있어요 (끝나는 날까지, 가장 최근 1개).</p>
+      <p className="muted">손님 화면 /notice · /faq · /press 에 보여요. 공지는 [첫 화면 팝업]으로 띄울 수 있어요 (끝나는 날까지, 가장 최근 1개). 자주 묻는 질문은 상담 챗봇 자료로도 들어가요.</p>
       {message && <p className="success">{message}</p>}
       {error && <p className="error">{error}</p>}
       {!list ? <p className="muted">불러오는 중…</p> : list.length === 0 ? <p className="muted">아직 글이 없어요.</p> : (

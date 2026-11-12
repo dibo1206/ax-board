@@ -9,7 +9,7 @@ import { requireAdmin, requireSeller } from './auth.js'
 import { sealText } from './crypto.js'
 import { pool } from './db.js'
 import { createLimiter } from './limit.js'
-import { adminEmail, publicUrl, queueMail } from './mailer.js'
+import { adminCc, adminEmail, publicUrl, queueMail } from './mailer.js'
 import { findMyOrder, inTransaction, loadOrder, maskOrderNo, publicOrder, runRefund, sendRefundResult, staffOrder } from './orders.js'
 import { openOrder, openReturn } from './pii.js'
 import { RETURNS, SHIPPING, SHOP } from './policy.js'
@@ -22,20 +22,22 @@ const STATUS = { requested: '신청', approved: '승인', rejected: '거절', re
 const tooManyRequests = createLimiter({ limit: 10, windowMs: 10 * 60_000 })
 
 // 환불 한도: 돌려줄 돈의 최대치 (실제 금액은 관리자가 확인해 정하고, 이보다 많이 돌려줄 수 없다)
-//  - 단순 변심: 돌려보낼 상품 금액 − 돌려보내는 배송비 − (처음 배송이 무료였으면) 보낼 때 배송비. 처음 낸 배송비는 돌려주지 않는다
-//  - 상품 하자·오배송: 돌려보낼 상품 금액 + 그 농가 배송에 손님이 낸 배송비
+//  - 단순 변심 (관리자가 받기로 켰을 때만 신청된다): 돌려보낼 상품 금액 − 돌려보내는 배송비 − (처음 배송이 무료였으면) 보낼 때 배송비.
+//    처음 낸 배송비는 돌려주지 않는다. "처음 배송이 무료"는 주문 배송비 기준 (배송비는 주문 한 번에 한 번, 2026-11-12)
+//  - 상품 하자·파손·오배송: 돌려보낼 상품 금액 + 그 농가 배송에 나눠 적은 배송비
 //  - 그 농가 배송에 낸 돈(상품 + 배송비)에서 이미 돌려준 돈, 주문 결제 금액에서 이미 돌려준 돈을 넘지 않는다
 export function returnLimit(ret, shipment, refundedForFarm, refundedForOrder, totalAmount) {
   const items = ret.items.reduce((sum, i) => sum + i.price * i.quantity, 0)
+  const freeAtFirst = (shipment.order_fee ?? shipment.shipping_fee) === 0
   const byPolicy = ret.reason_type === 'change_mind'
-    ? items - SHIPPING.fee - (shipment.shipping_fee === 0 ? SHIPPING.fee : 0)
+    ? items - SHIPPING.fee - (freeAtFirst ? SHIPPING.fee : 0)
     : items + shipment.shipping_fee
   return Math.max(0, Math.min(byPolicy, shipment.items_amount + shipment.shipping_fee - refundedForFarm, totalAmount - refundedForOrder))
 }
 
 async function limitOf(client, ret) {
   const { rows: [row] } = await client.query(
-    `SELECT sh.items_amount, sh.shipping_fee, o.total_amount,
+    `SELECT sh.items_amount, sh.shipping_fee, o.shipping_fee AS order_fee, o.total_amount,
             (SELECT COALESCE(sum(amount), 0) FROM order_refunds WHERE order_id = o.id AND seller_code = sh.seller_code AND status = 'done')::int AS farm_done,
             (SELECT COALESCE(sum(amount), 0) FROM order_refunds WHERE order_id = o.id AND status = 'done')::int AS order_done
      FROM order_shipments sh JOIN orders o ON o.id = sh.order_id WHERE sh.order_id = $1 AND sh.seller_code = $2`,
@@ -50,6 +52,9 @@ async function requestReturn(order, body, requestedBy) {
   const sellerCode = text(body.sellerCode)
   const reasonType = text(body.reasonType)
   const reason = text(body.reason)
+  if (reasonType === 'change_mind' && !RETURNS.changeMind) {
+    return { status: 409, error: `음료·식품이라 단순 변심 반품은 받지 않아요. 상품이 파손됐거나 상품에 문제가 있으면 사유 종류를 바꿔 주세요. 뜯지 않은 가공품은 고객센터(${SHOP.phone})로 문의해 주세요.` }
+  }
   const errors = []
   if (!Object.hasOwn(RETURNS.reasons, reasonType)) errors.push('반품 사유 종류를 골라 주세요.')
   if (reason.length < 5 || reason.length > 500) errors.push('반품 사유를 5~500자로 적어 주세요.')
@@ -136,7 +141,7 @@ async function notifyReturn(orderNo, event, ret, extra = {}) {
     const [subject, body] = mails[event]
     queueMail({ kind: `return_${event}`, to: order.buyer_email, subject, body })
     if (event === 'requested' && adminEmail()) {
-      queueMail({ kind: 'admin_return_requested', to: adminEmail(), subject: `[반품 신청] ${order.order_no}${farm ? ` · ${farm}` : ''}`,
+      queueMail({ kind: 'admin_return_requested', to: adminEmail(), cc: adminCc(), subject: `[반품 신청] ${order.order_no}${farm ? ` · ${farm}` : ''}`,
         body: `반품 신청이 들어왔어요.\n\n${head}\n관리자 화면: ${publicUrl()}/admin\n` })
     }
   } catch (error) {

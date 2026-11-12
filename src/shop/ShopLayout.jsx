@@ -105,6 +105,7 @@ export function ShopLayout({ children }) {
             <a href="/guide" className="underline">1분 사용 안내</a>
             <a href="/about" className="underline">회사 소개</a>
             <a href="/notice" className="underline">공지사항</a>
+            <a href="/faq" className="underline">자주 묻는 질문</a>
             <a href="/press" className="underline">언론보도</a>
             <a href="/about#location" className="underline">오시는 길</a>
             <a href="/sitemap" className="underline">사이트맵</a>
@@ -150,7 +151,7 @@ function StaffBar() {
       <span>관리자({staff.loginId})로 보는 중</span>
       <a href="/admin">관리자 화면</a>
       <a href="/admin?tab=site">홈페이지 관리</a>
-      <a href="/admin?tab=posts">공지·언론</a>
+      <a href="/admin?tab=posts">게시판</a>
       {code && <a href={`/admin?tab=products&edit=${encodeURIComponent(code)}`}>이 상품 고치기</a>}
     </div>
   )
@@ -271,25 +272,22 @@ function HeaderSearch() {
 // addToCart 가 보내는 'cart-added' 신호를 받는다. 알림 칸은 늘 두고 글만 바꿔서 화면 낭독기도 읽어 준다
 const TOAST_MS = 5000 // 무료 배송 게이지까지 읽을 시간
 
-// 담은 상품의 농가 기준으로 무료 배송까지 남은 금액 (배송비는 농가마다 따로라 서버·장바구니와 같은 규칙)
+// 장바구니 전체 기준으로 무료 배송까지 남은 금액 (배송비는 주문 한 번에 한 번이라 서버·장바구니와 같은 규칙, 2026-11-12)
 async function shippingNote(productCode) {
   const [list, policy] = await Promise.all([get('/products'), getPolicy()])
   const products = Object.fromEntries(list.map((p) => [p.product_code, p]))
-  const seller = products[productCode]?.seller_code
-  if (!seller || !policy?.shipping?.freeOver) return null
+  if (!products[productCode] || !policy?.shipping?.freeOver) return null
   const lines = readCart().map((l) => ({ ...l, p: products[l.productCode] })).filter((l) => l.p)
-  const farmAmount = lines.filter((l) => l.p.seller_code === seller).reduce((sum, l) => {
+  const cartAmount = lines.reduce((sum, l) => {
     const option = l.optionId ? l.p.options.find((o) => o.id === l.optionId) : null
     return sum + (l.p.has_options ? (option?.price ?? 0) : l.p.price) * l.quantity
   }, 0)
-  const manyFarms = new Set(lines.map((l) => l.p.seller_code)).size > 1
-  const farm = manyFarms ? `${products[productCode].seller_name.replace(/\[예시\]\s*/g, '')} 상품 ` : ''
-  const left = policy.shipping.freeOver - farmAmount
+  const left = policy.shipping.freeOver - cartAmount
   // 게이지: 무료 배송 기준 대비 지금 담은 금액 (2026-11-07 피드백)
-  const percent = Math.min(100, Math.round((farmAmount / policy.shipping.freeOver) * 100))
+  const percent = Math.min(100, Math.round((cartAmount / policy.shipping.freeOver) * 100))
   return left > 0
-    ? { done: false, percent, text: `${won(left)} 더 담으면 ${farm}무료 배송이에요`, scale: `${won(farmAmount)} / ${won(policy.shipping.freeOver)}` }
-    : { done: true, percent, text: `이제 ${farm}무료 배송이에요`, scale: `${won(policy.shipping.freeOver)} 이상 채웠어요` }
+    ? { done: false, percent, text: `${won(left)} 더 담으면 무료 배송이에요`, scale: `${won(cartAmount)} / ${won(policy.shipping.freeOver)}` }
+    : { done: true, percent, text: '이제 무료 배송이에요', scale: `${won(policy.shipping.freeOver)} 이상 채웠어요` }
 }
 
 function CartToast() {

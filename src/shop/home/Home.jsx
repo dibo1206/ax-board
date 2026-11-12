@@ -460,6 +460,7 @@ export function Faq({ policy, onRecommend }) {
             </details>
           ))}
         </div>
+        <p className="faq-more"><a href="/faq">자주 묻는 질문 더 보기 →</a></p>
         <p className="note">{FAQ.note}</p>
       </div>
     </section>

@@ -71,7 +71,7 @@ function policyChunks() {
   const won = (n) => `${n.toLocaleString('ko-KR')}원`
   const base = { item_code: null, product_code: null, trusted: true }
   const notes = [
-    ['policy:shipping', `배송비는 농가마다 따로 붙어요. 농가별로 ${won(SHIPPING.fee)}이고, 그 농가 상품을 ${won(SHIPPING.freeOver)} 이상 사면 그 농가 배송비는 무료예요. ${SHIPPING.leadTime}.`],
+    ['policy:shipping', `배송비는 주문 한 번에 ${won(SHIPPING.fee)}이고, 상품 합계가 ${won(SHIPPING.freeOver)} 이상이면 무료예요. 여러 농가 상품을 함께 사도 배송비는 한 번만 내요. 택배는 ${SHIPPING.courier}로 보내요. ${SHIPPING.leadTime}.`],
     ['policy:preorder', '예약 상품은 상품 페이지에 적힌 출고 시작일부터 주문 순서대로 보내요. 결제는 주문할 때 하고, 같은 농가의 다른 상품도 그날 함께 보내요. 보내기 전에는 [주문 조회]에서 취소할 수 있어요.'],
     ['policy:order', '상품을 장바구니에 담거나 [바로 구매]를 누르면 주문서로 이어져요. 회원이 아니어도 주문할 수 있고, 주문번호와 휴대폰 번호로 [주문 조회]에서 확인해요.'],
     ['policy:contact', `고객센터 전화는 ${SHOP.phone}이고, 운영 시간은 ${SHOP.hours}이에요. 회사 주소는 ${SHOP.address}예요. 메일은 ${SHOP.email}로 보낼 수 있어요.`],
@@ -81,21 +81,24 @@ function policyChunks() {
   return [...notes, ...refund].map(([key, text]) => ({ ...base, key, text: clean(text) }))
 }
 
-// 지금 손님에게 보여도 되는 자료만 조각으로 만든다: 판매 중 상품, 검수된 품목, 답이 달리고 숨기지 않은 Q&A
+// 지금 손님에게 보여도 되는 자료만 조각으로 만든다: 판매 중 상품, 검수된 품목, 답이 달리고 숨기지 않은 Q&A,
+// 숨기지 않은 자주 묻는 질문 게시판 글 (관리자가 쓴 글이라 그대로 답으로 써도 되는 자료, 2026-11-12)
 export async function buildChunks(db = pool) {
-  const [items, products, questions, sellers] = await Promise.all([
+  const [items, products, questions, sellers, faqs] = await Promise.all([
     db.query("SELECT * FROM items WHERE status <> 'pending'"),
     db.query("SELECT product_code, item_code, name, summary, description, faq FROM products WHERE status = 'active'"),
     db.query(`SELECT q.id, q.product_code, q.question, q.answer, p.item_code FROM questions q JOIN products p ON p.product_code = q.product_code
               WHERE q.answer IS NOT NULL AND q.answer <> '' AND NOT q.hidden AND NOT q.is_private AND p.status = 'active'`),
     db.query(`SELECT seller_code, name, region, story FROM sellers WHERE status = 'active'
               AND seller_code IN (SELECT seller_code FROM products WHERE status = 'active')`),
+    db.query("SELECT id, title, body FROM posts WHERE kind = 'faq' AND NOT hidden AND body <> ''"),
   ])
   return [
     ...items.rows.flatMap(itemChunks),
     ...products.rows.flatMap(productChunks),
     ...questions.rows.map((q) => ({ key: `qna:${q.id}`, item_code: q.item_code, product_code: q.product_code, trusted: true, text: `질문: ${clean(q.question)} 답: ${clean(q.answer)}` })),
     ...sellers.rows.map((s) => ({ key: `seller:${s.seller_code}`, item_code: null, product_code: null, trusted: false, text: `농가 ${clean(s.name)} (${clean(s.region)}): ${clean(s.story)}` })),
+    ...faqs.rows.flatMap((f) => splitText(clean(f.body)).map((text, i) => ({ key: `faq:${f.id}:${i}`, item_code: null, product_code: null, trusted: true, text: `자주 묻는 질문: ${clean(f.title)} 답: ${text}` }))),
     ...policyChunks(),
   ]
 }

@@ -208,9 +208,11 @@ try {
   const lines = [[carrot, 1], [onion, 2], [garlic, 5]]
   const byFarm = new Map()
   for (const [p, q] of lines) byFarm.set(p.seller_code, (byFarm.get(p.seller_code) ?? 0) + p.price * q)
-  const expectFee = [...byFarm.values()].reduce((n, amount) => n + (amount >= SHIPPING.freeOver ? 0 : SHIPPING.fee), 0)
-  const expectTotal = [...byFarm.values()].reduce((n, v) => n + v, 0) + expectFee
-  record('주문', '농가 3곳 주문: 배송비가 농가마다 붙음', `결제 금액 ${won(multi.data?.amount ?? 0)}, 기대 ${won(expectTotal)} (배송비 ${won(expectFee)} — 의성은 ${won(byFarm.get(UISEONG))}라 무료)`, multi.data?.amount === expectTotal)
+  // 배송비는 주문 한 번에 한 번 (2026-11-12): 상품 합계가 무료 기준 이상이면 무료
+  const itemsTotal = [...byFarm.values()].reduce((n, v) => n + v, 0)
+  const expectFee = itemsTotal >= SHIPPING.freeOver ? 0 : SHIPPING.fee
+  const expectTotal = itemsTotal + expectFee
+  record('주문', '농가 3곳 주문: 배송비는 주문 한 번', `결제 금액 ${won(multi.data?.amount ?? 0)}, 기대 ${won(expectTotal)} (상품 ${won(itemsTotal)} · 배송비 ${won(expectFee)})`, multi.data?.amount === expectTotal)
   const paid = await pay(multi.data)
   const stocks = (await db.query('SELECT product_code, stock FROM products WHERE product_code = ANY($1)', [lines.map(([p]) => p.product_code)])).rows
   const stockOk = lines.every(([p, q]) => stocks.find((s) => s.product_code === p.product_code)?.stock === touchedProducts.get(p.product_code).stock - q)

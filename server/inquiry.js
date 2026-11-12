@@ -7,7 +7,7 @@ import { openText, sealText } from './crypto.js'
 import { pool } from './db.js'
 import { openB2b, openQuestion } from './pii.js'
 import { createLimiter } from './limit.js'
-import { adminEmail, publicUrl, queueMail } from './mailer.js'
+import { adminCc, adminEmail, publicUrl, queueMail } from './mailer.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
 import { bannedMessage, findBanned } from './banned.js'
 
@@ -61,7 +61,7 @@ publicInquiryRouter.post('/products/:code/questions', async (req, res) => {
     [req.params.code, sealText(author), question, sealText(contact || null), customer?.id ?? null, isPrivate],
   )
   if (!rows.length) return res.status(409).json({ error: '같은 질문이 이미 올라와 있어요.' })
-  queueMail({ kind: 'admin_new_question', to: adminEmail(), subject: `[상품 문의] ${req.params.code}`, body: `새 상품 문의가 올라왔어요.${isPrivate ? ' (비밀글)' : ''}\n\n${question}\n\n답변하기: ${publicUrl()}/admin\n` })
+  queueMail({ kind: 'admin_new_question', to: adminEmail(), cc: adminCc(), subject: `[상품 문의] ${req.params.code}`, body: `새 상품 문의가 올라왔어요.${isPrivate ? ' (비밀글)' : ''}\n\n${question}\n\n답변하기: ${publicUrl()}/admin\n` })
   res.status(201).json({ ...rows[0], author: maskName(author), mine: Boolean(customer) })
 })
 
@@ -130,7 +130,7 @@ publicInquiryRouter.post('/b2b-inquiries', async (req, res) => {
     [body.company, sealText(body.contactName), sealText(body.contact), body.productCode || null, body.quantity || null, body.message || null],
   )
   console.log(`[b2b] 새 기업 구매 문의 #${rows[0].id}`)
-  queueMail({ kind: 'admin_new_b2b', to: adminEmail(), subject: `[기업 구매 문의] ${body.company}`, body: `새 기업 구매 문의가 들어왔어요.\n\n회사: ${body.company}\n수량: ${body.quantity || '-'}\n요청: ${body.message || '-'}\n\n확인하기: ${publicUrl()}/admin\n` })
+  queueMail({ kind: 'admin_new_b2b', to: adminEmail(), cc: adminCc(), subject: `[기업 구매 문의] ${body.company}`, body: `새 기업 구매 문의가 들어왔어요.\n\n회사: ${body.company}\n수량: ${body.quantity || '-'}\n요청: ${body.message || '-'}\n\n확인하기: ${publicUrl()}/admin\n` })
   res.status(201).json({ id: rows[0].id, message: '문의가 접수됐어요. 담당자가 확인 후 연락드립니다.' })
 })
 

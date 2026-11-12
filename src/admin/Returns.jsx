@@ -5,7 +5,7 @@ import { adminApi } from './api.js'
 // 관리자 반품 처리: 신청 → 승인 / 거절(사유는 손님에게 보임) → 승인한 신청만 금액을 확인하고 [환불] (토스 부분 취소)
 // 환불 한도는 서버가 주문 기록과 교환·환불 정책으로 계산한 값. 판매자 의견은 참고용 (판매자는 환불을 못 한다)
 const FILTERS = [['requested', '신청'], ['approved', '승인 (환불 대기)'], ['refunded', '환불 완료'], ['rejected', '거절'], ['', '전체']]
-const REASONS = { change_mind: '단순 변심', defect: '상품 하자·표시와 다름', wrong_item: '오배송' }
+const REASONS = { change_mind: '단순 변심', defect: '상품 하자·파손·표시와 다름', wrong_item: '오배송' }
 
 function ReturnRow({ ret, onDone, onError }) {
   const [note, setNote] = useState('')
