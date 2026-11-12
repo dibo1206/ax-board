@@ -4,7 +4,7 @@ import { isPreorder, ORDER_STATUS, REFUND_KIND, RETURN_STATUS, shipDay, when, wo
 import { adminApi } from './api.js'
 
 // 관리자 주문 관리: 결제 완료 → 배송 준비 → 배송 중(송장) → 배송 완료, 취소(결제 취소·재고 복구)
-// 여러 농가 주문은 아직 보내지 않은 농가 몫만 취소할 수 있다 (그 농가 상품 금액 + 배송비를 토스 부분 취소로)
+// 여러 농가 주문은 아직 보내지 않은 농가 몫만 취소할 수 있다 (그 농가 상품 금액 + 그 농가 몫의 배송비를 토스 부분 취소로. 배송비는 주문 한 번에 한 번이고 상품 금액 비율로 농가에 나눠 적는다)
 // 결제 완료·배송 준비는 농가 배송 기준: 여러 농가 주문에서 아직 준비 안 한(또는 송장 안 넣은) 농가가 있으면 나온다
 const FILTERS = [['', '전체'], ['paid', '결제 완료 (준비 안 한 농가)'], ['preparing', '배송 준비 (송장 전)'], ['shipping', '배송 중'], ['delivered', '배송 완료'], ['cancelled', '취소']]
 const NEXT = { paid: ['preparing', '배송 준비 시작'], preparing: ['shipping', '송장 넣고 배송 시작'], shipping: ['delivered', '배송 완료로'] }
@@ -18,7 +18,7 @@ function ShipmentRow({ shipment, many, onRun, onCancel }) {
   const next = NEXT[shipment.status]
   return (
     <li className="box">
-      <p><b>{shipment.seller_name}</b> · {ORDER_STATUS[shipment.status] ?? shipment.status} · 상품 {won(shipment.items_amount)} · 배송비 {shipment.shipping_fee ? won(shipment.shipping_fee) : '무료'}
+      <p><b>{shipment.seller_name}</b> · {ORDER_STATUS[shipment.status] ?? shipment.status} · 상품 {won(shipment.items_amount)} · 배송비 몫 {shipment.shipping_fee ? won(shipment.shipping_fee) : '무료'}
         {shipment.tracking_no && <> · {shipment.courier} {shipment.tracking_no}</>}
         {['paid', 'preparing'].includes(shipment.status) && isPreorder(shipment.ship_from) && <> · <span className="badge pending">예약 · {shipDay(shipment.ship_from)}부터 출고</span></>}</p>
       {next && (
@@ -68,7 +68,7 @@ function OrderPanel({ orderNo, onChanged, onClose }) {
     const amount = won(shipment.items_amount + shipment.shipping_fee)
     const reason = retry ? (order.refunds.find((r) => r.kind === 'cancel' && r.seller_code === shipment.seller_code && r.status === 'requested')?.reason ?? '').replace(/^관리자 취소: /, '') : window.prompt(`${shipment.seller_name} 몫 취소 사유 (손님에게 보여요)`)
     if (!reason?.trim()) return
-    if (!retry && !window.confirm(`${shipment.seller_name} 상품 금액과 배송비 ${amount}을 손님 결제에서 바로 취소해요. 재고도 돌려놓아요.`)) return
+    if (!retry && !window.confirm(`${shipment.seller_name} 상품 금액과 배송비 몫 ${amount}을 손님 결제에서 바로 취소해요. 재고도 돌려놓아요.`)) return
     run(() => adminApi(`/orders/${orderNo}/shipments/${shipment.seller_code}/cancel`, { method: 'POST', body: { reason } }), `${orderNo}: ${shipment.seller_name} 몫 ${amount}을 취소했어요`)
   }
 

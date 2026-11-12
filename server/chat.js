@@ -112,7 +112,8 @@ const ROUTES = [
     re: /환불|교환|반품|파손|불량|배송.{0,8}(안\s?와|안\s?오|늦|누락|잘못)|(받|온|왔|도착).{0,12}(상했|썩|깨졌|터졌|곰팡이|물러|멍)|(멍들|썩|상해|깨져|터져|곰팡이).{0,8}(왔|왓|도착)|(멍들|썩은|상한|깨진).{0,12}사진/,
     // 반품 신청 위치만 안내한다. 신청해도 환불 여부는 담당자가 정한다 (환불을 약속하지 않는다). 기간은 교환·환불 정책과 같은 값
     answer: () => '불편을 드려 죄송해요. 환불·교환 여부는 제가 결정할 수 없어서 담당자에게 넘길게요. '
-      + `배송 완료된 상품은 [주문 조회](비회원) 또는 마이페이지 주문 내역에서 농가별로 [반품 신청]을 눌러 사유를 남겨 주세요 (단순 변심은 받은 날부터 ${RETURNS.changeMindDays}일, 상품 하자·오배송은 ${RETURNS.defectMonths}개월 안). `
+      + `배송 완료된 상품은 [주문 조회](비회원) 또는 마이페이지 주문 내역에서 농가별로 [반품 신청]을 눌러 사유를 남겨 주세요 (${RETURNS.changeMind ? `단순 변심은 받은 날부터 ${RETURNS.changeMindDays}일, ` : ''}상품 하자·파손·오배송은 ${RETURNS.defectMonths}개월 안). `
+      + (RETURNS.changeMind ? '' : '음료·식품이라 단순 변심 반품은 받지 않아요. ')
       + '신청하면 담당자가 확인 후 결과를 알려 드려요. 상품 사진은 고객센터나 상품 Q&A로 주문번호와 함께 보내 주세요. '
       + '자세한 기준은 화면 아래 [교환·환불 정책]에 있어요. 배송 준비 전이면 [주문 조회]에서 바로 취소할 수도 있어요.',
     handoff: true,
@@ -152,7 +153,7 @@ const ROUTES = [
       const parts = []
       if (/편의점|직접|방문/.test(said)) parts.push('주문서에 적은 주소로 농가가 택배를 보내요. 편의점 수령이나 직접 찾아가는 방법은 없어요. 받기 어려우면 회사·가족 주소로 받거나, 주문서 배송 메모에 요청 사항(경비실에 맡겨 주세요 등)을 적어 주세요.')
       if (/해외|외국|국외|일본|미국|중국|캐나다|호주|베트남|대만/.test(said)) parts.push('주문서는 국내 주소(우편번호 5자리)만 받아서 해외로는 보낼 수 없어요.')
-      if (/착불|선불/.test(said)) parts.push(`배송비는 주문할 때 상품 금액과 함께 결제해요 (농가별 ${SHIPPING.fee.toLocaleString('ko-KR')}원, 그 농가 상품을 ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상 사면 무료). 착불로 받는 방법은 없어요.`)
+      if (/착불|선불/.test(said)) parts.push(`배송비는 주문할 때 상품 금액과 함께 결제해요 (주문 한 번에 ${SHIPPING.fee.toLocaleString('ko-KR')}원, 상품 합계가 ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상이면 무료). 착불로 받는 방법은 없어요.`)
       return `${parts.join(' ')} 더 궁금하면 고객센터 ${SHOP.phone}로 연락해 주세요.`
     },
     handoff: false,
@@ -235,7 +236,7 @@ const ROUTES = [
     kind: 'shipping',
     re: /배송비|무료\s?배송|택배비|언제\s?(와|도착|받|출고|발송)|며칠.{0,4}(걸|와)|몇일|영업일|내일.{0,6}(오|와|도착|받)|오늘.{0,8}(출고|발송|도착)|당일\s?(발송|배송|출고)|주말.{0,6}(배송|출고)/,
     answer: (ctx) => {
-      const fee = `배송비는 농가마다 따로 붙어요. 농가별로 ${SHIPPING.fee.toLocaleString('ko-KR')}원이고, 그 농가 상품을 ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상 사면 그 농가 배송비는 무료예요. 장바구니에서 농가별 배송비를 볼 수 있어요.`
+      const fee = `배송비는 주문 한 번에 ${SHIPPING.fee.toLocaleString('ko-KR')}원이고, 상품 합계가 ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상이면 무료예요. 여러 농가 상품을 함께 사도 배송비는 한 번만 내요 (상품은 농가마다 따로 도착할 수 있어요).`
       const when = `${SHIPPING.leadTime}. 예약 상품은 상품 페이지에 적힌 출고 시작일부터 보내요. 도착 날짜는 택배사 사정에 따라 달라서 약속드리기 어려워요.`
       // "그럼 언제 받을 수 있어요?"에 배송비부터 말하지 않는다
       return /배송비|무료\s?배송|택배비/.test(ctx.message ?? '') ? `${fee} ${when}` : `${when} ${fee}`
@@ -258,7 +259,7 @@ const ROUTES = [
     // 할인·쿠폰 기능이 없다: 약속하지 않고 정해진 정책이 없다고만 말한다
     kind: 'discount',
     re: /할인|쿠폰|깎아|에누리|적립금/,
-    answer: () => `할인·쿠폰은 지금 정해진 정책이 없어서 제가 약속드릴 수 없어요. 상품은 상품 페이지에 적힌 가격으로 팔고, 한 농가 상품을 ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상 사면 그 농가 배송비는 무료예요. 대량 구매는 상품 페이지의 [기업 구매 문의]로 견적을 받아 보실 수 있어요.`,
+    answer: () => `할인·쿠폰은 지금 정해진 정책이 없어서 제가 약속드릴 수 없어요. 상품은 상품 페이지에 적힌 가격으로 팔고, 상품 합계가 ${SHIPPING.freeOver.toLocaleString('ko-KR')}원 이상이면 배송비가 무료예요. 대량 구매는 상품 페이지의 [기업 구매 문의]로 견적을 받아 보실 수 있어요.`,
     handoff: false,
     action: null,
   },
@@ -1070,7 +1071,7 @@ function answerFromEvidence(evidence, message, catalog, ctx, fallbackProduct) {
   const top = chooseQuote(evidence, message, { itemNames: ctx.items.map((i) => i.name) })
   if (!top) return null
   const product = catalog.products.find((p) => p.product_code === top.product_code) ?? catalog.products.find((p) => p.item_code === top.item_code)
-  const lead = top.key.startsWith('qna:') ? '담당자가 비슷한 질문에 답한 내용이에요.' : '등록된 자료에서 찾은 내용이에요.'
+  const lead = top.key.startsWith('qna:') ? '담당자가 비슷한 질문에 답한 내용이에요.' : top.key.startsWith('faq:') ? '자주 묻는 질문 게시판에 올라온 내용이에요.' : '등록된 자료에서 찾은 내용이에요.'
   return {
     answer: `${lead} ${top.text}`,
     sources: product ? [{ code: product.product_code, name: product.name }] : [],

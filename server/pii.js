@@ -11,7 +11,7 @@ const TABLES = {
   b2b_inquiries: { key: 'id', columns: ['contact_name', 'contact'] },
   questions: { key: 'id', columns: ['contact', 'author'] }, // 회원은 작성자가 실명이라 암호화 (2026-11-11)
   reviews: { key: 'id', columns: ['author'] },
-  email_outbox: { key: 'id', columns: ['to_email', 'body'] },
+  email_outbox: { key: 'id', columns: ['to_email', 'cc_email', 'body'] }, // cc_email: 관리자 알림 참조 (2026-11-12)
   order_returns: { key: 'id', columns: ['reason'] }, // 반품 사유 (손님이 쓴 글이라 연락처·주소가 들어갈 수 있다)
 }
 

@@ -119,7 +119,7 @@ export function AboutPage() {
 const SITEMAP = [
   ['쇼핑', [['상품', '/products'], ['제철 달력', '/#season'], ['추천받기', '/#recommend'], ['장바구니', '/cart'], ['주문조회', '/order/lookup']]],
   ['윤주(주)', [['회사소개', '/about#intro'], ['핵심 가치', '/about#values'], ['로컬푸드', '/about#localfood'], ['오시는 길', '/about#location']]],
-  ['고객센터', [['공지사항', '/notice'], ['언론보도', '/press'], ['자주 묻는 질문', '/#faq'], ['1분 사용 안내', '/guide']]],
+  ['고객센터', [['공지사항', '/notice'], ['언론보도', '/press'], ['자주 묻는 질문', '/faq'], ['1분 사용 안내', '/guide']]],
   ['회원', [['로그인', '/account/login'], ['회원가입', '/account/signup'], ['마이페이지', '/account'], ['판매 농가 입점 신청', '/account/signup?type=seller']]],
   ['약관·정책', [['이용약관', '/policy/terms'], ['개인정보 처리방침', '/policy/privacy'], ['교환·환불 정책', '/policy/refund'], ['이메일무단수집거부', '/policy/noemail']]],
 ]

@@ -5,7 +5,7 @@ import { get, getPolicy, thumbUrl, won } from './shared.js'
 
 // 손님이 농가별로 보기 (2026-11-09)
 //  · /farms        농가 모아보기: 지역으로 걸러 보기 · 이름·지역·품목 찾기 · 정렬 · 12곳씩 더 보기 (농가가 많아져도)
-//  · /farm/농가코드 농가 페이지: 소개·이야기 + 그 농가의 판매 중 상품. 같은 농가 상품은 배송비가 합쳐지니 무료 배송 기준도 알려 준다
+//  · /farm/농가코드 농가 페이지: 소개·이야기 + 그 농가의 판매 중 상품. 배송비는 주문 한 번에 한 번이라 무료 배송 기준도 알려 준다 (다른 농가 상품과 합쳐도 된다)
 // 서버는 판매 중 상품이 있는 활동 중 농가만, 공개 칸(이름·지역·소개·이야기)만 보낸다 (server/index.js /api/farms)
 
 const PAGE = 12
@@ -135,7 +135,7 @@ export function FarmPage({ code }) {
         {freeOver > 0 && (
           <p className="farm-ship">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h11v10H3zM14 9h4l3 3.5V16h-7zM7 19a1.8 1.8 0 1 0 0 .01M17 19a1.8 1.8 0 1 0 0 .01" /></svg>
-            <span>이 농가 상품을 합쳐 <b>{won(freeOver)} 이상</b> 담으면 이 농가 배송비가 무료예요</span>
+            <span>다른 농가 상품과 합쳐 <b>{won(freeOver)} 이상</b> 담으면 배송비가 무료예요</span>
           </p>
         )}
       </header>

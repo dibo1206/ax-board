@@ -29,7 +29,7 @@ export function Notifications() {
             {mailPage.rows.map((m) => (
               <tr key={m.id}>
                 <td className="muted">{when(m.created_at)}</td>
-                <td>{m.to_email}</td>
+                <td>{m.to_email}{m.cc_email && <><br /><small className="muted">참조 {m.cc_email}</small></>}</td>
                 <td>
                   <button type="button" className="link" onClick={() => setOpen(open === m.id ? null : m.id)}>{m.subject}</button>
                   {open === m.id && <pre className="mail-body">{m.body}</pre>}

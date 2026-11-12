@@ -9,7 +9,7 @@ import { findBanned } from './banned.js'
 import { lookupHash, sealText } from './crypto.js'
 import { pool } from './db.js'
 import { createLimiter } from './limit.js'
-import { adminEmail, publicUrl, queueMail } from './mailer.js'
+import { adminCc, adminEmail, publicUrl, queueMail } from './mailer.js'
 import { openSeller } from './pii.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
 import { confirmMe, passwordProblem } from './staff.js'
@@ -81,7 +81,7 @@ sellerSignupRouter.post('/', async (req, res) => {
     client.release()
   }
   console.log(`[seller] 판매자 가입 신청 ${sellerCode}`)
-  queueMail({ kind: 'admin_new_seller', to: adminEmail(), subject: `[판매자 가입 신청] ${farmName}`, body: `${farmName}(${region})에서 판매자 가입을 신청했어요.\n관리자 화면 [판매자 승인]에서 확인해 주세요: ${publicUrl()}/admin\n` })
+  queueMail({ kind: 'admin_new_seller', to: adminEmail(), cc: adminCc(), subject: `[판매자 가입 신청] ${farmName}`, body: `${farmName}(${region})에서 판매자 가입을 신청했어요.\n관리자 화면 [판매자 승인]에서 확인해 주세요: ${publicUrl()}/admin\n` })
   res.status(201).json({ loginId, status: 'pending' })
 })
 

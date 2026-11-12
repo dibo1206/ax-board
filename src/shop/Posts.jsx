@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { get } from './shared.js'
 
-// 공지사항·언론보도 (/notice, /press, /notice/번호). 본문은 글자 그대로(줄바꿈만) 보여 준다
-const TITLES = { notice: '공지사항', press: '언론보도' }
+// 공지사항·자주 묻는 질문·언론보도 (/notice, /faq, /press, /notice/번호). 본문은 글자 그대로(줄바꿈만) 보여 준다
+// 자주 묻는 질문은 목록에서 질문을 누르면 답이 바로 펼쳐진다 (첫 화면 자주 묻는 질문과 같은 모양, 2026-11-12)
+const TITLES = { notice: '공지사항', faq: '자주 묻는 질문', press: '언론보도' }
 const day = (t) => new Date(t).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\.\s?/g, '.').replace(/\.$/, '')
 
 function BoardTabs({ kind }) {
@@ -31,6 +32,16 @@ export function PostListPage({ kind }) {
       ) : (
         <>
           <p className="muted board-count">전체 {data.total}건</p>
+          {kind === 'faq' ? (
+            <div className="faq-list board-faq">
+              {data.items.map((p) => (
+                <details key={p.id}>
+                  <summary><span className="faq-q">{p.title}</span></summary>
+                  <p className="pre-line">{p.body}</p>
+                </details>
+              ))}
+            </div>
+          ) : (
           <ul className="board-list">
             {data.items.map((p) => (
               <li key={p.id}>
@@ -45,6 +56,7 @@ export function PostListPage({ kind }) {
               </li>
             ))}
           </ul>
+          )}
           {data.pages > 1 && (
             <nav className="board-pages" aria-label="페이지">
               {Array.from({ length: data.pages }, (_, i) => i + 1).map((n) => (

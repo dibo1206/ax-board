@@ -178,7 +178,7 @@ export function ProductsPage() {
       <div className="pfilter" role="group" aria-label="걸러 보기">
         {FLAGS.map(([key, label]) => (
           <button key={key} type="button" className={`pchip${state[key] ? ' on' : ''}`} aria-pressed={state[key]} onClick={() => change({ [key]: !state[key] })}
-            title={key === 'free' && freeOver ? `한 농가 상품이 ${won(freeOver)} 이상이면 그 농가 배송비가 무료예요` : undefined}>
+            title={key === 'free' && freeOver ? `가격이 ${won(freeOver)} 이상이라 1개만 사도 배송비가 무료인 상품만 보여요` : undefined}>
             {state[key] && <span aria-hidden="true">✓ </span>}{label}
           </button>
         ))}

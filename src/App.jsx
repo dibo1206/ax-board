@@ -455,8 +455,8 @@ function innerPage(path) {
   if (farm) return <FarmPage code={safeDecode(farm[1])} />
   if (path === '/about') return <AboutPage />
   if (path === '/sitemap') return <SitemapPage />
-  if (path === '/notice' || path === '/press') return <PostListPage kind={path.slice(1)} />
-  const post = path.match(/^\/(notice|press)\/(\d{1,9})$/)
+  if (path === '/notice' || path === '/faq' || path === '/press') return <PostListPage kind={path.slice(1)} />
+  const post = path.match(/^\/(notice|faq|press)\/(\d{1,9})$/)
   if (post) return <PostDetailPage kind={post[1]} id={post[2]} />
   if (path === '/account/login') return <LoginPage />
   if (path === '/account/signup') return <SignupPage />

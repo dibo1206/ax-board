@@ -164,6 +164,8 @@ const before = await snapshot()
 const outboxBefore = (await db.query('SELECT COALESCE(max(id), 0) AS id FROM email_outbox')).rows[0].id
 const { rows: [apple5] } = await db.query("SELECT id, price FROM product_options WHERE product_code = 'apple_10kg' AND name LIKE '5kg%'")
 const customerBefore = (await db.query('SELECT COALESCE(max(id), 0) AS id FROM customers')).rows[0].id
+// 반품 설정(단순 변심 받기)은 시험 중에 켰다 끈다 → 끝나면 시험 전 값으로 되돌린다
+const savedReturns = (await db.query("SELECT value, updated_by FROM shop_settings WHERE key = 'returns'")).rows[0] ?? null
 
 try {
   for (const [loginId, role, sellerCode] of ACCOUNTS) {
@@ -184,6 +186,14 @@ try {
   let option0 = await optionStock(apple5.id)
   let o = await newPaidOrder([{ productCode: 'apple_10kg', optionId: apple5.id, quantity: 1 }, { productCode: 'carrot_3kg', quantity: 2 }])
   let sh = await shipment(o.orderNo, 'farm_green')
+  // 배송비는 주문 한 번에 한 번 (2026-11-12): 농가 배송에 나눠 적은 몫의 합 = 주문 배송비, 몫은 상품 금액 비율
+  const { rows: [feeSplit] } = await db.query(
+    'SELECT o.shipping_fee AS order_fee, o.items_amount, sum(s.shipping_fee)::int AS shares, count(*)::int AS farms FROM orders o JOIN order_shipments s ON s.order_id = o.id WHERE o.order_no = $1 GROUP BY o.id',
+    [o.orderNo])
+  const policyNow = (await call(null, 'GET', '/policy')).data.shipping
+  check('농가 2곳 주문: 배송비는 주문 한 번 (상품 합계로 무료 여부), 농가 몫의 합 = 주문 배송비',
+    feeSplit.farms === 2 && feeSplit.order_fee === (feeSplit.items_amount >= policyNow.freeOver ? 0 : policyNow.fee) && feeSplit.shares === feeSplit.order_fee,
+    `상품 ${feeSplit.items_amount}원 · 배송비 ${feeSplit.order_fee}원 · 몫 합 ${feeSplit.shares}원`)
   let r = await call(admin, 'POST', `/admin/orders/${o.orderNo}/shipments/farm_green/cancel`, { reason: '농가 재고 부족' })
   let ord = await orderRow(o.orderNo)
   check('관리자 부분 취소 → 그 농가 상품 금액 + 배송비만 토스 부분 취소, 주문은 유지',
@@ -306,6 +316,15 @@ try {
   const r3 = await call(other, 'POST', `/account/orders/${memberOrder.orderNo}/returns`, { sellerCode: 'farm_green', reasonType: 'defect', reason: '남의 주문에 신청' })
   const r4 = await call(null, 'POST', `/account/orders/${memberOrder.orderNo}/returns`, { sellerCode: 'farm_green', reasonType: 'defect', reason: '로그인 없이' })
   check('다른 손님 접근 → 휴대폰 다름 404, 다른 회원 404, 로그인 없음 401', r.status === 404 && r3.status === 404 && r4.status === 401, `${r.status}·${r3.status}·${r4.status}`)
+  // 단순 변심 반품: 기본은 받지 않는다 (2026-11-12 회사 결정). 꺼진 상태를 확인한 뒤, 기간·한도 시험을 위해 켠다 (끝나면 되돌림)
+  const RETURN_DAYS = { changeMindDays: 7, defectMonths: 3, defectKnownDays: 30 }
+  await call(admin, 'PUT', '/admin/settings/returns', { ...RETURN_DAYS, changeMind: false })
+  r = await call(null, 'POST', '/orders/lookup/returns', { orderNo: o.orderNo, phone: PHONE, sellerCode: 'farm_green', reasonType: 'change_mind', reason: '마음이 바뀌었어요' })
+  const policyOff = (await call(null, 'GET', '/policy')).data
+  check('단순 변심 반품 꺼짐(기본) → 409 받지 않음 안내, 손님 사유 목록에도 없음',
+    r.status === 409 && /받지 않아요/.test(r.data?.error ?? '') && policyOff?.returns?.reasons && !('change_mind' in policyOff.returns.reasons), `${r.status} ${r.data?.error}`)
+  r = await call(admin, 'PUT', '/admin/settings/returns', { ...RETURN_DAYS, changeMind: true })
+  check('관리자가 [쇼핑몰 설정 > 반품]에서 단순 변심 반품을 켬', r.status === 200 && r.data?.current?.returns?.changeMind === true, `${r.status}`)
   const shipRow = await shipment(o.orderNo, 'farm_green')
   await db.query("UPDATE order_shipments SET delivered_at = now() - interval '10 days' WHERE id = $1", [shipRow.id])
   r = await call(null, 'POST', '/orders/lookup/returns', { orderNo: o.orderNo, phone: PHONE, sellerCode: 'farm_green', reasonType: 'change_mind', reason: '마음이 바뀌었어요' })
@@ -335,7 +354,10 @@ try {
   const list = (await call(admin, 'GET', '/admin/returns?status=approved')).data
   const mine = list.find((x) => x.id === ret.id)
   const carrot = await db.query("SELECT price FROM products WHERE product_code = 'carrot_3kg'")
-  const expected = carrot.rows[0].price * 2 - 3000 // 단순 변심: 상품 − 돌려보내는 배송비 (처음 배송비 3,000원은 손님이 이미 냄)
+  const fee = (await call(null, 'GET', '/policy')).data.shipping.fee
+  const { rows: [orderFee] } = await db.query('SELECT shipping_fee FROM orders WHERE order_no = $1', [o.orderNo])
+  // 단순 변심: 상품 − 돌려보내는 배송비 − (처음 배송이 무료였으면) 보낼 때 배송비. 처음 낸 배송비는 돌려주지 않는다
+  const expected = carrot.rows[0].price * 2 - fee - (orderFee.shipping_fee === 0 ? fee : 0)
   check('관리자 승인 → 환불 한도는 정책대로 (단순 변심: 상품 금액 − 돌려보내는 배송비)', r.status === 200 && mine?.refund_limit === expected && mine.seller_note, `한도 ${mine?.refund_limit} / 예상 ${expected}`)
   r = await call(admin, 'POST', `/admin/returns/${ret.id}/refund`, { amount: expected + 1 })
   check('한도를 넘는 환불 → 400, 돈 안 나감', r.status === 400 && cancelCalls === calls0, `${r.status} ${r.data?.error}`)
@@ -394,6 +416,12 @@ try {
   if (child?.logs) console.log(child.logs.split('\n').slice(-20).join('\n'))
 } finally {
   if (child && child.exitCode === null) child.kill('SIGTERM')
+  if (savedReturns) {
+    await db.query(`INSERT INTO shop_settings (key, value, updated_at, updated_by) VALUES ('returns', $1, now(), $2)
+      ON CONFLICT (key) DO UPDATE SET value = $1, updated_by = $2`, [JSON.stringify(savedReturns.value), savedReturns.updated_by])
+  } else {
+    await db.query("DELETE FROM shop_settings WHERE key = 'returns'")
+  }
   // 시험 주문 정리: 아직 재고를 잡고 있는 줄(취소하지 않은 농가)은 재고를 돌려놓고 지운다
   const holding = `FROM order_items oi JOIN orders o ON o.id = oi.order_id
     WHERE o.order_no = ANY($1) AND o.status IN ('pending', 'paid', 'preparing', 'shipping', 'delivered')

@@ -5,7 +5,7 @@ import { promisify } from 'node:util'
 import { writeAccessLog } from './accessLog.js'
 import { decrypt, encrypt, newTotpSecret, openText, otpauthUri, verifyTotp } from './crypto.js'
 import { pool } from './db.js'
-import { adminEmail, queueMail } from './mailer.js'
+import { adminCc, adminEmail, queueMail } from './mailer.js'
 
 const scrypt = promisify(scryptCb)
 const COOKIE = 'admin_session'
@@ -235,7 +235,7 @@ export async function firstTwoFactor(req, res) {
   // 등록 사실을 주인에게 알린다: 본인이 한 게 아니면 바로 알아챌 수 있게
   const seller = row.seller_code ? (await pool.query('SELECT email FROM sellers WHERE seller_code = $1', [row.seller_code])).rows[0] : null
   queueMail({
-    kind: 'security_2fa_on', to: seller ? openText(seller.email) : adminEmail(), subject: '2단계 인증이 등록됐어요',
+    kind: 'security_2fa_on', to: seller ? openText(seller.email) : adminEmail(), cc: seller ? [] : adminCc(), subject: '2단계 인증이 등록됐어요',
     body: `계정 ${row.login_id}에 2단계 인증이 방금 등록됐어요. 직접 등록한 게 아니라면 바로 회사 관리자에게 알려 주세요.\n`,
   })
   res.json({ loginId: row.login_id, role: row.role, sellerCode: row.seller_code, mfa: true })

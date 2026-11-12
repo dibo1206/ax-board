@@ -54,10 +54,11 @@ function ReturnForm({ order, shipment, onSubmit, onClose }) {
           </label>
         ))}
       </fieldset>
+      {policy && !policy.returns.changeMind && <p className="muted">음료·식품이라 단순 변심 반품은 받지 않아요. 상품이 파손됐거나 문제가 있을 때 신청해 주세요. 뜯지 않은 가공품은 고객센터({policy.shop.phone})로 문의해 주세요.</p>}
       {reasonType === 'change_mind' && fee && (
-        <p className="warn">단순 변심이면 왕복 배송비를 손님이 부담해요: 돌려보내는 배송비 {won(fee)}을 빼고{shipment.shipping_fee === 0 ? `, 처음 무료로 보낸 배송비 ${won(fee)}도 빼요` : ', 처음 낸 배송비는 돌려드리지 않아요'}. 신선식품은 단순 변심 반품이 제한될 수 있어요.</p>
+        <p className="warn">단순 변심이면 왕복 배송비를 손님이 부담해요: 돌려보내는 배송비 {won(fee)}을 빼고{order.shipping_fee === 0 ? `, 처음 무료로 보낸 배송비 ${won(fee)}도 빼요` : ', 처음 낸 배송비는 돌려드리지 않아요'}. 신선식품은 단순 변심 반품이 제한될 수 있어요.</p>
       )}
-      {reasonType && reasonType !== 'change_mind' && <p className="muted">상품 하자·오배송이면 배송비는 판매자가 부담해요. 받은 상품 사진을 고객센터로 주문번호와 함께 보내 주세요.</p>}
+      {reasonType && reasonType !== 'change_mind' && <p className="muted">상품 하자·파손·오배송이면 배송비는 판매자가 부담해요. 받은 상품 사진을 고객센터로 주문번호와 함께 보내 주세요.</p>}
       <ul className="order-items">
         {lines.map(({ item, line }) => (
           <li key={line}>
@@ -139,7 +140,7 @@ export function OrderDetail({ order, phone = '', onConfirm = null, onReturn = nu
             <ul className="farm-shipments">
               {order.shipments.map((s) => (
                 <li key={s.seller_code}>
-                  <b>{s.seller_name}</b> · {ORDER_STATUS[s.status] ?? s.status} · 배송비 {s.shipping_fee ? won(s.shipping_fee) : '무료'}
+                  <b>{s.seller_name}</b> · {ORDER_STATUS[s.status] ?? s.status}
                   {['paid', 'preparing'].includes(s.status) && isPreorder(s.ship_from) && <> · <span className="badge pending">예약</span> {shipDay(s.ship_from)}부터 출고</>}
                   {s.tracking_no && <> · {s.courier} {s.tracking_no} {s.tracking_url && <a href={s.tracking_url} target="_blank" rel="noreferrer">배송 조회</a>}</>}
                 </li>

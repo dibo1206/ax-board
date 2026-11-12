@@ -281,6 +281,8 @@ CREATE TABLE IF NOT EXISTS email_outbox (
   sent_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS email_outbox_status_idx ON email_outbox (status, created_at);
+-- 관리자 알림 참조 (암호화해서 저장, server/mailer.js · 2026-11-12)
+ALTER TABLE email_outbox ADD COLUMN IF NOT EXISTS cc_email TEXT;
 
 -- 구매 후기: 배송 완료된 주문의 상품만, 주문·상품마다 한 번. 공개 화면에는 이름 첫 글자만
 CREATE TABLE IF NOT EXISTS reviews (
@@ -321,7 +323,7 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS orders_confirm_idx ON orders (status, confirmed_at);
 
--- 농가별 배송: 한 주문에 여러 농가 상품이 있으면 농가마다 따로 택배를 보낸다 → 배송비·송장·배송 상태가 농가마다
+-- 농가별 배송: 한 주문에 여러 농가 상품이 있으면 농가마다 따로 택배를 보낸다 → 송장·배송 상태가 농가마다. 배송비는 주문 한 번에 한 번이고 상품 금액 비율로 나눈 몫을 shipping_fee 에 적는다 (2026-11-12)
 -- 주문 전체 상태(orders.status)는 농가별 상태를 모아 정한다 (모두 배송 완료면 배송 완료, 하나라도 보냈으면 배송 중)
 CREATE TABLE IF NOT EXISTS order_shipments (
   id SERIAL PRIMARY KEY,
@@ -546,6 +548,9 @@ CREATE TABLE IF NOT EXISTS posts (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS posts_list_idx ON posts (kind, pinned DESC, created_at DESC);
+-- 자주 묻는 질문 게시판 (2026-11-12): 공지사항·언론보도 옆에 관리자가 질문(제목)과 답(내용)을 올린다
+ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_kind_check;
+ALTER TABLE posts ADD CONSTRAINT posts_kind_check CHECK (kind IN ('notice', 'press', 'faq'));
 
 -- 홈페이지 관리 (2026-11-08, server/siteContent.js): 관리자가 고친 첫 화면 칸(hero·story·season·faq)만 둔다. 없으면 코드의 기본값
 CREATE TABLE IF NOT EXISTS site_content (

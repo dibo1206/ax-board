@@ -136,7 +136,7 @@ function MyQuestions({ onMessage, onError }) {
   )
 }
 
-// 내 농가 상품이 들어 있는 주문. 다른 농가 상품과 함께 주문됐어도 내 상품은 내가 따로 보낸다 (송장·배송비가 농가마다)
+// 내 농가 상품이 들어 있는 주문. 다른 농가 상품과 함께 주문됐어도 내 상품은 내가 따로 보낸다 (송장은 농가마다. 배송비는 주문 한 번에 한 번이라 상품 금액 비율로 나눈 내 몫이 정산에 들어간다)
 // 정산 요약: 배송 완료 7일 뒤(또는 손님이 먼저) 구매 확정된 매출이 정산 대상. 취소한 내 농가 몫은 빠지고, 반품 환불액은 뺀다
 function Settlement() {
   const [s, setS] = useState(null)
@@ -185,7 +185,7 @@ function MyOrders({ onMessage, onError, initialFilter = 'all' }) {
   async function cancel(o) {
     const reason = window.prompt('취소 사유 (손님에게 보여요)')
     if (!reason?.trim()) return
-    if (!window.confirm(`내 상품 ${won(o.items_amount)} + 배송비 ${won(o.shipping_fee)}을 손님 결제에서 바로 취소해요.`)) return
+    if (!window.confirm(`내 상품 ${won(o.items_amount)} + 배송비 몫 ${won(o.shipping_fee)}을 손님 결제에서 바로 취소해요.`)) return
     try {
       await sellerApi(`/orders/${o.ref}/cancel`, { method: 'POST', body: { reason } })
       onMessage(`${o.order_label}:내 농가 몫을 취소하고 결제를 돌려드렸어요`)
@@ -226,7 +226,7 @@ function MyOrders({ onMessage, onError, initialFilter = 'all' }) {
           </div>
           <div>
             <ul className="oc-items">{o.items.map((i) => <li key={`${i.name}:${i.option_name ?? ''}`}><span>{i.name} <span className="muted">({i.option_name ?? i.unit})</span></span><span className="qty-x">× {i.quantity}</span></li>)}</ul>
-            <p className="oc-amount">내 상품 <b>{won(o.items_amount)}</b> + 배송비 {o.shipping_fee ? won(o.shipping_fee) : '무료'}{o.farms > 1 && ` · 다른 농가 ${o.farms - 1}곳과 함께 주문`}</p>
+            <p className="oc-amount">내 상품 <b>{won(o.items_amount)}</b> + 배송비 몫 {o.shipping_fee ? won(o.shipping_fee) : '무료'}{o.farms > 1 && ` · 다른 농가 ${o.farms - 1}곳과 함께 주문`}</p>
           </div>
           <div className="oc-side">
             {o.receiver ? (
@@ -263,7 +263,7 @@ function MyOrders({ onMessage, onError, initialFilter = 'all' }) {
 }
 
 // 내 농가 반품 신청: 손님 사유를 보고 의견을 남긴다. 승인·거절·환불은 회사 관리자가 한다
-const REASONS = { change_mind: '단순 변심', defect: '상품 하자·표시와 다름', wrong_item: '오배송' }
+const REASONS = { change_mind: '단순 변심', defect: '상품 하자·파손·표시와 다름', wrong_item: '오배송' }
 function MyReturns({ onMessage, onError }) {
   const [list, setList] = useState(null)
   const [notes, setNotes] = useState({})

@@ -215,7 +215,7 @@ function Admin() {
     { key: 'orders', label: '주문', icon: ICONS.orders, tabs: [['orders', '주문', newOrders], ['returns', '반품', counts?.returns_requested ?? 0]] },
     { key: 'products', label: '상품', icon: ICONS.products, tabs: [['products', '상품 관리', pending + (counts?.auto_unchecked ?? 0)], ['items', '품목 검수', counts?.pending_items ?? 0], ['sellers', '판매자 승인', counts?.pending_sellers ?? 0]] },
     { key: 'customers', label: '손님', icon: ICONS.customers, tabs: [['inbox', '문의함', waiting], ['reviews', '후기', 0], ['chat', '상담 기록', 0]] },
-    { key: 'site', label: '홈페이지', icon: ICONS.site, tabs: [['site', '홈페이지 관리', 0], ['posts', '공지·언론', 0]] },
+    { key: 'site', label: '홈페이지', icon: ICONS.site, tabs: [['site', '홈페이지 관리', 0], ['posts', '게시판', 0]] },
   ]
   // 자주 안 쓰는 설정·기록은 맨 아래 [설정] 하나로
   const SETTINGS = { key: 'settings', label: '설정', icon: ICONS.settings, tabs: [['settings', '쇼핑몰 설정', 0], ['staff', '관리자 계정', 0], ['mail', '알림 기록', 0], ['access', '접속 기록', 0], ['banned', '금지어', 0]] }
