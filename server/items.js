@@ -4,7 +4,10 @@ import { randomBytes } from 'node:crypto'
 import { findBanned } from './banned.js'
 import { BRIX_SOURCE, OFFICIAL, readStandards } from './brix.js'
 import { pool } from './db.js'
+import { createLimiter } from './limit.js'
 
+// 새 품목 요청: 계정마다 1시간에 10번 (품목 목록을 채우거나 AI 사진 몫을 혼자 쓰지 못하게, 2026-11-11 보안 점검)
+const tooManyRequests = createLimiter({ limit: 10, windowMs: 60 * 60_000, key: (req) => `item-request:${(req.admin ?? req.seller).loginId}` })
 const CATEGORIES = ['과일', '채소', '가공품']
 const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
 const textList = (v, maxItems, maxLength) => (Array.isArray(v) ? v.map((s) => text(s, maxLength)).filter(Boolean).slice(0, maxItems) : [])
@@ -19,6 +22,7 @@ export async function requestItem(req, res) {
   if (findBanned(name).length) return res.status(400).json({ error: '품목 이름에 쓸 수 없는 표현이 있어요.' })
   const same = await pool.query('SELECT * FROM items WHERE name = $1', [name])
   if (same.rowCount) return res.json({ item: same.rows[0], existed: true })
+  if (tooManyRequests(req)) return res.status(429).json({ error: '새 품목을 너무 많이 요청했어요. 1시간 뒤에 다시 해 주세요.' })
   const who = req.seller ? req.seller.sellerCode : `admin:${req.admin.loginId}`
   const { rows } = await pool.query(
     `INSERT INTO items (item_code, name, category, show_brix, stage1_uses, stage2_uses, stage3_uses, allergens, danger_signs, recipes, status, requested_by, brix_standards, brix_standard_source)

@@ -3,13 +3,17 @@
 import { notifyAnswer } from './inquiry.js'
 import express from 'express'
 import { checkOptions, codeSets, insertProduct, itemRanges, noticeProblem, rawImage, recordChanges, removeImage, stoppedNote, storeImage, updateProduct } from './admin.js'
-import { requireSeller } from './auth.js'
+import { writeAccessLog } from './accessLog.js'
+import { hashPassword, issueStaffSession, passwordMatches, requireSeller, reserveAttempt, undoAttempt } from './auth.js'
 import { bannedMessage, findBanned } from './banned.js'
 import { fillItem, listTemplates, productDraft } from './content.js'
 import { pool } from './db.js'
+import { maskName } from './inquiry.js'
 import { requestItem } from './items.js'
-import { ALL_OPTIONS_SQL, saveOptions } from './options.js'
+import { ALL_OPTIONS_SQL, currentOptions, saveOptions } from './options.js'
+import { openQuestion } from './pii.js'
 import { submitProduct } from './sellers.js'
+import { passwordProblem } from './staff.js'
 import { validateProduct } from './validate.js'
 
 export const sellerRouter = express.Router()
@@ -37,6 +41,41 @@ function nextStatus(requested, current) {
   if (requested === 'draft') return 'draft'
   if (current === 'active') return 'active'
   return 'pending'
+}
+
+// 승인받은 뒤 상품 내용을 바꾸면 다시 확인한다: 승인받은 상품을 다른 상품으로 바꿔치기하지 못하게 (2026-11-11 보안 점검)
+// 재고·가격·당도·수확일처럼 늘 바뀌는 값은 바로 반영되고 수정 이력에 남는다
+const REVIEWED_FIELDS = ['name', 'item_code', 'unit', 'summary', 'description', 'weight_g', 'count_per_box']
+const same = (a, b) => String(a ?? '').trim() === String(b ?? '').trim()
+async function contentChanged(current, product) {
+  if (REVIEWED_FIELDS.some((key) => !same(current[key], product[key]))) return true
+  if (!product.options) return false
+  // 새 이름의 옵션이 생기거나 이름이 바뀌면 다시 본다 (판매 중지·삭제는 품절처럼 바로 반영)
+  const before = new Set((await currentOptions(current.product_code)).map((o) => o.name))
+  return product.options.some((o) => !before.has(o.name))
+}
+
+// 내용이 바뀐 판매 중 상품을 검토로 돌린다. 믿을 만한 농가면 자동 승인 규칙대로 바로 판매되고 관리자 목록에 '확인 전'으로 남는다
+async function sendBackToReview(product) {
+  const { rows } = await pool.query("UPDATE products SET status = 'pending', auto_approved_at = NULL, auto_checked_at = NULL, updated_at = now() WHERE product_code = $1 AND status = 'active' RETURNING *", [product.product_code])
+  if (!rows[0]) return { product, reasons: [] }
+  const result = await submitProduct(rows[0])
+  if (result.product.status !== 'pending') return result
+  const reasons = ['승인 뒤 상품 내용이 바뀌었어요', ...result.reasons]
+  const updated = await pool.query('UPDATE products SET review_reason = $2 WHERE product_code = $1 RETURNING *', [product.product_code, reasons.join(' / ')])
+  return { product: updated.rows[0], reasons }
+}
+
+// 판매 중 상품의 대표·상세 사진을 바꿔도 같게 (당도계 사진은 당도처럼 바로 반영)
+function recheckPhotos(req, res, next) {
+  if (req.query.role !== 'brix') {
+    req.afterPhoto = async (row) => {
+      if (row.status !== 'active') return row
+      await pool.query('INSERT INTO product_changes (product_code, field, new_value, changed_by) VALUES ($1, $2, $3, $4)', [row.product_code, '사진', row.image_url, `판매자 ${req.seller.loginId}`])
+      return (await sendBackToReview(row)).product
+    }
+  }
+  next()
 }
 
 // 판매자 첫 화면의 [오늘 할 일]: 내 농가 몫만 센다. 여러 농가 주문은 농가 배송(order_shipments) 기준이라 관리자 대시보드와 같다
@@ -69,6 +108,23 @@ sellerRouter.get('/summary', async (req, res) => {
 sellerRouter.get('/me', async (req, res) => {
   const { rows } = await pool.query('SELECT seller_code, name, region, intro, story, status, reject_note FROM sellers WHERE seller_code = $1', [mine(req)])
   res.json({ loginId: req.seller.loginId, role: 'seller', seller: rows[0], mfa: Boolean(req.seller.mfa) })
+})
+
+// 내 비밀번호 바꾸기 {myPassword, password}: 바꾸면 다른 곳의 로그인은 끊기고 이 브라우저는 이어 간다 (2026-11-11 보안 점검)
+sellerRouter.post('/password', async (req, res) => {
+  const problem = passwordProblem(req.body?.password, req.seller.loginId)
+  if (problem) return res.status(400).json({ error: problem })
+  const key = `reauth:${req.seller.loginId}`
+  if (!reserveAttempt(key, req.ip)) return res.status(429).json({ error: '비밀번호를 여러 번 틀렸어요. 10분 뒤에 다시 해 주세요.' })
+  const { rows } = await pool.query('SELECT * FROM admins WHERE id = $1', [req.seller.id])
+  const given = typeof req.body?.myPassword === 'string' ? req.body.myPassword.slice(0, 200) : ''
+  if (!(await passwordMatches(given, rows[0]?.password_hash))) return res.status(401).json({ error: '지금 비밀번호가 맞지 않아요.' })
+  undoAttempt(key, req.ip)
+  if (await passwordMatches(req.body.password, rows[0].password_hash)) return res.status(400).json({ error: '지금 비밀번호와 다른 비밀번호로 정해 주세요.' })
+  const updated = await pool.query('UPDATE admins SET password_hash = $2, session_version = session_version + 1 WHERE id = $1 RETURNING *', [rows[0].id, await hashPassword(req.body.password)])
+  issueStaffSession(res, updated.rows[0])
+  writeAccessLog({ loginId: req.seller.loginId, role: 'seller', action: 'password_change', ip: req.ip })
+  res.json({ ok: true })
 })
 
 sellerRouter.patch('/profile', async (req, res) => {
@@ -126,6 +182,7 @@ sellerRouter.patch('/products/:code', ownProduct, async (req, res) => {
   const status = nextStatus(req.body.status ?? current.status, current.status)
   // 다시 검토를 요청하면 반려 사유는 지운다. 그 밖에는 관리자가 남긴 사유를 그대로 둔다
   const reviewNote = status === 'pending' ? null : current.review_note
+  const wasSelling = current.status === 'active' && status === 'active'
   const merged = { ...current, ...req.body, product_code: current.product_code, seller_code: mine(req), status, review_note: reviewNote }
   const { product, errors } = validateProduct(merged, { ...(await codeSets()), isNew: false, itemRanges: await itemRanges() })
   if (errors) return res.status(400).json({ error: errors.join(' '), errors })
@@ -135,6 +192,7 @@ sellerRouter.patch('/products/:code', ownProduct, async (req, res) => {
   }
   const checked = await checkOptions(current.product_code, product)
   if (checked.error) return res.status(400).json({ error: checked.error, errors: [checked.error] })
+  const needsReview = wasSelling && await contentChanged(current, product) // 옵션을 저장하기 전에 비교한다
   await recordChanges(current, product, `판매자 ${req.seller.loginId}`, checked.changes)
   await updateProduct(current.product_code, product)
   const saved = await saveOptions(current.product_code, product.options) // 옵션 저장, 상품 가격·재고를 옵션에 맞추기
@@ -145,8 +203,14 @@ sellerRouter.patch('/products/:code', ownProduct, async (req, res) => {
   if ((brixOf(current.brix) !== brixOf(product.brix) || (current.variety ?? '') !== (product.variety ?? '')) && current.brix_photo_url) {
     row = { ...row, ...(await pool.query('UPDATE products SET brix_photo_url = NULL WHERE product_code = $1 RETURNING *', [current.product_code])).rows[0] }
   }
-  console.log(`[seller] ${req.seller.loginId} 상품 수정 ${current.product_code} (${current.status} → ${status})`)
-  res.json({ ...row, saved_note: stoppedNote(saved.stopped) })
+  let reviewNoteText = ''
+  if (needsReview) {
+    const { product: reviewed, reasons } = await sendBackToReview(row)
+    row = { ...row, ...reviewed }
+    reviewNoteText = reviewed.status === 'active' ? ' (상품 내용이 바뀌어 회사가 나중에 확인해요)' : ` (상품 내용이 바뀌어 회사가 확인한 뒤 다시 판매돼요: ${reasons.join(' / ')})`
+  }
+  console.log(`[seller] ${req.seller.loginId} 상품 수정 ${current.product_code} (${current.status} → ${row.status})`)
+  res.json({ ...row, saved_note: `${stoppedNote(saved.stopped)}${reviewNoteText}` })
 })
 
 // 사진까지 올린 뒤 검토 요청: 믿을 만한 농가의 문제없는 상품은 바로 판매, 아니면 관리자 검토 대기 (이유를 돌려준다)
@@ -158,8 +222,11 @@ sellerRouter.post('/products/:code/submit', ownProduct, async (req, res) => {
   res.json({ ...product, reasons })
 })
 
-sellerRouter.post('/products/:code/image', ownProduct, rawImage, storeImage)
-sellerRouter.delete('/products/:code/image', ownProduct, removeImage)
+sellerRouter.post('/products/:code/image', ownProduct, recheckPhotos, rawImage, storeImage)
+sellerRouter.delete('/products/:code/image', ownProduct, recheckPhotos, removeImage)
+
+// 판매자에게는 이름 첫 글자만 (회원은 실명이 들어가서, 2026-11-11 보안 점검)
+const forSeller = (q) => ({ ...q, author: maskName(openQuestion(q).author) })
 
 // 내 상품에 달린 질문 (연락처는 회사만 본다)
 sellerRouter.get('/questions', async (req, res) => {
@@ -168,7 +235,7 @@ sellerRouter.get('/questions', async (req, res) => {
     FROM questions q JOIN products p ON p.product_code = q.product_code
     WHERE p.seller_code = $1 AND NOT q.hidden
     ORDER BY (q.answer IS NULL) DESC, q.created_at DESC`, [mine(req)])
-  res.json(rows)
+  res.json(rows.map(forSeller))
 })
 
 sellerRouter.patch('/questions/:id', async (req, res) => {
@@ -187,5 +254,5 @@ sellerRouter.patch('/questions/:id', async (req, res) => {
   if (!rows.length) return res.status(404).json({ error: '내 상품 질문 중에서 찾지 못했어요.' })
   console.log(`[seller] ${req.seller.loginId} 질문 #${rows[0].id} 답변`)
   notifyAnswer(rows[0].id).catch((e) => console.error(`[qna] 답변 알림 실패 · ${e.message}`))
-  res.json(rows[0])
+  res.json(forSeller(rows[0]))
 })

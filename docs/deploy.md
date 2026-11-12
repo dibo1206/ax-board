@@ -62,7 +62,7 @@ npm run admin-2fa -- <관리자 아이디>
 | `PROXY_SECRET` | 비워도 됨 | `npm start`(배포 모드)는 이 서버가 맨 앞이라 검사하지 않음 |
 | `TOSS_CLIENT_KEY`, `TOSS_SECRET_KEY` | 라이브 키 | 운영에서 테스트 키(`test_…`)면 돈 없이 결제 완료가 되어 주문을 받지 않음 |
 | `ALLOW_TEST_PAYMENTS` | 오픈 전 리허설 때만 `1`, 끝나면 지우기 | 운영에서 테스트 키로 주문 시험 |
-| `REQUIRE_2FA` | 비워 두기 | 운영에서는 기본으로 필수. `0`을 넣어야만 꺼짐. 켜기 전에 `npm run admin-2fa -- 아이디`로 등록 |
+| `REQUIRE_2FA` | 비워 두기 | 운영에서는 기본으로 필수. `0`을 넣어야만 꺼짐. 계정을 만든 뒤 3일(판매자는 승인 뒤 7일) 안에 처음 로그인하면서 등록한다. 기간이 지나면 관리자 화면에서 다시 연다 |
 | `ADMIN_ALLOWED_IPS` | 회사 사무실 IP | 관리자 화면은 사무실에서만 |
 | `SMTP_*`, `MAIL_FROM`, `ADMIN_EMAIL` | 회사 메일 계정 | 주문·문의 알림 |
 | `AI_DAILY_LIMIT` | 상황에 맞게 (0이면 AI 끄기) | 상담은 대부분 AI 없이 답함 |

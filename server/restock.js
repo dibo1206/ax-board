@@ -15,7 +15,7 @@ import { pool } from './db.js'
 import { createLimiter } from './limit.js'
 import { publicUrl, queueMail } from './mailer.js'
 
-const isEmail = (v) => /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(v)
+const isEmail = (v) => v.length <= 254 && /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(v)
 const tokenHash = (token) => createHash('sha256').update(String(token)).digest('hex')
 const label = (name) => String(name ?? '').replace(/\[예시\]\s*/g, '')
 

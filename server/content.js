@@ -21,6 +21,9 @@ export const TEMPLATES = {
 
 const CACHE_DAYS = 30
 const tooMany = createLimiter({ limit: 20, windowMs: 60 * 60_000, key: (req) => `content:${(req.admin ?? req.seller)?.loginId}` })
+const tooManyFills = createLimiter({ limit: 20, windowMs: 60 * 60_000, key: (req) => `fill:${(req.admin ?? req.seller)?.loginId}` })
+// 판매자 한 곳이 하루 AI 사진 몫을 혼자 쓰지 못하게 (품목 3개 몫)
+const tooManySellerPhotos = createLimiter({ limit: 3, windowMs: 24 * 3_600_000, key: (req) => `fill-photos:${req.seller?.loginId}` })
 const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : v == null ? '' : String(v).trim().slice(0, max))
 const empty = (v) => v == null || v === '' || (Array.isArray(v) && v.length === 0)
 
@@ -135,7 +138,7 @@ async function readCache(key) {
 // POST /ai/product-draft (관리자·판매자 공통). 판매자는 seller_code 를 자기 농가로 고정
 export async function productDraft(req, res) {
   const sellerCode = req.seller ? req.seller.sellerCode : text(req.body.seller_code, 64)
-  const template = TEMPLATES[req.body.template] ? req.body.template : 'story'
+  const template = Object.hasOwn(TEMPLATES, req.body.template ?? '') ? req.body.template : 'story'
   const input = await buildInput(req.body, sellerCode)
   if (input.error) return res.status(400).json({ error: input.error })
 
@@ -197,6 +200,7 @@ export async function fillItem(req, res) {
   if (!item) return res.status(404).json({ error: '품목을 찾지 못했어요.' })
   // 품목 정보는 여러 농가가 함께 쓰고 손님 화면·상담에 그대로 나간다. 판매자는 자기가 요청한 검수 전 품목만 채운다 (검수 때 관리자가 본다)
   if (req.seller && !(item.status === 'pending' && item.requested_by === req.seller.sellerCode)) return res.json({ filled: 0, item })
+  if (tooManyFills(req)) return res.status(429).json({ error: '너무 많이 요청했어요. 1시간 뒤에 다시 해 주세요.' })
   const b = req.body ?? {}
   const sets = []
   const params = [item.item_code]
@@ -206,7 +210,7 @@ export async function fillItem(req, res) {
   if (empty(item.danger_signs) && Array.isArray(b.danger_signs)) add('danger_signs', b.danger_signs.slice(0, 5).map((s) => text(s, 30)).filter(Boolean))
   let newRecipes = []
   if (empty(item.recipes) && Array.isArray(b.recipes)) {
-    newRecipes = b.recipes.slice(0, 3).map((r) => ({ title: text(r?.title, 30), ingredients: text(r?.ingredients, 60), method: text(r?.method, 120), photo: text(r?.photo, 400) })).filter((r) => r.title && r.method)
+    newRecipes = b.recipes.slice(0, 3).map((r) => ({ title: text(r?.title, 30), ingredients: text(r?.ingredients, 60), method: text(r?.method, 120), photo: PHOTO_HINT.test(text(r?.photo, 400)) ? text(r?.photo, 400) : '' })).filter((r) => r.title && r.method)
     add('recipes', JSON.stringify(newRecipes.map(({ photo: _photo, ...r }) => r)))
   }
   const banned = findBanned(JSON.stringify(params.slice(1)))
@@ -215,8 +219,9 @@ export async function fillItem(req, res) {
   const updated = await pool.query(`UPDATE items SET ${sets.join(', ')} WHERE item_code = $1 RETURNING *`, params)
   console.log(`[content] ${(req.admin ?? req.seller).loginId} 품목 ${item.item_code} 빈 칸 ${sets.length}개 채움`)
   // 레시피가 새로 생기면 사진도 만든다 (한 장에 몇 초라 응답은 기다리지 않고 뒤에서. 키가 없으면 기본 그림 그대로)
-  if (newRecipes.length && imageKeyLoaded()) photosInBackground(item.item_code, item.name, newRecipes)
-  res.json({ filled: sets.length, item: updated.rows[0], photos: newRecipes.length && imageKeyLoaded() ? 'making' : 'off' })
+  const makePhotos = newRecipes.length > 0 && imageKeyLoaded() && !(req.seller && tooManySellerPhotos(req))
+  if (makePhotos) photosInBackground(item.item_code, item.name, newRecipes)
+  res.json({ filled: sets.length, item: updated.rows[0], photos: makePhotos ? 'making' : 'off' })
 }
 
 // 사진이 없는 레시피마다 사진을 만들어 붙인다. 그 사이 관리자가 레시피를 고쳤으면(제목이 다르면) 그 칸은 건드리지 않는다

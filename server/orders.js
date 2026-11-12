@@ -346,7 +346,7 @@ function readOrderInput(body) {
   if (!input.address1 || input.address1.length > 100) errors.push('주소를 넣어 주세요.')
   if (input.address2.length > 60) errors.push('상세 주소는 60자 안으로 적어 주세요.')
   if (input.memo.length > 100) errors.push('배송 메모는 100자 안으로 적어 주세요.')
-  if (input.email && !/^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(input.email)) errors.push('알림 받을 이메일을 확인해 주세요.')
+  if (input.email && (input.email.length > 254 || !/^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(input.email))) errors.push('알림 받을 이메일을 확인해 주세요.')
   const sensitive = findSensitive(input.buyerName, input.receiverName, input.address1, input.address2, input.memo)
   if (sensitive) errors.push(SENSITIVE_MESSAGE(sensitive))
   if (body.agreeTerms !== true || body.agreePrivacy !== true) errors.push('구매 조건 확인과 개인정보 수집·이용에 동의해 주세요.')

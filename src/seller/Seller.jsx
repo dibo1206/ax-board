@@ -306,6 +306,42 @@ function MyReturns({ onMessage, onError }) {
   )
 }
 
+// 내 비밀번호 바꾸기: 바꾸면 다른 곳의 로그인은 끊기고 이 화면은 그대로 이어져요
+function ChangePassword() {
+  const [form, setForm] = useState({ my: '', pw: '', again: '' })
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const set = (key) => (e) => setForm({ ...form, [key]: e.target.value })
+
+  async function save(event) {
+    event.preventDefault()
+    setError('')
+    setMessage('')
+    try {
+      await sellerApi('/password', { method: 'POST', body: { myPassword: form.my, password: form.pw } })
+      setForm({ my: '', pw: '', again: '' })
+      setMessage('비밀번호를 바꿨어요. 다른 곳에서 로그인한 화면은 로그아웃됐어요.')
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  return (
+    <form className="box form" onSubmit={save}>
+      <h3>비밀번호 바꾸기</h3>
+      <label>지금 비밀번호<input type="password" value={form.my} onChange={set('my')} autoComplete="current-password" /></label>
+      <div className="row">
+        <label>새 비밀번호<input type="password" value={form.pw} onChange={set('pw')} autoComplete="new-password" placeholder="10자 이상, 영문·숫자·기호 중 두 가지 이상" /></label>
+        <label>한 번 더<input type="password" value={form.again} onChange={set('again')} autoComplete="new-password" /></label>
+      </div>
+      <p className="muted">비밀번호를 잊었거나 휴대폰을 잃어버렸으면 회사 담당자에게 연락해 주세요.</p>
+      {message && <p className="success">{message}</p>}
+      {error && <p className="error">{error}</p>}
+      <button type="submit" className="button" disabled={!form.my || !form.pw || form.pw !== form.again}>바꾸기</button>
+    </form>
+  )
+}
+
 function Profile({ seller, onSaved, onError }) {
   const [intro, setIntro] = useState(seller.intro ?? '')
   const [story, setStory] = useState(seller.story ?? '')
@@ -412,7 +448,7 @@ export default function Seller() {
 
   const go = (next, list = null) => { setTab(next); setFilter(list); setMessage(''); setError(''); loadSummary() }
   const t = summary ?? {}
-  const TABS = [['home', '오늘 할 일', 0], ['products', '내 상품', t.rejected], ['orders', '주문', (t.to_prepare ?? 0) + (t.to_ship ?? 0)], ['questions', '상품 문의', t.questions_waiting], ['returns', '반품', t.returns_waiting], ['profile', '농가 소개', 0]]
+  const TABS = [['home', '오늘 할 일', 0], ['products', '내 상품', t.rejected], ['orders', '주문', (t.to_prepare ?? 0) + (t.to_ship ?? 0)], ['questions', '상품 문의', t.questions_waiting], ['returns', '반품', t.returns_waiting], ['profile', '농가 소개·계정', 0]]
   return (
     <section className={bigText ? 'seller-big' : undefined}>
       <div className="admin-head">
@@ -454,11 +490,14 @@ export default function Seller() {
       {tab === 'orders' && <MyOrders key={filter ?? 'all'} initialFilter={filter ?? 'all'} onMessage={setMessage} onError={setError} />}
       {tab === 'returns' && <MyReturns onMessage={setMessage} onError={setError} />}
       {tab === 'profile' && (
-        <Profile
-          seller={me.seller}
-          onError={setError}
-          onSaved={(seller) => { setMe((prev) => ({ ...prev, seller })); setMessage('농가 소개를 저장했어요') }}
-        />
+        <>
+          <Profile
+            seller={me.seller}
+            onError={setError}
+            onSaved={(seller) => { setMe((prev) => ({ ...prev, seller })); setMessage('농가 소개를 저장했어요') }}
+          />
+          <ChangePassword />
+        </>
       )}
     </section>
   )

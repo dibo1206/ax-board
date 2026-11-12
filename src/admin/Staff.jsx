@@ -70,10 +70,12 @@ function MyAccount({ me, twoFactorRequired, onChanged }) {
           {!setup ? (
             <>
               <MyPassword value={form.my} onChange={set('my')} />
+              {me.mfa && <label>지금 쓰는 인증 앱 코드 (6자리)<input value={form.code} onChange={(e) => set('code')(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" /></label>}
+              {me.mfa && <p className="muted">휴대폰을 잃어버렸으면 다른 관리자에게 [2단계 인증 풀기]를 부탁해 주세요.</p>}
               <div className="actions">
-                <button type="button" className="button" disabled={!form.my} onClick={async () => {
+                <button type="button" className="button" disabled={!form.my || (me.mfa && form.code.length !== 6)} onClick={async () => {
                   setError('')
-                  try { setSetup(await adminApi('/staff/me/2fa/start', { method: 'POST', body: { myPassword: form.my } })) } catch (e) { setError(e.message) }
+                  try { setSetup(await adminApi('/staff/me/2fa/start', { method: 'POST', body: { myPassword: form.my, code: form.code } })); set('code')('') } catch (e) { setError(e.message) }
                 }}>등록 키 받기</button>
                 <button type="button" className="link" onClick={() => setMode(null)}>닫기</button>
               </div>
@@ -141,7 +143,7 @@ function OtherRow({ account, onChanged }) {
         <td>{day(account.last_login)}</td>
         <td className="actions">
           <button type="button" className="link" onClick={() => open('password')}>비밀번호 다시 정하기</button>
-          {account.mfa && <button type="button" className="link" onClick={() => open('2fa')}>2단계 인증 풀기</button>}
+          <button type="button" className="link" onClick={() => open('2fa')}>{account.mfa ? '2단계 인증 풀기' : '2단계 인증 등록 다시 열기'}</button>
           <button type="button" className="link danger" onClick={() => open('delete')}>지우기</button>
         </td>
       </tr>
@@ -151,12 +153,12 @@ function OtherRow({ account, onChanged }) {
             <div className="site-row form">
               {mode === 'password' && <><p className="muted">{account.login_id}님은 지금 로그인한 곳에서 로그아웃돼요. 새 비밀번호는 직접 전하고, 로그인한 뒤 [내 계정]에서 바꾸게 해 주세요.</p>
                 <NewPassword value={form.pw} again={form.again} onChange={set('pw')} onAgain={set('again')} label={`${account.login_id}의 새 비밀번호`} /></>}
-              {mode === '2fa' && <p className="muted">휴대폰을 잃어버렸을 때만 풀어 주세요. {account.login_id}님은 다음 로그인 때 다시 등록해요.</p>}
+              {mode === '2fa' && <p className="muted">{account.mfa ? '휴대폰을 잃어버렸을 때만 풀어 주세요. ' : '등록 기간이 지났을 때 다시 열어요. '}{account.login_id}님은 3일 안에 로그인하면서 등록해요.</p>}
               {mode === 'delete' && <p className="muted">{account.login_id} 계정을 지우면 되돌릴 수 없어요. 접속 기록은 남아요.</p>}
               <MyPassword value={form.my} onChange={set('my')} />
               <div className="actions">
                 {mode === 'password' && <button type="button" className="button" disabled={!form.my || !form.pw || form.pw !== form.again} onClick={() => run('/password', { myPassword: form.my, password: form.pw }, `${account.login_id}의 비밀번호를 다시 정했어요.`)}>정하기</button>}
-                {mode === '2fa' && <button type="button" className="button" disabled={!form.my} onClick={() => run('/2fa/reset', { myPassword: form.my }, `${account.login_id}의 2단계 인증을 풀었어요.`)}>풀기</button>}
+                {mode === '2fa' && <button type="button" className="button" disabled={!form.my} onClick={() => run('/2fa/reset', { myPassword: form.my }, `${account.login_id}의 2단계 인증 등록을 열었어요. 3일 안에 등록해야 해요.`)}>{account.mfa ? '풀기' : '열기'}</button>}
                 {mode === 'delete' && <button type="button" className="button danger" disabled={!form.my} onClick={() => run('/delete', { myPassword: form.my }, `${account.login_id} 계정을 지웠어요.`)}>지우기</button>}
                 <button type="button" className="link" onClick={() => setMode(null)}>닫기</button>
               </div>
@@ -186,7 +188,7 @@ function AddAdmin({ onAdded }) {
   return (
     <div className="box form">
       <h3>관리자 추가</h3>
-      <p className="muted">새 관리자는 처음 로그인할 때 2단계 인증을 등록하고(필수인 서버), [내 계정]에서 비밀번호를 바꾸게 해 주세요. 판매 농가 계정은 [판매자 승인]에서 만들어져요.</p>
+      <p className="muted">새 관리자는 3일 안에 처음 로그인하면서 2단계 인증을 등록하고(필수인 서버), [내 계정]에서 비밀번호를 바꾸게 해 주세요. 판매 농가 계정은 [판매자 승인]에서 만들어져요.</p>
       <label>아이디<em className="req">*</em><input value={form.id} onChange={(e) => set('id')(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20))} placeholder="영문 소문자·숫자·밑줄 3~20자" autoComplete="off" /></label>
       <NewPassword value={form.pw} again={form.again} onChange={set('pw')} onAgain={set('again')} label="처음 비밀번호" />
       <MyPassword value={form.my} onChange={set('my')} />

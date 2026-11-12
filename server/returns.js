@@ -51,7 +51,7 @@ async function requestReturn(order, body, requestedBy) {
   const reasonType = text(body.reasonType)
   const reason = text(body.reason)
   const errors = []
-  if (!RETURNS.reasons[reasonType]) errors.push('반품 사유 종류를 골라 주세요.')
+  if (!Object.hasOwn(RETURNS.reasons, reasonType)) errors.push('반품 사유 종류를 골라 주세요.')
   if (reason.length < 5 || reason.length > 500) errors.push('반품 사유를 5~500자로 적어 주세요.')
   const sensitive = findSensitive(reason)
   if (sensitive) errors.push(SENSITIVE_MESSAGE(sensitive))

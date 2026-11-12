@@ -23,7 +23,8 @@ import { publicItem } from './items.js'
 import { GRADE_LABEL } from './brix.js'
 import { checkDataKey } from './crypto.js'
 import { orderingOpen, paymentMode } from './payments.js'
-import { encryptExisting } from './pii.js'
+import { encryptExisting, openQuestion } from './pii.js'
+import { startRetention } from './retention.js'
 import { buildNotice } from './notice.js'
 import { ACTIVE_OPTIONS_SQL } from './options.js'
 import { adminOrderRouter, KOREA_TODAY, memberOrderRouter, publicOrderRouter, sellerOrderRouter, startOrderSweeper } from './orders.js'
@@ -54,6 +55,11 @@ try {
   process.exit(1)
 }
 const SERVE = process.argv.includes('--serve') // 배포 모드: 화면까지 이 서버가 보낸다
+// NODE_ENV 를 빠뜨리면 가짜 결제·시험 로그인이 켜지고 2단계 인증·Secure 쿠키가 꺼진다 → 배포 모드는 켜지 않는다 (2026-11-11 보안 점검)
+if (SERVE && process.env.NODE_ENV !== 'production') {
+  console.error('[server] 배포 모드(npm start)는 NODE_ENV=production 이 있어야 켜져요. 없으면 가짜 결제와 시험 로그인이 켜져서 위험해요. 예: NODE_ENV=production npm start')
+  process.exit(1)
+}
 if (process.env.NODE_ENV === 'production' && !process.env.ADMIN_ALLOWED_IPS) {
   console.warn('[server] ADMIN_ALLOWED_IPS 가 없어서 관리자 로그인이 인터넷 전체에 열려 있어요. 회사 IP를 넣어 주세요')
 }
@@ -77,10 +83,11 @@ app.use((req, res, next) => {
 // 글자로 된 응답(화면 파일·상품 목록 JSON)은 압축해서 보낸다 (사진은 이미 압축돼 있어 그대로)
 app.use(compression())
 // 손님 IP(글 남기기 횟수 제한용)는 앞단 프록시가 붙인 값만 믿는다. 개발: Vite 1단, 배포 시 프록시 수에 맞게 TRUST_PROXY_HOPS
-// 배포 모드(--serve)에서 값을 안 적었으면 0: 앞에 nginx 가 없을 때 손님이 X-Forwarded-For 를 써서 IP를 속이고
-// 로그인 잠금·관리자 IP 제한·AI 하루 몫을 피하지 못하게 (nginx 뒤라면 .env 에 TRUST_PROXY_HOPS=1, docs/deploy.md)
+// 이 서버는 127.0.0.1 에서만 받으므로 손님은 항상 앞단(nginx·Vite) 한 단을 거친다 → 값을 안 적으면 1 (2026-11-11 보안 점검).
+// 전에는 배포 모드 기본이 0이라, 값을 빠뜨리면 모든 손님이 127.0.0.1 한 명으로 잡혀 주문 횟수 제한·로그인 잠금을 다 같이 맞았다.
+// 앞단이 둘이면(CDN + nginx) 2, 앞단 없이 이 컴퓨터에서만 쓰면 0
 const hops = process.env.TRUST_PROXY_HOPS
-app.set('trust proxy', hops !== undefined && hops !== '' ? Number(hops) : SERVE ? 0 : 1)
+app.set('trust proxy', hops !== undefined && hops !== '' ? Number(hops) : 1)
 app.disable('x-powered-by')
 
 // 기본 보안 헤더: 파일 종류를 바꿔 해석하지 않기, 다른 사이트의 틀(iframe) 안에 넣지 않기
@@ -153,6 +160,12 @@ app.use('/api', (req, res, next) => {
   }
   if (host && (host === req.host || host === OWN_HOST)) return next()
   res.status(403).json({ error: '허용되지 않은 요청이에요.' })
+})
+
+// 로그인한 사람의 응답(주문·배송지·관리자 화면)은 브라우저·중간 서버에 남기지 않는다
+app.use(['/api/account', '/api/admin', '/api/seller', '/api/orders'], (req, res, next) => {
+  res.set('Cache-Control', 'private, no-store')
+  next()
 })
 
 // 무언가 바뀌면(관리자·판매자 수정, 주문, 후기·문의 남기기) 기억해 둔 상품 목록·상세를 지운다. AI 상담은 상품을 바꾸지 않아서 뺀다
@@ -380,7 +393,7 @@ async function loadProductDetail(code) {
     item: publicItem(item.rows[0]), // 검수 전 품목은 보관·안전 정보를 빼고 보낸다
     seller: seller.rows[0],
     // 비밀글은 글쓴이 첫 글자와 답변 여부만 (이 상세는 모두에게 같은 캐시). 내용은 쓴 회원만 /my-questions 로 받는다
-    questions: questions.rows.map((q) => (q.is_private
+    questions: questions.rows.map(openQuestion).map((q) => (q.is_private
       ? { id: q.id, author: maskName(q.author), is_private: true, question: null, answer: null, answered: Boolean(q.answer), created_at: q.created_at, answered_at: q.answered_at }
       : { ...q, author: maskName(q.author) })),
   }
@@ -445,7 +458,8 @@ if (SERVE) await serveDist(app)
 app.use((error, req, res, _next) => {
   if (error.type === 'entity.too.large') return res.status(413).json({ error: '파일이 너무 커요. 사진은 2MB 이하만 올릴 수 있어요.' })
   if (error.type === 'entity.parse.failed') return res.status(400).json({ error: '보낸 내용을 읽지 못했어요.' })
-  if (error.status === 404) return res.status(404).json({ error: '없는 주소예요.' }) // 없는 화면 파일(/assets/...)
+  if ([403, 404].includes(error.status)) return res.status(404).json({ error: '없는 주소예요.' }) // 없는 화면 파일, 폴더 밖으로 나가려는 주소(/assets/../)
+  if (error.status >= 400 && error.status < 500) return res.status(error.status).json({ error: '보낸 내용을 처리하지 못했어요.' })
   if (isTransientDbError(error)) {
     // DB가 잠깐 끊기거나 느린 경우: 트랜잭션은 자동으로 되돌려졌으니 다시 시도하면 된다
     console.warn(`[server] ${req.method} ${req.path} · DB 연결 불안정 ${error.code ?? ''}`)
@@ -460,6 +474,7 @@ await encryptExisting()
 await loadSettings() // 관리자가 고친 사업자 정보·배송비·반품 기간·정책 글
 await loadBanned()
 startOrderSweeper()
+startRetention()
 const server = app.listen(PORT, '127.0.0.1', () => {
   console.log(`[server] http://127.0.0.1:${server.address().port}${SERVE ? ' (배포 모드: 화면 + API)' : ''}`)
   startRag()

@@ -14,7 +14,7 @@ const COOKIE = 'customer_session'
 const SESSION_DAYS = 14
 const text = (v) => (typeof v === 'string' ? v.trim() : '')
 const digits = (v) => text(v).replace(/[^0-9]/g, '')
-const isEmail = (v) => /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(v)
+const isEmail = (v) => v.length <= 254 && /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(v)
 const isMobile = (v) => /^01[016789]\d{7,8}$/.test(v)
 const sha256 = (v) => createHash('sha256').update(v).digest('hex')
 
@@ -103,7 +103,10 @@ accountRouter.post('/login', async (req, res) => {
   res.json(me(openCustomer(rows[0])))
 })
 
-accountRouter.post('/logout', (req, res) => {
+// 쿠키를 지우는 것에 더해 그 로그인 표 자체를 무효로 만든다 (복사된 표로 계속 쓰지 못하게, 2026-11-11 보안 점검). 이 계정의 다른 기기 로그인도 함께 끊긴다
+accountRouter.post('/logout', async (req, res) => {
+  const customer = await currentCustomer(req)
+  if (customer) await pool.query('UPDATE customers SET session_version = session_version + 1 WHERE id = $1', [customer.id]).catch((e) => console.error(`[account] 로그아웃 처리 실패 · ${e.message}`))
   setCookie(res, COOKIE, '', 0)
   res.status(204).end()
 })
