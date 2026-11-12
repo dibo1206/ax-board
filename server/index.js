@@ -71,6 +71,16 @@ if (process.env.NODE_ENV === 'production' && !process.env.PUBLIC_URL) {
 }
 // BACKEND_PORT: 시험 스크립트가 빈 포트(0)로 따로 띄울 때만 쓴다
 const PORT = process.env.BACKEND_PORT !== undefined ? Number(process.env.BACKEND_PORT) : Number(process.env.PORT) + (SERVE ? 0 : 100)
+// 받을 주소 (2026-11-12, 배포 준비). 기본은 이 컴퓨터 안(127.0.0.1)에서만 — 실습서버·nginx 뒤 운영 서버.
+// Railway 같은 배포 서비스는 서비스 앞단(프록시)이 컨테이너로 들어와야 해서 HOST=0.0.0.0 으로 바깥 주소에서도 받는다
+// (Railway 문서: 0.0.0.0 과 PORT 로 받아야 함). 앞단이 한 단이라 TRUST_PROXY_HOPS 기본 1 그대로 맞다.
+// 개발 모드(--serve 없이)는 PROXY_SECRET 으로 앞단 화면 서버만 믿는 구조라, 바깥 주소로 열면 공유 서버의 다른 사용자가 직접 들어올 수 있다 → 막는다
+const HOST = process.env.HOST?.trim() || '127.0.0.1'
+const LOOPBACK = ['127.0.0.1', 'localhost', '::1']
+if (!SERVE && !LOOPBACK.includes(HOST)) {
+  console.error(`[server] 개발 모드는 이 컴퓨터 안(127.0.0.1)에서만 받아요. HOST=${HOST} 는 배포 모드(npm start)에서만 쓸 수 있어요.`)
+  process.exit(1)
+}
 const app = express()
 
 // 끄는 중에는 새 요청을 받지 않는다 (처리 중인 요청은 마저 끝낸다)
@@ -475,8 +485,8 @@ await loadSettings() // 관리자가 고친 사업자 정보·배송비·반품 
 await loadBanned()
 startOrderSweeper()
 startRetention()
-const server = app.listen(PORT, '127.0.0.1', () => {
-  console.log(`[server] http://127.0.0.1:${server.address().port}${SERVE ? ' (배포 모드: 화면 + API)' : ''}`)
+const server = app.listen(PORT, HOST, () => {
+  console.log(`[server] http://${HOST}:${server.address().port}${SERVE ? ' (배포 모드: 화면 + API)' : ''}`)
   startRag()
 })
 

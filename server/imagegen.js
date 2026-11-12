@@ -6,8 +6,8 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import sharp from 'sharp'
 import { complete, keyLoaded } from './ai.js'
+import { UPLOAD_DIR } from './uploads.js'
 
-const UPLOAD_DIR = new URL('../uploads/', import.meta.url)
 const MODEL = '@cf/black-forest-labs/flux-1-schnell'
 const dailyLimit = () => Math.max(0, Number(process.env.IMAGE_DAILY_LIMIT || 30))
 let used = { day: '', count: 0 }
