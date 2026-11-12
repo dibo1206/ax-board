@@ -15,7 +15,9 @@ import { noticeMissing } from './notice.js'
 import { ALL_OPTIONS_SQL, currentOptions, optionPriceChanges, saveOptions } from './options.js'
 import { validateProduct } from './validate.js'
 
-export const UPLOAD_DIR = new URL('../uploads/', import.meta.url)
+import { UPLOAD_DIR } from './uploads.js'
+
+export { UPLOAD_DIR } // 올린 사진 폴더 (배포 때는 볼륨, server/uploads.js)
 export const IMAGE_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024
 

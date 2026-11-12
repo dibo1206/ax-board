@@ -562,6 +562,10 @@ npm run build && NODE_ENV=production npm start   # $PORT 에서 화면 + API 함
 ```
 `PUBLIC_URL`(https://도메인)을 꼭 넣는다. 클라우드 서버로 옮기는 방법(systemd, nginx + HTTPS, 백업, 열기 전 점검표): [docs/deploy.md](docs/deploy.md)
 
+**한 달 공개 데모 (Railway, 2026-11-12)**: 반복 작업·사진 저장·긴 AI 요청이 있어 서버리스 대신 상시 서버(Railway 앱 + Postgres + 볼륨)에 올린다.
+배포 서비스에서는 `HOST=0.0.0.0`으로 바깥 주소에서도 받고(배포 모드에서만 허용), 올린 사진은 볼륨(`RAILWAY_VOLUME_MOUNT_PATH/uploads` 또는 `UPLOAD_DIR`)에 둔다.
+순서·변수·DB 옮기기·확인표: [docs/deploy-railway.md](docs/deploy-railway.md) · 11/14 보고서 초안: [docs/deploy_test_report.md](docs/deploy_test_report.md)
+
 ### 계정 만들기
 ```bash
 npm run company-content                                     # 회사 실제 제품 11개와 공지·언론보도 넣기 (여러 번 해도 같다)
