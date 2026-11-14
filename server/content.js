@@ -4,9 +4,12 @@
 //  - 같은 원물(품목)의 보관법·레시피가 이미 있으면 그대로 쓰고, 비어 있을 때만 품목 초안도 만든다
 //  - 금지어(효능 표현 등)가 든 문장, 입력에 없는 숫자(가격·당도·무게)를 쓴 문장은 빼고 무엇을 뺐는지 알려 준다
 //  - 초안은 화면에 채워 주기만 한다. 판매자가 읽고 고친 뒤 저장해야 공개된다
+//  - 블록형 상세페이지 초안 (2026-11-14): 패턴의 섹션마다 글 블록을 쓰고, 사이사이에 "이런 사진을 넣어 주세요" 사진 자리를 제안한다.
+//    사진은 AI가 만들지 않는다 (농산물 상세 사진은 실물이어야 해서). 판매자가 자리마다 직접 찍은 사진을 고른다
 import { createHash } from 'node:crypto'
 import { complete, describeAiError, keyLoaded } from './ai.js'
 import { findBanned } from './banned.js'
+import { LIMITS, MAX_BLOCKS } from './blocks.js'
 import { pool } from './db.js'
 import { generateRecipePhoto, imageKeyLoaded } from './imagegen.js'
 import { createLimiter } from './limit.js'
@@ -100,7 +103,52 @@ function draftRecipe(r, allowed, flagged) {
 }
 const RECIPE_FORMAT = '{"title": "", "ingredients": "재료·재료", "method": "한 문장", "photo": "완성된 요리가 식탁에 놓인 모습을 영어 한 문장으로 (그릇, 색, 곁들임)"}'
 
-function parseDraft(raw, input, flagged) {
+// 블록 초안: 글 블록 { type: 'text', title, body } 과 사진 자리 { type: 'photo', hint }
+// 글은 상품 설명과 같은 검사(금지어·자료에 없는 숫자)를 거치고, 사진 자리 안내는 금지어만 본다
+const MAX_PHOTO_SLOTS = 4
+// 상세 화면 아래 칸(보관·섭취 안내, 판매 농가 이야기)과 자동 카드(구성 비교·배송)에 이미 나오는 섹션은 블록으로 쓰지 않는다 (같은 말이 두 번 보이지 않게)
+const SHOWN_ELSEWHERE = /보관|배송|대량 구매 문의/
+// 블록에는 가격을 쓰지 않는다: 가격을 바꿔도 블록 글은 그대로라 옛 값이 남고, 블록 글은 상담 자료에도 들어간다
+const PRICE = /\d[\d,]*\s*원/
+function withoutPrices(text, flagged) {
+  return text.split('\n').map((line) => line.split(/(?<=[.!?])\s+/).filter((sentence) => {
+    if (!PRICE.test(sentence)) return true
+    flagged.push(`블록에 가격(구매 칸에서 보여요): ${sentence.slice(0, 40)}`)
+    return false
+  }).join(' ')).join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+function draftBlocks(list, allowed, flagged) {
+  let photos = 0
+  const blocks = []
+  for (const b of Array.isArray(list) ? list.slice(0, MAX_BLOCKS) : []) {
+    if (b?.type === 'photo') {
+      const hint = cleanText(b.hint, allowed, flagged, 60, false)
+      if (hint && photos < MAX_PHOTO_SLOTS && blocks.at(-1)?.type !== 'photo') {
+        photos += 1
+        blocks.push({ type: 'photo', hint })
+      }
+    } else {
+      const title = cleanText(b?.title, allowed, flagged, LIMITS.title, false)
+      if (SHOWN_ELSEWHERE.test(title)) continue
+      const body = withoutPrices(cleanText(b?.body, allowed, flagged, LIMITS.body), flagged)
+      if (body) blocks.push({ type: 'text', title, body })
+    }
+  }
+  return blocks
+}
+
+// 모델이 blocks 를 빼먹으면 "■ 제목" 섹션으로 쓴 설명을 글 블록으로 나눈다 (사진 자리 없이)
+function blocksFromSections(description) {
+  return description.split(/\n{2,}/).map((para) => {
+    const [first, ...rest] = para.split('\n')
+    return /^■\s/.test(first) && rest.join(' ').trim()
+      ? { type: 'text', title: first.replace(/^■\s*/, '').slice(0, LIMITS.title), body: rest.join('\n').trim() }
+      : null
+  }).filter(Boolean)
+}
+
+// 시험(scripts/blocks-test.js)에서도 부른다
+export function parseDraft(raw, input, flagged) {
   const json = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1))
   const allowed = input.facts.map(([, v]) => v).join(' ').replace(/,/g, '') + ' 1 2 3 4 5'
   const draft = {
@@ -110,8 +158,10 @@ function parseDraft(raw, input, flagged) {
       q: cleanText(f?.q, allowed, flagged, 100),
       a: cleanText(f?.a, allowed, flagged, 300),
     })).filter((f) => f.q && f.a),
+    blocks: draftBlocks(json.blocks, allowed, flagged),
     item: null,
   }
+  if (!draft.blocks.length) draft.blocks = blocksFromSections(draft.description)
   if (input.needItem && json.item && typeof json.item === 'object') {
     const it = json.item
     draft.item = {
@@ -142,7 +192,7 @@ export async function productDraft(req, res) {
   const input = await buildInput(req.body, sellerCode)
   if (input.error) return res.status(400).json({ error: input.error })
 
-  const key = createHash('sha256').update(`content-v2\n${template}\n${JSON.stringify(input.facts)}\n${input.needItem}`).digest('hex')
+  const key = createHash('sha256').update(`content-v4\n${template}\n${JSON.stringify(input.facts)}\n${input.needItem}`).digest('hex')
   const saved = await readCache(key)
   if (saved) return res.json({ ...saved.reply, template, aiCalls: 0, model: `cache:${saved.model}` })
   if (!keyLoaded()) return res.status(503).json({ error: 'AI 키가 없어 초안을 만들 수 없어요. 직접 적어 주세요.' })
@@ -151,11 +201,13 @@ export async function productDraft(req, res) {
   const t = TEMPLATES[template]
   const prompt = [
     `[상세페이지 순서] ${t.name}: ${t.sections.map((s) => `■ ${s}`).join(' → ')}`,
-    'description 은 위 순서대로 각 섹션을 "■ 섹션 제목" 한 줄 + 2문장으로 짧게 쓰고, 섹션 사이는 빈 줄 하나.',
+    'description 은 상품 전체를 3~4문장으로 짧게 소개한다 (섹션 제목 없이).',
+    'blocks 는 상세페이지 본문이다. 위 순서대로 섹션마다 글 블록 {"type": "text", "title": "섹션 제목", "body": "2~3문장"} 을 하나씩 쓴다. 보관·배송·대량 구매 섹션은 상세 화면의 다른 칸에 이미 나오므로 blocks 에서는 뺀다. blocks 에는 가격을 쓰지 않는다. 농가 이야기는 [농가 이야기]를 그대로 옮기지 말고 이 상품을 어떻게 길렀는지 중심으로 쓴다.',
+    `글 블록 사이에 사진이 있으면 좋은 곳 2~${MAX_PHOTO_SLOTS}군데에 사진 자리 {"type": "photo", "hint": "판매자가 직접 찍을 실물 사진, 한국어 30자 이내"} 를 넣는다. 예: 과수원에 열매가 달린 모습, 상자를 연 구성, 단면을 자른 모습. 사진 자리는 두 개를 연달아 두지 않는다.`,
     '[상품 정보]',
     ...input.facts.map(([k, v]) => `- ${k}: ${v}`),
     input.needItem ? '[품목 정보 필요] 이 원물의 보관 방법·개봉 후 안내·먹지 말아야 할 상태·레시피(2~3개)가 비어 있다. 일반적인 내용으로 item 에 채운다.' : '',
-    '[출력 형식] {"summary": "한 줄 소개 40자 이내", "description": "■ 제목\\n문장…\\n\\n■ 제목\\n문장…", "faq": [{"q": "질문", "a": "답"}] (3개, 보관·배송·활용·구성 위주, 답은 1~2문장)'
+    '[출력 형식] {"summary": "한 줄 소개 40자 이내", "description": "3~4문장 소개", "blocks": [{"type": "text", "title": "", "body": ""}, {"type": "photo", "hint": ""}, …], "faq": [{"q": "질문", "a": "답"}] (3개, 보관·배송·활용·구성 위주, 답은 1~2문장)'
       + (input.needItem ? `, "item": {"storage_method": "", "opened_note": "", "danger_signs": [""], "recipes": [${RECIPE_FORMAT}]}` : '') + '}',
   ].filter(Boolean).join('\n')
 
@@ -167,8 +219,8 @@ export async function productDraft(req, res) {
   const tried = []
   for (let attempt = 1; attempt <= 2 && !draft; attempt += 1) {
     try {
-      // 설명 5단락 + 자주 묻는 질문 + 품목 초안이라 답 길이 한도를 넉넉히 (생각하는 모델은 생각에도 토큰을 쓴다)
-      result = await complete([{ role: 'system', content: RULES }, { role: 'user', content: prompt }], { maxTokens: 4000, timeoutMs: 90_000, lightThinking: true, skip: tried })
+      // 소개 + 상세 블록 5~9개 + 자주 묻는 질문 + 품목 초안이라 답 길이 한도를 넉넉히 (생각하는 모델은 생각에도 토큰을 쓴다)
+      result = await complete([{ role: 'system', content: RULES }, { role: 'user', content: prompt }], { maxTokens: 5000, timeoutMs: 90_000, lightThinking: true, skip: tried })
     } catch (error) {
       if (error.code === 'DAILY_LIMIT') return res.status(429).json({ error: '오늘 AI 사용 한도에 닿았어요. 내일 다시 하거나 직접 적어 주세요.' })
       describeAiError(error) // 기록만 남기고, 안내는 초안에 맞게

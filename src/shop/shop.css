@@ -1187,6 +1187,63 @@
 .shop .detail-images { display: flex; flex-direction: column; align-items: center; }
 .shop .detail-images h3 { align-self: flex-start; }
 .shop .detail-images img { display: block; width: 100%; max-width: 860px; height: auto; }
+/* 블록형 상세페이지 (2026-11-14): 글과 사진을 판매자가 정한 순서대로. 사진은 가운데 860px 까지, 휴대폰에서는 화면 너비.
+   글 블록은 사진 옆에서 작은 글씨로 묻히지 않게 본문보다 크게, 읽기 좋은 폭(680px)으로 */
+.shop .detail-blocks { display: flex; flex-direction: column; align-items: center; gap: 28px; padding-block: 28px; }
+.shop .detail-blocks > * { width: 100%; max-width: 860px; }
+.shop .detail-block-photo { margin: 0; }
+.shop .detail-block-photo img { display: block; width: 100%; height: auto; }
+.shop .detail-block-photo figcaption { margin-top: 8px; font-size: 14px; color: var(--muted); text-align: center; }
+.shop .detail-blocks > .detail-block-text { max-width: 680px; text-align: center; }
+.shop .detail .detail-block-text .para-title { margin: 0 0 10px; font-size: round(clamp(20px, 2vw, 24px), 1px); line-height: 1.35; letter-spacing: -0.3px; }
+.shop .detail-block-text .para { margin: 0 0 10px; font-size: 16.5px; line-height: 1.8; color: var(--text); }
+
+/* 자동 상세 카드 (2026-11-14, src/shop/DetailCards.jsx): 저장된 값만으로 모든 상품에 그린다.
+   타일 칸(dl)은 구매 칸 표(.shop .detail dl: 95px 1fr)보다 구체적으로 적어야 덮이지 않는다 */
+.shop .auto-card h3 { margin-top: 0; }
+.shop .key-facts { padding: 28px 24px; text-align: center; background: linear-gradient(180deg, #f1f5ec, var(--surface) 70%); }
+.shop .detail .auto-kicker { margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--accent); }
+.shop .auto-card .auto-title { max-width: 680px; margin: 0 auto 22px; font-family: var(--display); font-weight: 700; font-size: round(clamp(20px, 2.4vw, 27px), 1px); line-height: 1.4; letter-spacing: -0.4px; }
+.shop .detail .fact-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; max-width: 860px; margin: 0 auto; font-size: inherit; border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
+.shop .detail .fact-tile { display: flex; flex-direction: column; gap: 4px; padding: 16px 12px; background: var(--surface); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.shop .detail .fact-tile dt { font-size: 13px; color: var(--muted); }
+.shop .detail .fact-tile dd { margin: 0; font-family: var(--display); font-weight: 700; font-size: 18px; line-height: 1.35; word-break: keep-all; }
+.shop .detail .fact-tile dd small { display: block; margin-top: 2px; font-family: inherit; font-weight: 400; font-size: 12.5px; color: var(--muted); }
+
+.shop .brix-card { text-align: center; }
+.shop .brix-card h3 { text-align: left; } /* 다른 상자 제목과 같은 자리 */
+.shop .brix-big { margin: 4px 0 18px; font-family: var(--display); font-size: 22px; font-weight: 600; }
+.shop .brix-big strong { font-size: 56px; font-weight: 800; letter-spacing: -1px; color: #b3261e; margin-right: 4px; }
+.shop .brix-big .brix-grade { margin-left: 10px; vertical-align: middle; }
+.shop .brix-scale { position: relative; max-width: 620px; height: 74px; margin: 0 auto 8px; }
+.shop .brix-bar { position: absolute; left: 0; right: 0; top: 26px; height: 14px; border-radius: 7px; background: linear-gradient(90deg, #f3e3c3, #b3261e); }
+.shop .brix-dot { position: absolute; top: 19px; width: 28px; height: 28px; margin-left: -14px; border-radius: 50%; background: #fff; border: 6px solid #b3261e; box-shadow: 0 1px 4px rgb(0 0 0 / 0.2); }
+.shop .brix-std { position: absolute; top: 0; transform: translateX(-50%); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.shop .brix-std i { position: absolute; left: 50%; top: 18px; width: 2px; height: 26px; background: var(--line); opacity: 0.5; }
+.shop .brix-end { position: absolute; top: 48px; font-size: 13px; color: var(--muted); }
+.shop .brix-end.lo { left: 0; } .shop .brix-end.hi { right: 0; }
+
+.shop .option-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.shop .option-tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; padding: 22px 12px 18px; font: inherit; color: var(--text); background: #fff; border: 1px solid var(--border); cursor: pointer; }
+.shop .option-tile:hover:not(:disabled), .shop .option-tile.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.shop .option-tile strong { font-family: var(--display); font-size: 22px; font-weight: 800; }
+.shop .option-tile .option-price { font-family: var(--display); font-size: 19px; font-weight: 700; color: #b3261e; }
+.shop .option-tile small { font-size: 12.5px; color: var(--muted); }
+.shop .option-tile.sold-out { opacity: 0.55; cursor: default; }
+.shop .option-tile.sold-out .option-price { color: var(--muted); }
+.shop .option-best { position: absolute; top: -1px; left: 50%; transform: translate(-50%, -50%); padding: 2px 8px; font-size: 11.5px; font-weight: 700; white-space: nowrap; color: var(--accent-ink); background: var(--accent); }
+.shop .detail .ship-line { margin: 14px 0 0; padding: 12px; font-size: 14.5px; font-weight: 600; text-align: center; color: var(--accent); background: #edf3e9; }
+
+.shop .storage-steps { margin: 4px 0 12px; padding: 0; list-style: none; counter-reset: step; display: grid; gap: 8px; }
+.shop .storage-steps li { position: relative; padding: 10px 12px 10px 46px; line-height: 1.6; background: #fff; border: 1px solid var(--border); counter-increment: step; }
+.shop .storage-steps li::before { content: counter(step); position: absolute; left: 12px; top: 10px; display: grid; place-items: center; width: 24px; height: 24px; font-size: 13px; font-weight: 700; color: var(--accent-ink); background: var(--accent); border-radius: 50%; }
+@media (max-width: 560px) {
+  .shop .key-facts { padding: 22px 14px; }
+  .shop .detail .fact-tiles { grid-template-columns: 1fr 1fr; }
+  .shop .detail .fact-tile:last-child:nth-child(odd) { grid-column: 1 / -1; } /* 칸 수가 홀수면 마지막 칸이 줄 끝까지 (빈 칸 없게) */
+  .shop .brix-big strong { font-size: 44px; }
+  .shop .option-tiles { grid-template-columns: 1fr 1fr; }
+}
 
 /* 사이트맵 */
 .shop .sitemap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; }

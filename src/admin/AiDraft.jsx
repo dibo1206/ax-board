@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
-// 상품 입력 화면의 [AI로 채우기]: 기본 정보만 넣고 누르면 소개·상세 설명·자주 묻는 질문 초안을 채운다
+// 상품 입력 화면의 [AI로 채우기]: 기본 정보만 넣고 누르면 소개·상세 설명·상세 블록·자주 묻는 질문 초안을 채운다
+// 상세 블록은 패턴의 섹션마다 글 블록 + "이런 사진을 넣어 주세요" 사진 자리 (사진은 판매자가 직접 고른다)
 // 상세페이지 패턴(이야기형·정보형·선물형·카페·업소형)을 고르면 그 순서로 쓴다. 초안은 읽고 고친 뒤 저장해야 공개된다
 export function AiDraft({ form, api, onDraft }) {
   const [templates, setTemplates] = useState([])
@@ -33,7 +34,7 @@ export function AiDraft({ form, api, onDraft }) {
   return (
     <div className="preview ai-draft">
       <strong>AI로 상세 내용 채우기</strong>
-      <p className="muted">품목·상품 이름·판매 단위·가격만 넣고 누르면 한 줄 소개, 상세 설명, 자주 묻는 질문 초안을 채워요. 상품당 한 번만 AI를 부르고, 같은 내용으로 다시 누르면 저장된 초안을 써요.</p>
+      <p className="muted">품목·상품 이름·판매 단위·가격만 넣고 누르면 한 줄 소개, 상세 설명, <b>상세 블록(글 + 사진 자리)</b>, 자주 묻는 질문 초안을 채워요. 사진 자리에는 어떤 사진을 찍으면 좋을지 적어 줘요. 상품당 한 번만 AI를 부르고, 같은 내용으로 다시 누르면 저장된 초안을 써요.</p>
       <div className="row">
         <label>상세페이지 패턴
           <select value={template} onChange={(e) => setTemplate(e.target.value)}>
@@ -51,6 +52,7 @@ export function AiDraft({ form, api, onDraft }) {
       {result && (
         <p className="success">
           초안을 채웠어요{result.aiCalls === 0 ? ' (저장된 초안 · AI 0회)' : ' (AI 1회)'}. 아래 내용을 읽고 고친 뒤 저장해 주세요.
+          {result.blocks?.length > 0 && <> 상세 블록: 글 {result.blocks.filter((b) => b.type === 'text').length}개 · 사진 자리 {result.blocks.filter((b) => b.type === 'photo').length}개 (사진 자리마다 사진을 골라 주세요).</>}
           {result.flagged?.length > 0 && <span className="warn"> 금지어·자료에 없는 숫자가 있어 뺀 문장 {result.flagged.length}개</span>}
         </p>
       )}

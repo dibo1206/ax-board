@@ -6,6 +6,8 @@ import { B2bForm, QuestionForm } from './Inquiry.jsx'
 import { Related } from './Recommend.jsx'
 import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
 import { addToCart, get, getPolicy, post, preorderNote, thumbUrl, unitPrice } from './shop/shared.js'
+import { BrixCard, KeyFactsCard, OptionsCard } from './shop/DetailCards.jsx'
+import { storageSteps } from './shop/detailFacts.js'
 import { FarmPage, FarmsPage } from './shop/Farms.jsx'
 import { Guide } from './shop/Guide.jsx'
 import { NotFound } from './shop/NotFound.jsx'
@@ -62,7 +64,8 @@ function Gallery({ product }) {
         <div className="gallery-thumbs">
           {photos.map((url, i) => (
             <button key={url} type="button" className={i === index ? 'on' : ''} onClick={() => setIndex(i)} aria-label={`사진 ${i + 1}`}>
-              <img src={thumbUrl(url)} alt="" loading="lazy" width="64" height="64" />
+              {/* 작은 사진(-thumb)이 없는 사진(회사 제품 상세 사진 등)은 원본으로 바꿔 보여 준다 (깨진 그림 대신) */}
+              <img src={thumbUrl(url)} alt="" loading="lazy" width="64" height="64" onError={(e) => { if (!e.currentTarget.src.endsWith(url)) e.currentTarget.src = url }} />
             </button>
           ))}
         </div>
@@ -84,6 +87,26 @@ function Description({ text }) {
           ? <div key={i}><h4 className="para-title">{first.replace(/^■\s*/, '')}</h4>{rest.length > 0 && <p className="para">{rest.join('\n')}</p>}</div>
           : <p key={i} className="para">{para}</p>
       })}
+    </section>
+  )
+}
+
+// 블록형 상세페이지 (2026-11-14): 글 블록과 사진 블록을 판매자가 정한 순서대로. 글은 글자 그대로 보여 준다 (HTML로 해석하지 않음)
+function DetailBlocks({ blocks, name }) {
+  if (!blocks?.length) return null
+  return (
+    <section className="box detail-blocks">
+      {blocks.map((b, i) => (b.type === 'image' ? (
+        <figure key={`${i}-${b.url}`} className="detail-block-photo">
+          <img src={b.url} alt={b.alt || b.caption || `${name} 상세 사진 ${i + 1}`} loading="lazy" decoding="async" />
+          {b.caption && <figcaption>{b.caption}</figcaption>}
+        </figure>
+      ) : (
+        <div key={i} className="detail-block-text">
+          {b.title && <h4 className="para-title">{b.title}</h4>}
+          {b.body.split(/\n{2,}/).map((para, j) => <p key={j} className="para">{para}</p>)}
+        </div>
+      )))}
     </section>
   )
 }
@@ -305,7 +328,12 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         </div>
 
         <div role="tabpanel" id="panel-info" aria-labelledby="tab-info" hidden={tab !== 'info'} className="detail-panel">
+        {/* 상품 설명 탭 순서 (2026-11-14): 한눈에 보기(자동) → 설명 → 판매 농가가 쓴 상세 블록 → 당도·구성 비교(자동) → 회사 상세 이미지 → 즐기는 법 → … */}
+        <KeyFactsCard product={product} />
         <Description text={product.description} />
+        <DetailBlocks blocks={product.detail_blocks} name={product.name.replace(/\[예시\]\s*/g, '')} />
+        <BrixCard product={product} />
+        <OptionsCard product={product} optionId={optionId} onPick={setOptionId} />
         {/* 회사 상세페이지 이미지 (세로로 긴 이미지를 위에서 아래로 이어서) */}
         {product.detail_images?.length > 0 && (
           <section className="box detail-images">
@@ -318,7 +346,10 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         <section className="box">
           <h3>보관·섭취 안내</h3>
           {item.pending && <p className="muted">새로 들어온 품목이라 담당자가 보관·섭취 정보를 확인하고 있어요. 궁금한 점은 아래 상품 Q&A로 물어봐 주세요.</p>}
-          {item.storage_method && <p>{item.storage_method}</p>}
+          {/* 보관법은 "A. B. C" 처럼 쓰여 있어서 번호 단계로 나눠 보여 준다 (한 문장이면 그대로) */}
+          {item.storage_method && (storageSteps(item.storage_method)
+            ? <ol className="storage-steps">{storageSteps(item.storage_method).map((step) => <li key={step}>{step}</li>)}</ol>
+            : <p>{item.storage_method}</p>)}
           {item.keep_period && <p>보관 기간 참고: {item.keep_period}</p>}
           {/* 신선도는 날짜가 아니라 지금 상태로 판단한다 (팀 식품 기준표). 옛 데이터(며칠)도 그대로 보여 준다 */}
           {fresh && item.stage1_state && (

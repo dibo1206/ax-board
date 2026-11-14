@@ -1,5 +1,6 @@
 // 관리자 화면에서 들어온 상품 입력 검사. 데이터 불러오기 스크립트와 같은 규칙을 쓴다.
 import { randomBytes } from 'node:crypto'
+import { blocksText, readBlocks } from './blocks.js'
 import { readNotice } from './notice.js'
 
 export const FORBIDDEN = ['면역력', '다이어트', '치료', '예방', '해독', '항암', '혈압', '혈당']
@@ -55,6 +56,10 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
       }))
       : null,
   }
+  // 블록형 상세페이지 (server/blocks.js): 사진은 이 상품에 올린 파일만
+  const readBlocksResult = readBlocks(input.detail_blocks, p.product_code)
+  if (readBlocksResult.errors) errors.push(...readBlocksResult.errors)
+  p.detail_blocks = readBlocksResult.blocks ?? []
 
   // 옵션이 있으면 가격·재고는 옵션마다 적는다. 상품 가격·재고는 판매 중 옵션의 최저가·재고 합으로 맞춘다 (server/options.js)
   if (p.options?.length) {
@@ -115,7 +120,7 @@ export function validateProduct(input, { itemCodes, sellerCodes, tagCodes, isNew
   if (unknown.length) errors.push(`없는 태그예요: ${unknown.join(', ')}`)
   if (p.faq.length > 6) errors.push('자주 묻는 질문은 6개까지 적어 주세요.')
   if (p.faq.some((f) => !f.q || !f.a || f.q.length > 100 || f.a.length > 300)) errors.push('자주 묻는 질문은 질문(100자)과 답(300자)을 모두 적어 주세요.')
-  const all = `${p.name} ${(p.options ?? []).map((o) => o.name).join(' ')} ${p.summary} ${p.description} ${p.faq.map((f) => `${f.q} ${f.a}`).join(' ')} ${Object.values(p.notice).filter((v) => typeof v === 'string').join(' ')}`
+  const all = `${p.name} ${(p.options ?? []).map((o) => o.name).join(' ')} ${p.summary} ${p.description} ${p.faq.map((f) => `${f.q} ${f.a}`).join(' ')} ${Object.values(p.notice).filter((v) => typeof v === 'string').join(' ')} ${blocksText(p.detail_blocks)}`
   const bad = findBanned(all)
   if (bad.length) errors.push(`효능 표현은 쓰지 않아요: ${bad.join(', ')}`)
   if (p.review_note && p.review_note.length > 300) errors.push('반려 사유는 300자 안으로 적어 주세요.')

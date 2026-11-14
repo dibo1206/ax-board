@@ -20,7 +20,8 @@ export function loadActive() {
       pool.query('SELECT * FROM tags'),
     ])
     // 후기에서 '표시와 달랐어요'가 많은 상품은 당도를 내세우지 않는다
-    return { products: products.rows.map((p) => (p.info_disputed ? { ...p, brix: null } : p)), tagLabel: Object.fromEntries(tags.rows.map((t) => [t.tag_code, t.label])) }
+    // 상세 블록은 추천 카드에 쓰지 않아서 뺀다 (응답이 무거워지지 않게)
+    return { products: products.rows.map(({ detail_blocks: _b, ...p }) => (p.info_disputed ? { ...p, brix: null } : p)), tagLabel: Object.fromEntries(tags.rows.map((t) => [t.tag_code, t.label])) }
   })
 }
 
