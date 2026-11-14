@@ -571,3 +571,6 @@ CREATE TABLE IF NOT EXISTS shop_settings (
 -- 2단계 인증을 처음 등록할 수 있는 기간 (2026-11-11 보안 점검): 비밀번호만 알아낸 사람이 나중에 자기 휴대폰을 먼저 등록하지 못하게.
 -- 계정을 만들거나 판매자를 승인하거나 관리자가 등록을 다시 열 때 정한다 (server/auth.js login)
 ALTER TABLE admins ADD COLUMN IF NOT EXISTS totp_enroll_until TIMESTAMPTZ;
+
+-- 블록형 상세페이지 (2026-11-14, server/blocks.js): 상품 설명 아래에 쌓는 글·사진 블록 [{type:'text',title,body} | {type:'image',url,alt,caption}]
+ALTER TABLE products ADD COLUMN IF NOT EXISTS detail_blocks JSONB NOT NULL DEFAULT '[]';

@@ -4,6 +4,7 @@
 //  - 가격·재고는 조각에 넣지 않는다. 바뀌는 값은 답할 때마다 DB에서 읽는다
 //  - 호출이 실패하면 빈 결과를 돌려준다. 그러면 챗봇은 벡터 검색 없이 전처럼 답한다
 import { createHash } from 'node:crypto'
+import { blocksText } from './blocks.js'
 import { embed, keyLoaded } from './ai.js'
 import { cached, clearCache } from './cache.js'
 import { pool } from './db.js'
@@ -59,7 +60,8 @@ function itemChunks(item) {
 
 function productChunks(p) {
   const base = { item_code: p.item_code, product_code: p.product_code, trusted: false } // 판매자가 쓴 글이라 AI 자료로만 쓴다
-  const about = [clean(p.summary), clean(p.description)].filter(Boolean).join(' ')
+  // 상세 블록의 글·사진 설명도 같은 상품 소개로 넣는다 (사진 속 글자는 못 읽으니 화면 글만)
+  const about = [clean(p.summary), clean(p.description), clean(blocksText(p.detail_blocks))].filter(Boolean).join(' ')
   return [
     ...splitText(about).map((text, i) => ({ ...base, key: `product:${p.product_code}:about:${i}`, text: `${clean(p.name)}: ${text}` })),
     ...(p.faq ?? []).map((f, i) => ({ ...base, key: `product:${p.product_code}:faq:${i}`, text: `${clean(p.name)} 자주 묻는 질문: ${clean(f.q)} 답: ${clean(f.a)}` })),
@@ -86,7 +88,7 @@ function policyChunks() {
 export async function buildChunks(db = pool) {
   const [items, products, questions, sellers, faqs] = await Promise.all([
     db.query("SELECT * FROM items WHERE status <> 'pending'"),
-    db.query("SELECT product_code, item_code, name, summary, description, faq FROM products WHERE status = 'active'"),
+    db.query("SELECT product_code, item_code, name, summary, description, faq, detail_blocks FROM products WHERE status = 'active'"),
     db.query(`SELECT q.id, q.product_code, q.question, q.answer, p.item_code FROM questions q JOIN products p ON p.product_code = q.product_code
               WHERE q.answer IS NOT NULL AND q.answer <> '' AND NOT q.hidden AND NOT q.is_private AND p.status = 'active'`),
     db.query(`SELECT seller_code, name, region, story FROM sellers WHERE status = 'active'

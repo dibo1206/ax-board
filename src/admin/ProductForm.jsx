@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { thumbUrl, todayKst, unitPrice } from '../shop/shared.js'
 import { AiDraft } from './AiDraft.jsx'
+import { DetailBlocksEditor } from './DetailBlocks.jsx'
+import { fromDraftBlocks, hasPendingPhotos, storedBlocks, toEditorBlocks } from './detailBlockUtils.js'
 import { adminApi } from './api.js'
 import { Help } from './ui.jsx'
 
 const EMPTY = {
   product_code: '', seller_code: '', item_code: '', name: '', price: '', unit: '', stock: '',
   weight_g: '', count_per_box: '', brix: '', variety: '', brix_measured_at: '', harvest_date: '', ship_from: '', summary: '', description: '',
-  external_url: '', b2b_available: false, tags: [], faq: [], notice: { imported: false }, options: [],
+  external_url: '', b2b_available: false, tags: [], faq: [], notice: { imported: false }, options: [], detail_blocks: [],
 }
 
 function toForm(product) {
@@ -19,6 +21,7 @@ function toForm(product) {
   }
   form.notice = { imported: false, ...product.notice }
   form.options = (product.options ?? []).map((o) => ({ ...o, price: String(o.price), stock: String(o.stock) }))
+  form.detail_blocks = toEditorBlocks(product.detail_blocks)
   return form
 }
 
@@ -181,6 +184,8 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
   const [request, setRequest] = useState(null) // null: 닫힘, { name, category, error }
   const [step, setStep] = useState(0) // 판매자 단계 (0부터)
   const top = useRef(null)
+  // 새 상품을 한 번 저장했으면 그 코드를 기억한다: 사진 올리기에서 멈춘 뒤 다시 눌러도 상품이 두 번 생기지 않고 고치기로 이어진다
+  const savedCode = useRef(product?.product_code ?? null)
   const items = [...options.items, ...extraItems.filter((x) => !options.items.some((i) => i.item_code === x.item_code))]
 
   const item = items.find((i) => i.item_code === form.item_code)
@@ -194,11 +199,15 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
   // AI 초안을 받으면: 소개는 비어 있을 때만, 설명은 물어보고 바꾸고, 자주 묻는 질문은 채운다
   function applyDraft(draft) {
     const replace = !form.description || window.confirm('지금 적힌 상품 설명을 AI 초안으로 바꿀까요?')
+    // 상세 블록 초안: 지금 블록이 없을 때만 바로 채우고, 있으면 물어본다 (올려 둔 사진 블록이 사라질 수 있어서)
+    const blocks = draft.blocks?.length ? fromDraftBlocks(draft.blocks) : null
+    const replaceBlocks = blocks && (!form.detail_blocks.length || window.confirm('지금 있는 상세 블록을 AI 초안으로 바꿀까요? (지금 블록은 사라져요)'))
     setForm((prev) => ({
       ...prev,
       summary: prev.summary || draft.summary,
       description: replace ? draft.description : prev.description,
       faq: draft.faq?.length ? draft.faq : prev.faq,
+      detail_blocks: replaceBlocks ? blocks : prev.detail_blocks,
     }))
     const it = draft.item
     setItemDraft(it && (it.storage_method || it.opened_note || it.danger_signs?.length || it.recipes?.length) ? it : null)
@@ -209,10 +218,12 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
     setSaving(true)
     setErrors([])
     try {
-      const body = { ...form, status }
-      let saved = isNew
-        ? await api('/products', { method: 'POST', body })
-        : await api(`/products/${product.product_code}`, { method: 'PATCH', body })
+      // 상세 블록은 이미 올린 사진과 글만 먼저 저장하고, 새로 고른 사진은 아래에서 올린 뒤 한 번 더 저장한다
+      const body = { ...form, detail_blocks: storedBlocks(form.detail_blocks), status }
+      let saved = savedCode.current
+        ? await api(`/products/${savedCode.current}`, { method: 'PATCH', body })
+        : await api('/products', { method: 'POST', body })
+      savedCode.current = saved.product_code
       if (image) {
         await api(`/products/${saved.product_code}/image`, {
           method: 'POST',
@@ -226,6 +237,8 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
       for (const file of gallery) {
         await api(`/products/${saved.product_code}/image?role=gallery`, { method: 'POST', headers: { 'Content-Type': file.type }, body: file })
       }
+      setGallery([]) // 다시 눌러도 같은 사진을 또 올리지 않게
+      if (hasPendingPhotos(form.detail_blocks)) saved = await saveBlockPhotos(saved.product_code, status)
       if (itemDraft && fillItem) {
         // 같은 원물 상품들이 함께 쓰는 품목 정보는 비어 있는 칸만 채운다 (이미 있는 내용은 덮어쓰지 않음)
         await api(`/items/${form.item_code}/fill`, { method: 'POST', body: itemDraft })
@@ -242,6 +255,22 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
     } finally {
       setSaving(false)
     }
+  }
+
+  // 상세 블록에서 새로 고른 사진을 차례로 올리고(주소를 받음) 블록을 다시 저장한다.
+  // 올린 사진은 화면 상태에도 주소를 남겨서, 중간에 멈춘 뒤 다시 저장해도 같은 사진을 또 올리지 않는다
+  async function saveBlockPhotos(code, status) {
+    const blocks = [...form.detail_blocks]
+    try {
+      for (const [i, b] of blocks.entries()) {
+        if (b.type !== 'image' || !b.file || b.url) continue
+        const { url } = await api(`/products/${code}/image?role=block`, { method: 'POST', headers: { 'Content-Type': b.file.type }, body: b.file })
+        blocks[i] = { ...b, url, file: null }
+      }
+    } finally {
+      setForm((prev) => ({ ...prev, detail_blocks: blocks }))
+    }
+    return api(`/products/${code}`, { method: 'PATCH', body: { detail_blocks: storedBlocks(blocks), status } })
   }
 
   async function sendRequest() {
@@ -407,6 +436,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
       <label>상품 설명 <span className="muted">(선택) 빈 줄로 문단을 나눠요. 효능 표현은 쓰지 않아요</span>
         <textarea value={form.description} onChange={set('description')} rows={6} maxLength={3000} placeholder="재배 방법, 맛, 크기, 포장 방법 등" />
       </label>
+      <DetailBlocksEditor blocks={form.detail_blocks} onChange={(detail_blocks) => setForm((prev) => ({ ...prev, detail_blocks }))} />
       <fieldset className="tags faq-edit">
         <legend>자주 묻는 질문 (선택, 6개까지) — 상품 페이지에 보이고 상담 챗봇도 AI 없이 이 답을 써요</legend>
         {form.faq.map((f, i) => (
@@ -537,7 +567,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
             <li>상품 이름: {form.name || <b className="red">비어 있어요</b>} {fix(0)}</li>
             <li>가격: {hasOptions ? `옵션 ${form.options.length}개` : form.price ? `${won(form.price)} · ${form.unit}` : <b className="red">비어 있어요</b>} · 재고 {hasOptions ? '옵션마다' : form.stock || '–'} {fix(1)}</li>
             <li>사진: 대표 {image || photos.main ? '있음' : <b className="red">없음</b>} · 상세 {gallery.length + photos.list.length}장 {fix(3)}</li>
-            <li>소개: {form.summary ? '있음' : '없음'} · 태그 {form.tags.length}개 {fix(4)}</li>
+            <li>소개: {form.summary ? '있음' : '없음'} · 상세 블록 {form.detail_blocks.length}개 · 태그 {form.tags.length}개 {fix(4)}</li>
           </ul>
         </div>
       )}

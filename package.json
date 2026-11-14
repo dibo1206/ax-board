@@ -27,6 +27,7 @@
     "test-resilience": "node scripts/resilience-test.js",
     "test-refund": "node scripts/refund-test.js",
     "test-submit": "node scripts/submit-test.js",
+    "test-blocks": "node scripts/blocks-test.js",
     "eval-chat": "node scripts/eval-chat.js",
     "count-ai": "node scripts/count-ai.js",
     "chat-eval": "node scripts/chat-eval.js",

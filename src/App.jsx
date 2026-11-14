@@ -88,6 +88,26 @@ function Description({ text }) {
   )
 }
 
+// 블록형 상세페이지 (2026-11-14): 글 블록과 사진 블록을 판매자가 정한 순서대로. 글은 글자 그대로 보여 준다 (HTML로 해석하지 않음)
+function DetailBlocks({ blocks, name }) {
+  if (!blocks?.length) return null
+  return (
+    <section className="box detail-blocks">
+      {blocks.map((b, i) => (b.type === 'image' ? (
+        <figure key={`${i}-${b.url}`} className="detail-block-photo">
+          <img src={b.url} alt={b.alt || b.caption || `${name} 상세 사진 ${i + 1}`} loading="lazy" decoding="async" />
+          {b.caption && <figcaption>{b.caption}</figcaption>}
+        </figure>
+      ) : (
+        <div key={i} className="detail-block-text">
+          {b.title && <h4 className="para-title">{b.title}</h4>}
+          {b.body.split(/\n{2,}/).map((para, j) => <p key={j} className="para">{para}</p>)}
+        </div>
+      )))}
+    </section>
+  )
+}
+
 // 7단계: (옵션 상품은 옵션 고르기 →) 수량 고르기 → 장바구니 담기 / 바로 구매 (가격은 주문할 때 서버가 다시 계산)
 // 옵션 상품은 옵션을 고르기 전에는 담거나 살 수 없다. 옵션마다 가격·재고가 다르다
 // 품절 상품·옵션: 이메일을 남기면 다시 들어올 때 메일로 한 번 알려 준다 (server/restock.js)
@@ -288,6 +308,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
 
       <div className="detail-body">
         <Description text={product.description} />
+        <DetailBlocks blocks={product.detail_blocks} name={product.name.replace(/\[예시\]\s*/g, '')} />
         {/* 회사 상세페이지 이미지 (세로로 긴 이미지를 위에서 아래로 이어서) */}
         {product.detail_images?.length > 0 && (
           <section className="box detail-images">

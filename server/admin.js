@@ -6,6 +6,7 @@ import express from 'express'
 import sharp from 'sharp'
 import { requireAdmin } from './auth.js'
 import { findBanned } from './banned.js'
+import { blocksSummary, removedBlockImages } from './blocks.js'
 import { fillItem, itemDraft, listTemplates, productDraft } from './content.js'
 import { createLimiter } from './limit.js'
 import { generateRecipePhoto, imageKeyLoaded, imagesLeftToday, saveRecipePhoto } from './imagegen.js'
@@ -56,8 +57,9 @@ export async function itemRanges() {
 }
 
 // 판매 중인 상품의 가격·당도·수확일이 바뀌면 누가 언제 무엇을 바꿨는지 남긴다 (거짓 표시를 나중에 따져 볼 수 있게)
-const WATCHED = [['name', '상품 이름'], ['item_code', '품목'], ['unit', '판매 단위'], ['summary', '한 줄 소개'], ['description', '상품 설명'], ['price', '가격'], ['brix', '당도'], ['variety', '품종'], ['brix_measured_at', '당도 잰 날'], ['harvest_date', '수확일'], ['ship_from', '출고 시작일'], ['notice.origin', '원산지'], ['notice.expiry', '소비기한']]
-const watched = (product, key) => (key.startsWith('notice.') ? product.notice?.[key.slice(7)] : product[key])
+const WATCHED = [['name', '상품 이름'], ['item_code', '품목'], ['unit', '판매 단위'], ['summary', '한 줄 소개'], ['description', '상품 설명'], ['price', '가격'], ['brix', '당도'], ['variety', '품종'], ['brix_measured_at', '당도 잰 날'], ['harvest_date', '수확일'], ['ship_from', '출고 시작일'], ['notice.origin', '원산지'], ['notice.expiry', '소비기한'], ['detail_blocks', '상세 블록']]
+// 상세 블록은 통째로 남기면 길어서 글·사진 수와 내용 지문만 남긴다 (server/blocks.js)
+const watched = (product, key) => (key.startsWith('notice.') ? product.notice?.[key.slice(7)] : key === 'detail_blocks' ? blocksSummary(product.detail_blocks) : product[key])
 // optionChanges: 옵션이 있는 상품은 판매 중 옵션의 가격 변경을 옵션마다 남긴다 ([{ label, old, new }], options.js).
 // 이때 상품 가격은 옵션 최저가를 따라 바뀌는 값이라 따로 남기지 않는다
 export async function recordChanges(before, after, who, optionChanges = null) {
@@ -122,8 +124,9 @@ adminRouter.get('/products', async (req, res) => {
 })
 
 const PRODUCT_FIELDS = ['seller_code', 'item_code', 'name', 'price', 'unit', 'stock', 'weight_g', 'count_per_box',
-  'brix', 'brix_measured_at', 'harvest_date', 'ship_from', 'summary', 'description', 'external_url', 'b2b_available', 'tags', 'status', 'review_note', 'faq', 'notice', 'variety']
-const value = (product, column) => (column === 'faq' ? JSON.stringify(product.faq ?? []) : column === 'notice' ? JSON.stringify(product.notice ?? {}) : product[column])
+  'brix', 'brix_measured_at', 'harvest_date', 'ship_from', 'summary', 'description', 'external_url', 'b2b_available', 'tags', 'status', 'review_note', 'faq', 'notice', 'variety', 'detail_blocks']
+const JSON_FIELDS = { faq: [], notice: {}, detail_blocks: [] } // JSONB 칸은 글자로 바꿔 넘긴다
+const value = (product, column) => (column in JSON_FIELDS ? JSON.stringify(product[column] ?? JSON_FIELDS[column]) : product[column])
 
 // 검사를 통과한 상품을 넣는다. 같은 코드가 있으면 null
 export async function insertProduct(product, source) {
@@ -195,6 +198,7 @@ adminRouter.patch('/products/:code', async (req, res) => {
   await recordChanges(current.rows[0], product, `관리자 ${req.admin.loginId}`, checked.changes)
   await updateProduct(req.params.code, product)
   const { product: row, stopped } = await saveOptions(req.params.code, product.options) // 옵션 저장, 상품 가격·재고를 옵션에 맞추기
+  await deleteBlockImages(current.rows[0], product.detail_blocks)
   // 승인 기록 (믿을 만한 농가 판단에 쓴다). 반려·내리기는 관리자가 다시 승인할 때까지 그 농가의 자동 승인을 멈춘다
   const before = current.rows[0]
   if (before.status !== 'active' && product.status === 'active') {
@@ -223,11 +227,15 @@ export const rawImage = express.raw({ type: Object.keys(IMAGE_TYPES), limit: MAX
 const MAX_GALLERY = 8
 const OUR_FILE = (code) => new RegExp(`^/uploads/${code}-[0-9a-f]{12}\\.webp$`)
 
-async function saveOptimized(code, buffer) {
+// wide: 상세 블록 사진은 세로로 긴 사진이 많아서 가로 1000px 에 맞추고 세로는 6000px 까지 둔다
+// (긴 변 1200px 로 줄이면 860×6000 사진이 172×1200 이 되어 사진 속 글씨를 못 읽는다)
+const LARGE = { width: 1200, height: 1200 }
+const WIDE = { width: 1000, height: 6000 }
+async function saveOptimized(code, buffer, { wide = false } = {}) {
   const base = `${code}-${randomBytes(6).toString('hex')}`
   const image = sharp(buffer, { limitInputPixels: 40_000_000 }).rotate()
   const [large, thumb] = await Promise.all([
-    image.clone().resize({ width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true }).webp({ quality: 82 }).toBuffer(),
+    image.clone().resize({ ...(wide ? WIDE : LARGE), fit: 'inside', withoutEnlargement: true }).webp({ quality: 82 }).toBuffer(),
     image.clone().resize({ width: 400, height: 400, fit: 'cover' }).webp({ quality: 78 }).toBuffer(),
   ])
   await mkdir(UPLOAD_DIR, { recursive: true })
@@ -236,11 +244,22 @@ async function saveOptimized(code, buffer) {
 }
 
 // 우리가 만든 사진 파일만 지운다 (주소 형식이 맞을 때만)
-async function deleteFiles(code, url) {
+export async function deleteFiles(code, url) {
   if (!url || !OUR_FILE(code).test(url)) return
   const name = url.slice('/uploads/'.length)
   await Promise.all([name, name.replace(/\.webp$/, '-thumb.webp')].map((n) => unlink(new URL(n, UPLOAD_DIR)).catch(() => {})))
 }
+
+// 상품을 저장하면서 블록에서 빠진 사진 파일을 지운다. 대표·상세·당도계 사진으로도 쓰는 파일은 남긴다
+export async function deleteBlockImages(row, after) {
+  const inUse = new Set([row.image_url, row.brix_photo_url, ...(row.images ?? [])])
+  const gone = removedBlockImages(row.detail_blocks, after).filter((url) => !inUse.has(url))
+  await Promise.all(gone.map((url) => deleteFiles(row.product_code, url)))
+}
+
+// 상세 블록 사진은 올릴 때 상품에 붙이지 않고 주소만 돌려준다. 화면이 그 주소를 블록에 넣어 상품을 저장해야 손님에게 보인다
+// (저장하지 않고 떠난 사진 파일이 쌓이지 않게 한 사람이 1시간에 60장까지)
+const tooManyBlockImages = createLimiter({ limit: 60, windowMs: 60 * 60_000, key: (req) => `block-image:${(req.admin ?? req.seller)?.loginId}` })
 
 export async function storeImage(req, res) {
   const type = req.headers['content-type']
@@ -251,6 +270,14 @@ export async function storeImage(req, res) {
   }
   const current = await pool.query('SELECT image_url, images, brix_photo_url FROM products WHERE product_code = $1', [req.params.code])
   if (!current.rowCount) return res.status(404).json({ error: '상품을 찾지 못했어요.' })
+  if (req.query.role === 'block') {
+    if (tooManyBlockImages(req)) return res.status(429).json({ error: '사진을 너무 많이 올렸어요. 1시간 뒤에 다시 해 주세요.' })
+    try {
+      return res.status(201).json({ url: await saveOptimized(req.params.code, req.body, { wide: true }) })
+    } catch {
+      return res.status(400).json({ error: '사진을 읽지 못했어요. 다른 사진으로 올려 주세요.' })
+    }
+  }
   if (req.query.role === 'brix') {
     // 당도계 사진 (?role=brix): 상품 페이지의 당도 옆 [측정 사진]으로 보인다. 새로 올리면 옛 사진은 지운다
     let brixUrl

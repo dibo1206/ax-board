@@ -236,7 +236,8 @@ app.get('/api/health', async (req, res) => {
 // 수확 며칠째인지와 당도 등급 이름을 붙인다 (신선도 등급은 매기지 않고 사실만 보여 준다)
 const koreaToday = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
 const harvestDays = (date) => (date ? Math.max(1, Math.floor((Date.parse(koreaToday()) - Date.parse(String(date).slice(0, 10))) / 86_400_000) + 1) : null)
-const publicProduct = ({ review_note: _n, review_reason: _r, rejected_at: _x, admin_approved_at: _a, auto_approved_at: _o, auto_checked_at: _c, source: _s, external_url: _u, ...p }) => ({
+// 상세 블록(detail_blocks)은 목록에서 빼고 상품 상세에서만 보낸다 (목록 응답이 무거워지지 않게)
+const publicProduct = ({ review_note: _n, review_reason: _r, rejected_at: _x, admin_approved_at: _a, auto_approved_at: _o, auto_checked_at: _c, source: _s, external_url: _u, detail_blocks: _b, ...p }) => ({
   ...p,
   brix_grade: GRADE_LABEL[p.brix_rank] ?? null,
   harvest_days: p.category === '가공품' ? null : harvestDays(p.harvest_date),
@@ -399,6 +400,7 @@ async function loadProductDetail(code) {
   ])
   return {
     ...product,
+    detail_blocks: rows[0].detail_blocks ?? [], // 블록형 상세페이지 (server/blocks.js)
     notice_table: buildNotice(product, publicItem(item.rows[0]), seller.rows[0]), // 상품정보 제공 고시 표
     item: publicItem(item.rows[0]), // 검수 전 품목은 보관·안전 정보를 빼고 보낸다
     seller: seller.rows[0],

@@ -217,6 +217,17 @@ a.card { text-decoration: none; height: 100%; box-sizing: border-box; }
 /* AI 초안 · 자주 묻는 질문 · 단위 가격 */
 .ai-draft { display: flex; flex-direction: column; gap: 8px; border-style: solid; border-color: var(--accent); }
 .faq-edit .row { align-items: end; }
+/* 상세 블록 편집 (관리자·판매자 상품 화면, src/admin/DetailBlocks.jsx) */
+.detail-blocks-edit .block-list { display: flex; flex-direction: column; gap: 10px; margin: 8px 0; padding: 0; list-style: none; }
+.detail-blocks-edit .block-card { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.detail-blocks-edit .block-card.image { border-left: 4px solid var(--border); }
+.detail-blocks-edit .block-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+.detail-blocks-edit .block-tools { display: flex; flex-wrap: wrap; gap: 10px; }
+.detail-blocks-edit .block-tools button:disabled { opacity: 0.35; cursor: default; }
+.detail-blocks-edit .block-photo { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: start; }
+.detail-blocks-edit .block-photo img, .detail-blocks-edit .block-slot { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; }
+.detail-blocks-edit .block-slot { display: grid; place-items: center; font-size: 1.8rem; background: var(--bg); border: 1px dashed var(--border); }
+@media (max-width: 520px) { .detail-blocks-edit .block-photo { grid-template-columns: 1fr; } }
 .unit-price { margin: -4px 0 8px; font-size: 0.85rem; }
 .para-title { margin: 16px 0 4px; font-size: 1.02rem; }
 .faq-box details { padding: 8px 0; border-bottom: 1px solid var(--border); }

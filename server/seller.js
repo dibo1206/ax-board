@@ -2,10 +2,11 @@
 // 새 상품은 '검토 대기'로 올라가고 회사 관리자가 승인해야 판매된다. 이미 판매 중인 상품의 수정(가격·재고 등)은 바로 반영된다.
 import { notifyAnswer } from './inquiry.js'
 import express from 'express'
-import { checkOptions, codeSets, insertProduct, itemRanges, noticeProblem, rawImage, recordChanges, removeImage, stoppedNote, storeImage, updateProduct } from './admin.js'
+import { checkOptions, codeSets, deleteBlockImages, insertProduct, itemRanges, noticeProblem, rawImage, recordChanges, removeImage, stoppedNote, storeImage, updateProduct } from './admin.js'
 import { writeAccessLog } from './accessLog.js'
 import { hashPassword, issueStaffSession, passwordMatches, requireSeller, reserveAttempt, undoAttempt } from './auth.js'
 import { bannedMessage, findBanned } from './banned.js'
+import { sameBlocks } from './blocks.js'
 import { fillItem, listTemplates, productDraft } from './content.js'
 import { pool } from './db.js'
 import { maskName } from './inquiry.js'
@@ -49,6 +50,7 @@ const REVIEWED_FIELDS = ['name', 'item_code', 'unit', 'summary', 'description', 
 const same = (a, b) => String(a ?? '').trim() === String(b ?? '').trim()
 async function contentChanged(current, product) {
   if (REVIEWED_FIELDS.some((key) => !same(current[key], product[key]))) return true
+  if (!sameBlocks(current.detail_blocks, product.detail_blocks)) return true // 상세 블록(글·사진)도 상품 내용
   if (!product.options) return false
   // 새 이름의 옵션이 생기거나 이름이 바뀌면 다시 본다 (판매 중지·삭제는 품절처럼 바로 반영)
   const before = new Set((await currentOptions(current.product_code)).map((o) => o.name))
@@ -196,6 +198,7 @@ sellerRouter.patch('/products/:code', ownProduct, async (req, res) => {
   await recordChanges(current, product, `판매자 ${req.seller.loginId}`, checked.changes)
   await updateProduct(current.product_code, product)
   const saved = await saveOptions(current.product_code, product.options) // 옵션 저장, 상품 가격·재고를 옵션에 맞추기
+  await deleteBlockImages(current, product.detail_blocks)
   let row = saved.product
   // 당도를 바꾸면 옛 당도계 사진은 새 값의 증거가 아니라서 내린다 (새 사진을 올리면 다시 붙는다)
   const brixOf = (v) => (v == null || v === '' ? null : Number(v)) // DB 의 "14.0" 과 화면의 "14" 는 같은 값

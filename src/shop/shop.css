@@ -1185,6 +1185,13 @@
 .shop .detail-images { display: flex; flex-direction: column; align-items: center; }
 .shop .detail-images h3 { align-self: flex-start; }
 .shop .detail-images img { display: block; width: 100%; max-width: 860px; height: auto; }
+/* 블록형 상세페이지 (2026-11-14): 글과 사진을 판매자가 정한 순서대로. 사진은 가운데 860px 까지, 휴대폰에서는 화면 너비 */
+.shop .detail-blocks { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.shop .detail-blocks > * { width: 100%; max-width: 860px; }
+.shop .detail-block-photo { margin: 0; }
+.shop .detail-block-photo img { display: block; width: 100%; height: auto; border-radius: 10px; }
+.shop .detail-block-photo figcaption { margin-top: 6px; font-size: 0.88rem; color: var(--muted); text-align: center; }
+.shop .detail-block-text .para-title { margin-top: 0; }
 
 /* 사이트맵 */
 .shop .sitemap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; }
