@@ -106,6 +106,17 @@ const RECIPE_FORMAT = '{"title": "", "ingredients": "재료·재료", "method": 
 // 블록 초안: 글 블록 { type: 'text', title, body } 과 사진 자리 { type: 'photo', hint }
 // 글은 상품 설명과 같은 검사(금지어·자료에 없는 숫자)를 거치고, 사진 자리 안내는 금지어만 본다
 const MAX_PHOTO_SLOTS = 4
+// 상세 화면 아래 칸(보관·섭취 안내, 판매 농가 이야기)과 자동 카드(구성 비교·배송)에 이미 나오는 섹션은 블록으로 쓰지 않는다 (같은 말이 두 번 보이지 않게)
+const SHOWN_ELSEWHERE = /보관|배송|대량 구매 문의/
+// 블록에는 가격을 쓰지 않는다: 가격을 바꿔도 블록 글은 그대로라 옛 값이 남고, 블록 글은 상담 자료에도 들어간다
+const PRICE = /\d[\d,]*\s*원/
+function withoutPrices(text, flagged) {
+  return text.split('\n').map((line) => line.split(/(?<=[.!?])\s+/).filter((sentence) => {
+    if (!PRICE.test(sentence)) return true
+    flagged.push(`블록에 가격(구매 칸에서 보여요): ${sentence.slice(0, 40)}`)
+    return false
+  }).join(' ')).join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
 function draftBlocks(list, allowed, flagged) {
   let photos = 0
   const blocks = []
@@ -117,8 +128,10 @@ function draftBlocks(list, allowed, flagged) {
         blocks.push({ type: 'photo', hint })
       }
     } else {
-      const body = cleanText(b?.body, allowed, flagged, LIMITS.body)
-      if (body) blocks.push({ type: 'text', title: cleanText(b?.title, allowed, flagged, LIMITS.title, false), body })
+      const title = cleanText(b?.title, allowed, flagged, LIMITS.title, false)
+      if (SHOWN_ELSEWHERE.test(title)) continue
+      const body = withoutPrices(cleanText(b?.body, allowed, flagged, LIMITS.body), flagged)
+      if (body) blocks.push({ type: 'text', title, body })
     }
   }
   return blocks
@@ -179,7 +192,7 @@ export async function productDraft(req, res) {
   const input = await buildInput(req.body, sellerCode)
   if (input.error) return res.status(400).json({ error: input.error })
 
-  const key = createHash('sha256').update(`content-v3\n${template}\n${JSON.stringify(input.facts)}\n${input.needItem}`).digest('hex')
+  const key = createHash('sha256').update(`content-v4\n${template}\n${JSON.stringify(input.facts)}\n${input.needItem}`).digest('hex')
   const saved = await readCache(key)
   if (saved) return res.json({ ...saved.reply, template, aiCalls: 0, model: `cache:${saved.model}` })
   if (!keyLoaded()) return res.status(503).json({ error: 'AI 키가 없어 초안을 만들 수 없어요. 직접 적어 주세요.' })
@@ -189,7 +202,7 @@ export async function productDraft(req, res) {
   const prompt = [
     `[상세페이지 순서] ${t.name}: ${t.sections.map((s) => `■ ${s}`).join(' → ')}`,
     'description 은 상품 전체를 3~4문장으로 짧게 소개한다 (섹션 제목 없이).',
-    'blocks 는 상세페이지 본문이다. 위 순서대로 섹션마다 글 블록 {"type": "text", "title": "섹션 제목", "body": "2~3문장"} 을 하나씩 쓴다.',
+    'blocks 는 상세페이지 본문이다. 위 순서대로 섹션마다 글 블록 {"type": "text", "title": "섹션 제목", "body": "2~3문장"} 을 하나씩 쓴다. 보관·배송·대량 구매 섹션은 상세 화면의 다른 칸에 이미 나오므로 blocks 에서는 뺀다. blocks 에는 가격을 쓰지 않는다. 농가 이야기는 [농가 이야기]를 그대로 옮기지 말고 이 상품을 어떻게 길렀는지 중심으로 쓴다.',
     `글 블록 사이에 사진이 있으면 좋은 곳 2~${MAX_PHOTO_SLOTS}군데에 사진 자리 {"type": "photo", "hint": "판매자가 직접 찍을 실물 사진, 한국어 30자 이내"} 를 넣는다. 예: 과수원에 열매가 달린 모습, 상자를 연 구성, 단면을 자른 모습. 사진 자리는 두 개를 연달아 두지 않는다.`,
     '[상품 정보]',
     ...input.facts.map(([k, v]) => `- ${k}: ${v}`),

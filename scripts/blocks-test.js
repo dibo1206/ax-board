@@ -1,10 +1,12 @@
 // 블록형 상세페이지 규칙 시험 (2026-11-14): DB·AI 키 없이 돈다 → GitHub 자동 검사(CI)에서도 돌린다
 //   npm run test-blocks
 // 1) 블록 검사(server/blocks.js) 2) 상품 저장 검사(server/validate.js)와 금지어 3) AI 초안 정리(server/content.js parseDraft)
+// 4) 자동 상세 카드에 들어갈 값 고르기(src/shop/detailFacts.js)
 import { blocksSummary, blocksText, readBlocks, removedBlockImages, sameBlocks } from '../server/blocks.js'
 import { findBanned } from '../server/banned.js'
 import { parseDraft } from '../server/content.js'
 import { validateProduct } from '../server/validate.js'
+import { brixGauge, headline, keyFacts, optionRows, storageSteps } from '../src/shop/detailFacts.js'
 
 let failed = 0
 let count = 0
@@ -86,10 +88,49 @@ check('빈 사진 자리는 버린다', photos.every((b) => b.hint))
 check('효능 표현 문장은 빼고 나머지는 남긴다', texts[1].body === '단맛이 진해요.', texts[1].body)
 check('입력에 없는 숫자(20개) 문장은 뺀다', texts[2]?.body === '하나씩 골라 담았어요.', texts[2]?.body)
 check('뺀 문장을 알려 준다', flagged.length >= 2, JSON.stringify(flagged))
+const dupe = parseDraft(JSON.stringify({ summary: '사과', description: '사과예요.', blocks: [
+  { type: 'text', title: '보관 안내', body: '냉장 보관해 주세요.' },
+  { type: 'text', title: '배송 안내', body: '바로 보내요.' },
+  { type: 'text', title: '구성과 포장', body: '한 박스 30,000원이에요. 하나씩 감싸 담았어요.' },
+], faq: [] }), input, [])
+check('보관·배송 섹션은 블록으로 쓰지 않음 (아래 칸과 겹쳐서)', dupe.blocks.length === 1 && dupe.blocks[0].title === '구성과 포장', JSON.stringify(dupe.blocks))
+check('블록 글의 가격 문장은 뺌 (입력에 있는 가격이어도)', dupe.blocks[0]?.body === '하나씩 감싸 담았어요.', dupe.blocks[0]?.body)
 const onlyBad = parseDraft(JSON.stringify({ summary: '사과', description: '사과예요.', blocks: [{ type: 'text', title: '구성', body: '사과 20개예요.' }], faq: [] }), input, [])
 check('문장이 모두 빠진 글 블록은 통째로 버린다', onlyBad.blocks.length === 0, JSON.stringify(onlyBad.blocks))
 const old = parseDraft(JSON.stringify({ summary: '사과', description: '■ 농가 이야기\n비탈밭에서 키웠어요.\n\n■ 보관 안내\n냉장 보관해요.', faq: [] }), input, [])
 check('blocks 를 빼먹은 모델이면 ■ 섹션을 글 블록으로 나눈다', old.blocks.length === 2 && old.blocks[0].title === '농가 이야기', JSON.stringify(old.blocks))
+
+// ---------- 4. 자동 상세 카드 ----------
+const apple = {
+  name: '[예시] 사과 5kg·10kg', summary: '아삭한 부사 사과', unit: '1박스', variety: '후지', brix: '16.0', brix_measured_at: '2026-10-14',
+  harvest_date: '2026-10-12', harvest_days: 33, brix_high: '12', brix_top: '14', brix_grade: '매우높은 당도', brix_rank: 3,
+  notice: { origin: '국내산 (경북 안동)', composition: '사과 5kg 또는 10kg' },
+  item: { category: '과일', show_brix: true, brix_min: 11, brix_max: 16 },
+  seller: { name: '[예시] 햇살농원', region: '경상북도 안동시' },
+  options: [{ id: 1, name: '5kg 1박스', price: 31000, stock: 5 }, { id: 2, name: '10kg 1박스', price: 58000, stock: 3 }],
+}
+const facts = keyFacts(apple)
+const fact = (label) => facts.find((f) => f.label === label)
+check('한눈에 보기: 원산지·품종·당도·수확일·구성·보내는 곳', ['원산지', '품종', '당도', '수확일', '구성', '보내는 곳'].every(fact), JSON.stringify(facts))
+check('당도는 측정일과 함께', fact('당도')?.value === '16Brix' && fact('당도')?.note === '10월 14일 판매 농가 측정', JSON.stringify(fact('당도')))
+check("'표시와 달랐어요'로 당도를 내린 상품은 당도 칸 없음", !keyFacts({ ...apple, info_disputed: true }).some((f) => f.label === '당도'))
+check('당도를 보여 주지 않는 품목은 당도 칸 없음', !keyFacts({ ...apple, item: { ...apple.item, show_brix: false } }).some((f) => f.label === '당도'))
+check("품종 '공통'은 칸 없음", !keyFacts({ ...apple, variety: '공통' }).some((f) => f.label === '품종'))
+check('가공품은 수확일 칸 없음', !keyFacts({ ...apple, item: { ...apple.item, category: '가공품' } }).some((f) => f.label === '수확일'))
+check('빈 값은 칸을 만들지 않음 (원산지 없음)', !keyFacts({ ...apple, notice: {} }).some((f) => f.label === '원산지'))
+check('머리글: [예시] 뗀 농가 이름 · 지역, 소개 글', headline(apple).kicker === '햇살농원 · 경상북도 안동시' && headline(apple).title === '아삭한 부사 사과', JSON.stringify(headline(apple)))
+check('소개가 없으면 상품 이름으로', headline({ ...apple, summary: '' }).title === '사과 5kg·10kg')
+const g = brixGauge(apple)
+check('당도 눈금 안에 값과 기준선', g && g.at > 0 && g.at < 100 && g.standards.length === 2 && g.standards.every((x) => x.at > 0 && x.at < 100), JSON.stringify(g))
+check('당도를 내린 상품은 눈금 없음', brixGauge({ ...apple, info_disputed: true }) === null)
+const opts = optionRows({ ...apple, options: [{ id: 1, name: '5kg 1상자', price: 45000, stock: 1 }, { id: 2, name: '7.5kg 1상자', price: 63000, stock: 1 }, { id: 3, name: '15kg 1상자', price: 115000, stock: 1 }] })
+check('구성 비교: 100g당 가격이 가장 낮은 옵션 표시 (15kg)', opts?.find((r) => r.best)?.name === '15kg 1상자', JSON.stringify(opts))
+check("100g당 가격의 '100' 을 값으로 읽지 않음 (5kg 900원)", opts?.[0].per100 === '100g당 900원', opts?.[0].per100)
+check('옵션이 하나면 구성 비교 없음', optionRows({ ...apple, options: [apple.options[0]] }) === null)
+const soldOut = optionRows({ ...apple, options: [{ id: 1, name: '5kg', price: 30000, stock: 0 }, { id: 2, name: '10kg', price: 50000, stock: 2 }] })
+check('품절 옵션은 품절로, 가장 낮은 가격 표시에서 빠짐', soldOut?.[0].soldOut && !soldOut.some((r) => r.best), JSON.stringify(soldOut))
+check('보관법을 번호 단계로 나눔', storageSteps('약 0℃로 냉장 보관. 비닐봉지에 넣기. 다른 과일과 따로 보관')?.length === 3)
+check('한 문장 보관법은 나누지 않음', storageSteps('서늘한 곳에 보관해 주세요.') === null)
 
 console.log(`\n${count - failed}/${count} 통과`)
 process.exit(failed ? 1 : 0)
