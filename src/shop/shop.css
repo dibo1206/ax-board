@@ -1048,14 +1048,16 @@
   .shop .lookup-steps li { font-size: 12px; }
 }
 
-/* 상품 상세 후기·문의 탭 칸 (2026-11-08) */
-.shop .talk-panel { display: flex; flex-direction: column; gap: 14px; }
-.shop .talk-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); }
-.shop .talk-tabs button { padding: 10px 16px 12px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--muted); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; margin-bottom: -1px; }
-.shop .talk-tabs button b { margin-left: 4px; color: var(--accent); }
-.shop .talk-tabs button.on { border-bottom-color: var(--accent); color: var(--text); }
-.shop .talk-panel [role=tabpanel] { display: flex; flex-direction: column; gap: 12px; }
-.shop .talk-panel [role=tabpanel][hidden] { display: none; }
+/* 상품 상세 사진 밑 탭 띠 (2026-11-14): 4칸 같은 너비, 고른 탭은 굵은 검정 글씨 + 검정 밑줄 */
+.shop .detail-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); scroll-margin-top: 160px; }
+.shop .detail-tabs button { padding: 18px 8px 16px; border: 0; border-bottom: 3px solid transparent; margin-bottom: -1px; background: none; color: var(--muted); font: inherit; font-size: 17px; font-weight: 400; cursor: pointer; white-space: nowrap; }
+.shop .detail-tabs button:hover { color: var(--text); }
+.shop .detail-tabs button.on { border-bottom-color: var(--text); color: var(--text); font-weight: 700; }
+.shop .detail-tabs .tab-count { font-weight: 400; }
+@media (max-width: 560px) { .shop .detail-tabs button { padding: 14px 2px 12px; font-size: 14px; } }
+.shop .detail-panel { display: flex; flex-direction: column; gap: 20px; }
+.shop .detail-panel.box { gap: 12px; }
+.shop .detail-panel[hidden] { display: none; }
 .shop .qna-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
 .shop .qna-list li { padding: 14px 2px; border-bottom: 1px solid var(--border); line-height: 1.7; }
 .shop .qna-list li:last-child { border-bottom: 0; }
