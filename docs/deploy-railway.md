@@ -35,6 +35,7 @@ Railway 화면 메뉴 이름과 요금은 바뀔 수 있으니 쓰기 직전에 
 1. **프로젝트와 DB**: New Project → Deploy PostgreSQL (또는 빈 프로젝트에서 New → Database → PostgreSQL).
 2. **DB 옮기기**: 아래 3장.
 3. **앱 서비스**: 같은 프로젝트에서 New → GitHub Repo → `ax-board`.
+   - **반드시 DB가 있는 프로젝트 캔버스에서** 추가한다. 프로젝트가 다르면 `${{Postgres.DATABASE_URL}}`이 빈 값이 되고 내부 주소(`postgres.railway.internal`)도 못 찾는다(ENOTFOUND) — 11/14 시험에서 실제로 겪음. 캔버스에 앱과 Postgres 블록이 같이 보여야 한다.
    - Settings → Source에서 배포할 브랜치를 고른다. 시험은 `feat/railway-deploy`, 병합한 뒤에는 `main`.
    - 빌드는 Railway(Railpack)가 `package.json`을 보고 알아서 한다: Node 22(`engines`) → `npm ci` → `npm run build`(화면 빌드) → `npm start`.
 4. **볼륨(사진 폴더)**: 앱 서비스에 볼륨을 붙이고 마운트 경로를 `/data`로 한다(캔버스에서 서비스 오른쪽 클릭 → Attach Volume). 코드가 Railway가 알려 주는 `RAILWAY_VOLUME_MOUNT_PATH` 아래 `uploads/`를 자동으로 쓴다(`server/uploads.js`). 사진 옮기기는 4장.
@@ -50,7 +51,7 @@ Railway 화면 메뉴 이름과 요금은 바뀔 수 있으니 쓰기 직전에 
 |---|---|---|
 | `NODE_ENV` | `production` | 없으면 `npm start`가 켜지지 않는다(가짜 결제·시험 로그인 방지) |
 | `HOST` | `0.0.0.0` | Railway는 0.0.0.0 과 `PORT`로 받아야 한다. `PORT`는 Railway가 넣어 준다 |
-| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` | 같은 프로젝트 안 주소를 참조. 서비스 이름이 다르면 화면에서 고른다 |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` | 같은 프로젝트 안 주소를 참조. 서비스 이름이 다르면 화면에서 고른다. 저장 뒤 눈 아이콘으로 값이 `<empty string>`이 아닌지 확인 |
 | `DATA_KEY` | **실습서버 `.env`와 같은 값** | 다르면 옮긴 DB의 이름·전화·주소를 하나도 못 읽는다. 채팅·문서에 붙이지 말고 직접 옮긴다 |
 | `SESSION_SECRET` | 새로 만든 임의 값 | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `OPENROUTER_API_KEY` | 계정 주인의 키 | 사용 한도를 걸어 둔다 |
