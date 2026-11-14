@@ -64,7 +64,8 @@ function Gallery({ product }) {
         <div className="gallery-thumbs">
           {photos.map((url, i) => (
             <button key={url} type="button" className={i === index ? 'on' : ''} onClick={() => setIndex(i)} aria-label={`사진 ${i + 1}`}>
-              <img src={thumbUrl(url)} alt="" loading="lazy" width="64" height="64" />
+              {/* 작은 사진(-thumb)이 없는 사진(회사 제품 상세 사진 등)은 원본으로 바꿔 보여 준다 (깨진 그림 대신) */}
+              <img src={thumbUrl(url)} alt="" loading="lazy" width="64" height="64" onError={(e) => { if (!e.currentTarget.src.endsWith(url)) e.currentTarget.src = url }} />
             </button>
           ))}
         </div>
