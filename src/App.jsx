@@ -189,15 +189,15 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   const [showB2b, setShowB2b] = useState(focus === 'b2b')
   const [sentMessage, setSentMessage] = useState('')
   const [optionId, setOptionId] = useState(null) // 옵션 상품에서 고른 옵션
-  const qnaRef = useRef(null)
-  const [talkTab, setTalkTab] = useState(focus === 'qna' ? 'qna' : 'reviews') // 후기·문의 칸에서 보고 있는 탭
+  const tabsRef = useRef(null)
+  const [tab, setTab] = useState(focus === 'qna' ? 'qna' : 'info') // 사진 밑 탭 띠에서 보고 있는 탭
   const [reviewCount, setReviewCount] = useState(null)
   const [qnaShown, setQnaShown] = useState(5)
   const [askOpen, setAskOpen] = useState(focus === 'qna')
   const openAsk = () => {
-    setTalkTab('qna')
+    setTab('qna')
     setAskOpen(true)
-    qnaRef.current?.scrollIntoView({ behavior: 'smooth' })
+    tabsRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
   const [myQuestions, setMyQuestions] = useState([]) // 내가 남긴 문의 (비밀글 내용 포함, 로그인했을 때만)
 
@@ -208,7 +208,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   }, [code])
 
   useEffect(() => {
-    if (product && focus === 'qna') qnaRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (product && focus === 'qna') tabsRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [product, focus])
 
   useEffect(() => {
@@ -235,6 +235,12 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   const unit = option ? option.name : product.unit
 
   const questions = mergeQuestions(product.questions, myQuestions)
+  const tabs = [
+    { key: 'info', name: '상품 설명' },
+    { key: 'reviews', name: '후기', count: reviewCount ?? product.review_count },
+    { key: 'qna', name: '상품 문의', count: questions.length },
+    { key: 'faq', name: 'Q&A', count: product.faq?.length ?? 0 },
+  ]
   return (
     <article className="detail">
       <button type="button" className="link" onClick={onBack}>← 목록</button>
@@ -287,6 +293,18 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
       </div>
 
       <div className="detail-body">
+        {showB2b && <div id="b2b-form"><B2bForm product={product} onClose={() => setShowB2b(false)} /></div>}
+
+        {/* 사진 밑 탭 띠 (2026-11-14): 누른 탭의 내용만 보여 준다. 후기 수는 후기 목록이 불러오기 전까지 상품에 저장된 값 */}
+        <div className="detail-tabs" role="tablist" aria-label="상품 정보 보기" ref={tabsRef}>
+          {tabs.map((t) => (
+            <button key={t.key} type="button" role="tab" id={`tab-${t.key}`} aria-controls={`panel-${t.key}`} aria-selected={tab === t.key} className={tab === t.key ? 'on' : ''} onClick={() => setTab(t.key)}>
+              {t.name}{t.count != null && <span className="tab-count"> {t.count}</span>}
+            </button>
+          ))}
+        </div>
+
+        <div role="tabpanel" id="panel-info" aria-labelledby="tab-info" hidden={tab !== 'info'} className="detail-panel">
         <Description text={product.description} />
         {/* 회사 상세페이지 이미지 (세로로 긴 이미지를 위에서 아래로 이어서) */}
         {product.detail_images?.length > 0 && (
@@ -295,7 +313,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
             {product.detail_images.map((src) => <img key={src} src={src} alt="" loading="lazy" />)}
           </section>
         )}
-        {/* 순서 (2026-11-08 피드백): 즐기는 법 → 보관·섭취 → 농가 이야기 → 고시 → 자주 묻는 질문 → 후기·문의 */}
+        {/* 상품 설명 탭 순서 (2026-11-08 피드백): 즐기는 법 → 보관·섭취 → 농가 이야기 → 고시. 자주 묻는 질문·후기·문의는 각자 탭으로 */}
         <RecipeCards recipes={item.recipes} />
         <section className="box">
           <h3>보관·섭취 안내</h3>
@@ -335,29 +353,13 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
             </tbody></table>
           </section>
         )}
-        {product.faq?.length > 0 && (
-          <section className="box faq-box">
-            <h3>자주 묻는 질문</h3>
-            {product.faq.map((f) => <details key={f.q}><summary>{f.q}</summary><p>{f.a}</p></details>)}
-          </section>
-        )}
+        </div>
 
-        {showB2b && <div id="b2b-form"><B2bForm product={product} onClose={() => setShowB2b(false)} /></div>}
-
-        {/* 후기와 문의는 탭 한 칸에 모은다. 5개씩 보여 주고 [더 보기]로 늘려서, 많아져도 상세 화면이 끝없이 길어지지 않게 */}
-        <section className="box talk-panel" ref={qnaRef}>
-          <div className="talk-tabs" role="tablist" aria-label="후기와 문의">
-            <button type="button" role="tab" id="tab-reviews" aria-controls="panel-reviews" aria-selected={talkTab === 'reviews'} className={talkTab === 'reviews' ? 'on' : ''} onClick={() => setTalkTab('reviews')}>
-              구매 후기 <b>{reviewCount ?? ''}</b>
-            </button>
-            <button type="button" role="tab" id="tab-qna" aria-controls="panel-qna" aria-selected={talkTab === 'qna'} className={talkTab === 'qna' ? 'on' : ''} onClick={() => setTalkTab('qna')}>
-              상품 문의 <b>{product.questions.length}</b>
-            </button>
-          </div>
-          <div role="tabpanel" id="panel-reviews" aria-labelledby="tab-reviews" hidden={talkTab !== 'reviews'}>
-            <ReviewList code={product.product_code} embedded onCount={setReviewCount} />
-          </div>
-          <div role="tabpanel" id="panel-qna" aria-labelledby="tab-qna" hidden={talkTab !== 'qna'}>
+        {/* 후기·문의는 5개씩 보여 주고 [더 보기]로 늘린다. 후기 패널은 숨겨 둬도 그려 둬야 탭의 후기 수가 맞는다 */}
+        <section role="tabpanel" id="panel-reviews" aria-labelledby="tab-reviews" hidden={tab !== 'reviews'} className="box detail-panel">
+          <ReviewList code={product.product_code} embedded onCount={setReviewCount} />
+        </section>
+        <section role="tabpanel" id="panel-qna" aria-labelledby="tab-qna" hidden={tab !== 'qna'} className="box detail-panel">
             {askOpen ? (
               <QuestionForm
                 productCode={product.product_code}
@@ -390,7 +392,12 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
             {questions.length > qnaShown && (
               <button type="button" className="button ghost talk-more" onClick={() => setQnaShown((n) => n + 5)}>문의 더 보기 ({qnaShown}/{questions.length})</button>
             )}
-          </div>
+        </section>
+        <section role="tabpanel" id="panel-faq" aria-labelledby="tab-faq" hidden={tab !== 'faq'} className="box detail-panel faq-box">
+          <h3>자주 묻는 질문</h3>
+          {product.faq?.length > 0
+            ? product.faq.map((f) => <details key={f.q}><summary>{f.q}</summary><p>{f.a}</p></details>)
+            : <p className="muted">아직 등록된 자주 묻는 질문이 없어요. 궁금한 점은 [상품 문의] 탭에 남겨 주세요.</p>}
         </section>
       </div>
       <Related code={product.product_code} onOpen={onOpen} />
