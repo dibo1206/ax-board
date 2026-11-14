@@ -9,6 +9,15 @@ const PRODUCT_MENU = [['가격·재고', '이 상품 가격 알려 주세요'], 
 const SHOP_MENU = [['배송비', '배송비 얼마예요?'], ['주문 조회', '주문 조회는 어디서 해요?'], ['교환·환불', '교환·환불은 어떻게 해요?'], ['상품 추천', '선물용 추천해 주세요'], ['보관법', '보관법 알려 주세요']]
 const HELLO = { role: 'assistant', content: '안녕하세요! 아래 버튼을 누르거나 가격·당도·보관법·레시피를 물어보세요. 상품 정보에 있는 내용으로 답해 드려요.' }
 
+// 상담하기 버튼에 마우스를 올리면 사과 캐릭터가 wave1·wave2 그림을 번갈아 손을 흔든다 (shop.css).
+// wave2는 손을 흔드는 순간에야 내려받아서 처음 올렸을 때 한 번 깜빡였다 → 미리 받아 두고, 페이지가 떠 있는 동안 붙잡아 둔다
+let mascotImage = null
+function preloadMascot() {
+  if (mascotImage || !window.matchMedia?.('(hover: hover)').matches) return
+  mascotImage = new Image()
+  mascotImage.src = '/home/mascot-wave2.svg'
+}
+
 export function Chat({ productCode, onOpenProduct }) {
   const [start] = useState(() => loadChat(HELLO))
   const [open, setOpen] = useState(start.open)
@@ -17,6 +26,8 @@ export function Chat({ productCode, onOpenProduct }) {
   const [sending, setSending] = useState(false)
   const [member, setMember] = useState(null) // 로그인했는지 (확인 전 null)
   const endRef = useRef(null)
+
+  useEffect(preloadMascot, [])
 
   // 저장된 대화가 다른 로그인 상태에서 나눈 것이면 버린다.
   // account-change 신호는 새 답변 숫자를 고칠 때도 오므로, 계정이 실제로 바뀌었을 때(로그인·로그아웃·다른 계정)만 비운다
