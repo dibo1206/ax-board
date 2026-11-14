@@ -88,3 +88,11 @@ question_type,question,expected,expected_source
 넘겨야 함,사진에서 본 거보다 훨씬 작은 게 왔어요,"담당자 연결, [반품 신청]에 사유 남기기 안내 (환불을 약속하지 않음)",고령자 말투 · 표시와 다름 = 반품 사유 (server/policy.js) · 온라인 과일 불만: 크기가 설명과 다름
 보관·신선도,고구마 우째 보관하는교?,냉장 보관하지 말고 서늘한 곳에 상온 보관,고령자 말투(경상도 사투리) · items.csv sweet_potato (팀 식품 기준표)
 상품 정보,사과 십 키로 얼마요,58000원,고령자 말투(음성 입력: 숫자를 한글로) · apple_10kg 10kg 옵션 가격
+상품 정보,이 상품 가격 알려 주세요,"5kg 1박스 31000원, 10kg 1박스 58000원 (사과 상품 화면에서 누른 경우)",챗봇 버튼 문장 (src/Chat.jsx PRODUCT_MENU [가격·재고]) · 상품 화면 apple_10kg · product_options.csv
+보관·신선도,이 상품 보관법 알려 주세요,"약 0℃로 냉장 보관(김치냉장고 등), 비닐봉지나 밀폐용기에 넣기, 다른 과일·채소와 따로 보관",챗봇 버튼 문장 (src/Chat.jsx PRODUCT_MENU [보관법]) · 상품 화면 apple_10kg · items.csv apple (팀 식품 기준표)
+레시피,이 상품 레시피 알려 주세요,사과 샐러드·사과 조림·사과 토스트 중에서 안내 (기준표에 없는 요리를 지어내지 않기),챗봇 버튼 문장 (src/Chat.jsx PRODUCT_MENU [레시피]) · 상품 화면 apple_10kg · items.csv apple recipes
+상품 정보,이 상품 어디서 키웠어요?,학가산 햇살농원(경상북도 안동시 북후면),챗봇 버튼 문장 (src/Chat.jsx PRODUCT_MENU [산지]) · 상품 화면 apple_10kg · sellers.csv farm_sunny
+상품 정보,교환·환불은 어떻게 해요?,"단순 변심 반품은 받지 않음, 상품 하자·파손·오배송은 받은 날부터 3개월 안에 [주문 조회](비회원) 또는 마이페이지 주문 내역에서 [반품 신청] (환불을 약속하지 않음, 문제가 없는 손님에게 사과·담당자 넘김은 하지 않기)",챗봇 버튼 문장 (src/Chat.jsx SHOP_MENU·PRODUCT_MENU [교환·환불]) · server/policy.js DEFAULT_RETURNS
+상품 정보,주문 조회는 어디서 해요?,[주문 조회]에서 주문번호와 주문자 휴대폰 번호로 확인 (상담창에서 주문 정보를 확인하지 않음),챗봇 버튼 문장 (src/Chat.jsx SHOP_MENU [주문 조회]) · server/chat.js 주문 조회 안내
+상품 정보,선물용 추천해 주세요,"선물용 태그 상품 중 재고 있는 것(사과 5kg·10kg, 배즙 50포) 추천, 품절 상품(신고 배 5kg)은 빼기",챗봇 버튼 문장 (src/Chat.jsx SHOP_MENU [상품 추천]) · products.csv tags gift · server/recommend.js 품절 제외
+보관·신선도,보관법 알려 주세요,어떤 상품인지 되묻고 품목 버튼 보여 주기 (아무 품목 보관법이나 지어내지 않기),챗봇 버튼 문장 (src/Chat.jsx SHOP_MENU [보관법]) · 쇼핑몰 화면 (상품 없음)
