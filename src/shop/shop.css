@@ -732,7 +732,7 @@
 .shop .text-tabs button { font-size: 17.5px; }
 
 /* "이달의 상품" 제목을 옆 검색칸보다 조금 위로 */
-.shop #products-title { position: relative; top: -7.5px; }
+.shop #products-title { position: relative; top: -4px; } /* 심지은 레이아웃 수정 (2026-11-10) */
 
 /* 당도 알약 → 동그라미: 위에 "당도", 아래에 숫자 */
 .shop .ptag.ptag-brix { display: inline-grid; align-content: center; justify-items: center; gap: 0; width: 52.5px; height: 52.5px; padding: 0; border-radius: 50%; line-height: 1.1; text-align: center; box-shadow: 0 1px 4px rgb(0 0 0 / 0.2); }
@@ -1420,3 +1420,34 @@
 /* 헤더 아래 줄 메뉴(8개)는 세 칸에 걸쳐 있어서, 그 글자 폭이 로고·도구 칸을 넓히고 가운데 검색칸을 74px까지 눌렀다(노트북 너비).
    메뉴 폭은 칸 너비 계산에 넣지 않는다 (2026-11-09) */
 .shop .site-head-inner .site-menu { contain: inline-size; }
+
+/* 레이아웃 정리 (심지은, 2026-11-10 · 농가별로 보기 실험은 빼고 디자인만 옮김 2026-11-14): 색·글꼴·모양은 그대로, 정렬과 여백만 손본다 */
+/* 1) 헤더 오른쪽(로그인·회원가입이 보이는 761px 이상): 주문조회·마이페이지·장바구니·로그인·회원가입을 한 줄에서 세로 가운데로 */
+@media (min-width: 761px) {
+  .shop .site-head-inner .site-tools { flex-direction: row; align-items: center; justify-content: flex-end; flex-wrap: nowrap; gap: 12px; }
+  .shop .site-head-inner .site-tools > * { flex: none; }
+  .shop .tools-main { gap: round(clamp(8px, 1vw, 14px), 1px); } /* 주문조회·마이페이지·장바구니 사이를 좁혀 검색칸 자리를 넓힌다 */
+  .shop .tools-main, .shop .tools-auth { align-items: center; white-space: nowrap; }
+  .shop .tools-auth { gap: 8px; line-height: 1; position: relative; top: 2px; } /* 글자가 작아서 장바구니 줄보다 살짝 떠 보이는 것을 맞춤 */
+  .shop .tools-auth a, .shop .tools-auth .link-btn { display: inline-flex; align-items: center; white-space: nowrap; }
+}
+/* 2) '상품' 글씨를 오른쪽 '전체 상품·베스트 보기' 링크와 같은 글자 밑선에 맞춘다 (여백·간격은 그대로) */
+.shop .products-head { align-items: baseline; }
+/* 2-1) 히어로 제목('이번 달, 식탁에 올릴 과일')만 살짝 아래로. 다른 문구·버튼 위치와 여백은 그대로 */
+.shop .hero-text .display { position: relative; top: 3px; }
+/* 3) 상품 목록: 행 높이를 카드 내용만큼만(남는 공간을 늘려 잡지 않게) */
+.shop .pgrid { align-content: start; grid-auto-rows: auto; }
+.shop .pgrid > li { min-width: 0; }
+
+/* 상품 상세의 [← 목록]: 네모 테두리 버튼 */
+.shop .detail > button.link {
+  display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: auto; min-width: 0; margin-bottom: 16px; padding: 9px 20px; gap: 0;
+  font-size: 15px; font-weight: 500; line-height: 24px; white-space: nowrap; text-decoration: none; cursor: pointer;
+  border: 1px solid #3f423d; border-radius: 6px; background: #fff; color: #000;
+}
+.shop .detail > button.link:hover { border-color: var(--text); background: var(--text); color: #fff; filter: none; }
+
+/* 회원가입 화면 맨 아래 [가입하기] 버튼을 가운데로 */
+.shop .signup-form > button[type="submit"] { display: flex; justify-content: center; margin: 20px auto 0; min-width: 300px; padding-block: 14px; font-size: 18px; border-radius: 8px; }
+/* 회원가입 카드: 모서리를 둥글게, 배경은 더 밝게 */
+.shop .signup-form.box { max-width: 520px; border-radius: 14px; background: #fff; }
