@@ -5,7 +5,8 @@ import { getAccount, loadScript, MAX_QTY, optionLabel, post, preorderNote, readC
 import { useCartLines } from './useCartLines.js'
 
 // 주문서 → (주문 만들기: 서버가 금액 계산·재고 잡아 둠) → 결제 단계(토스 결제위젯)
-const POSTCODE_SDK = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js'
+// 카카오 우편번호 스크립트 (2026-11-16: t1.daumcdn.net 은 2026-11-30 종료 공지가 있어 t1.kakaocdn.net 으로 옮김)
+const POSTCODE_SDK = 'https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js'
 const TOSS_SDK = 'https://js.tosspayments.com/v2/standard'
 
 // 바로 구매: /checkout?item=상품코드&option=옵션번호&qty=수량 (옵션 없는 상품은 option 없이)
