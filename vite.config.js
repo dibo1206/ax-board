@@ -10,9 +10,13 @@ const PRIVATE = /^\/(\.env|\.git|server\/|scripts\/|data\/|docs\/|package(-lock)
 // 그래서 주소를 실제 파일 위치로 바꿔 보고, 화면용 폴더(src·public·node_modules)와 index.html 밖의 파일이면 막는다
 const ROOT = process.cwd()
 const SERVABLE = ['src', 'public', 'node_modules'].map((dir) => resolve(ROOT, dir) + sep)
+// 올린 사진 폴더(uploads/)는 Vite 가 직접 보여 주지 않고 아래 proxy 로 백엔드에 넘긴다 (백엔드가 그림 전용 머리글을 붙여 보냄).
+// 전에는 이 폴더도 '화면용 폴더 밖 파일'로 막혀서 개발 화면에서만 올린 사진·당도계 사진이 404였다 (2026-11-16)
+const UPLOADS = resolve(ROOT, 'uploads') + sep
 function exposesFile(path) {
   const target = path.startsWith('/@fs/') ? resolve(path.slice(4)) : resolve(ROOT, `.${path}`)
   if (target === resolve(ROOT, 'index.html') || SERVABLE.some((dir) => target.startsWith(dir))) return false
+  if (!path.startsWith('/@fs/') && target.startsWith(UPLOADS)) return false
   try {
     return statSync(target).isFile()
   } catch {
