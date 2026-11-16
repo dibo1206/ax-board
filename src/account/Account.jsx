@@ -8,7 +8,8 @@ import { AgreeAll, EmailField, NewPasswordFields, Req } from './fields.jsx'
 import { emailProblem, formatPhone, passwordOk, phoneOk } from './rules.js'
 
 // 손님 회원: 로그인 · 가입 · 비밀번호 찾기 · 마이페이지(주문 내역 · 내 정보·배송지 · 비밀번호 · 탈퇴)
-const POSTCODE_SDK = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js'
+// 카카오 우편번호 스크립트 (2026-11-16: t1.daumcdn.net 은 2026-11-30 종료 공지가 있어 t1.kakaocdn.net 으로 옮김)
+const POSTCODE_SDK = 'https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js'
 const goNext = () => {
   const next = new URLSearchParams(window.location.search).get('next') ?? ''
   // 브라우저는 /\\evil.example 도 다른 사이트로 읽는다 → 글자가 아니라 풀어 본 주소로 우리 사이트인지 확인한다

@@ -14,15 +14,17 @@ const PRIVATE_PAGES = /^\/(admin|seller|account|cart|checkout|order|restock)(\/|
 // 손님이 여는 공개 화면 (여기 없는 주소는 404 + 화면은 '찾으시는 페이지가 없어요'). 화면 주소를 새로 만들면 여기에도 더한다
 const PUBLIC_PAGES = ['/', '/products', '/farms', '/about', '/notice', '/press', '/guide', '/sitemap', '/policy/terms', '/policy/privacy', '/policy/refund', '/policy/noemail']
 const CODE = /^[A-Za-z0-9_-]{1,64}$/
-// 화면에서 불러도 되는 곳: 우리 서버, 토스페이먼츠(결제창), 다음 우편번호(주소 검색 창), 구글·jsDelivr 글꼴. 나머지 스크립트·틀(iframe)은 막는다
+// 화면에서 불러도 되는 곳: 우리 서버, 토스페이먼츠(결제창), 카카오(다음) 우편번호(주소 검색 창), 구글·jsDelivr 글꼴. 나머지 스크립트·틀(iframe)은 막는다
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' https://js.tosspayments.com https://*.tosspayments.com https://t1.daumcdn.net",
+  "script-src 'self' https://js.tosspayments.com https://*.tosspayments.com https://t1.kakaocdn.net",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
   "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net",
   "img-src 'self' data: blob: https:",
   "connect-src 'self' https://*.tosspayments.com",
-  "frame-src https://*.tosspayments.com https://*.toss.im",
+  // 주소 검색 창(카카오 우편번호)은 새 창(about:blank)이 이 정책을 물려받은 채 postcode.map.kakao.com 화면을 틀(iframe)로 띄운다.
+  // 이 주소가 빠져 있어서 배포 주소에서 주소 검색 창이 '차단된 콘텐츠'로 나왔다 (2026-11-16). 주소만 적으면 http·https 둘 다 맞는다(로컬 시험용)
+  "frame-src https://*.tosspayments.com https://*.toss.im postcode.map.kakao.com",
   "form-action 'self' https://*.tosspayments.com",
   "base-uri 'self'",
   "object-src 'none'",
