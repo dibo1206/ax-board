@@ -1,12 +1,13 @@
 // 블록형 상세페이지 규칙 시험 (2026-11-14): DB·AI 키 없이 돈다 → GitHub 자동 검사(CI)에서도 돌린다
 //   npm run test-blocks
 // 1) 블록 검사(server/blocks.js) 2) 상품 저장 검사(server/validate.js)와 금지어 3) AI 초안 정리(server/content.js parseDraft)
-// 4) 자동 상세 카드에 들어갈 값 고르기(src/shop/detailFacts.js)
+// 4) 자동 상세 카드에 들어갈 값 고르기(src/shop/detailFacts.js) 5) 쿠팡식 지그재그 묶기·[예시] 상품 데모 블록 설계(server/demoPlan.js)
 import { blocksSummary, blocksText, readBlocks, removedBlockImages, sameBlocks } from '../server/blocks.js'
 import { findBanned } from '../server/banned.js'
 import { parseDraft } from '../server/content.js'
 import { validateProduct } from '../server/validate.js'
-import { brixGauge, headline, keyFacts, optionRows, storageSteps } from '../src/shop/detailFacts.js'
+import { brixGauge, headline, keyFacts, optionRows, pairBlocks, storageSteps } from '../src/shop/detailFacts.js'
+import { DEMO_CAPTION, planDemoBlocks } from '../server/demoPlan.js'
 
 let failed = 0
 let count = 0
@@ -131,6 +132,43 @@ const soldOut = optionRows({ ...apple, options: [{ id: 1, name: '5kg', price: 30
 check('품절 옵션은 품절로, 가장 낮은 가격 표시에서 빠짐', soldOut?.[0].soldOut && !soldOut.some((r) => r.best), JSON.stringify(soldOut))
 check('보관법을 번호 단계로 나눔', storageSteps('약 0℃로 냉장 보관. 비닐봉지에 넣기. 다른 과일과 따로 보관')?.length === 3)
 check('한 문장 보관법은 나누지 않음', storageSteps('서늘한 곳에 보관해 주세요.') === null)
+
+// ---------- 5. 쿠팡식 지그재그·[예시] 데모 블록 ----------
+const T = (title = '제목') => ({ type: 'text', title, body: '본문' })
+const I = (hex) => ({ type: 'image', url: photo(hex), alt: '', caption: '' })
+const zig = pairBlocks([I('a00000000001'), T('1'), I('a00000000002'), T('2')])
+check('사진·글이 붙어 있으면 한 줄로 묶고 둘째 줄은 사진 쪽을 바꿈', zig.length === 2 && !zig[0].flip && zig[1].flip && zig[1].text.title === '2', JSON.stringify(zig))
+const textFirst = pairBlocks([T('글 먼저'), I('a00000000003')])
+check('글 → 사진 순서여도 한 줄 (사진은 image 칸)', textFirst.length === 1 && textFirst[0].image?.url === photo('a00000000003'))
+const lone = pairBlocks([I('a00000000004'), I('a00000000005'), T('끝')])
+check('사진 두 장이 이어지면 앞 사진은 혼자 한 칸', lone.length === 2 && lone[0].single?.type === 'image' && lone[1].text?.title === '끝', JSON.stringify(lone))
+check('글만 있으면 혼자 한 칸', pairBlocks([T()]).every((r) => r.single))
+
+const demoProduct = {
+  product_code: CODE, name: '[예시] 거창 부사 가정용 5kg', summary: '고랭지에서 일교차를 맞고 자란 거창 부사', variety: '후지', unit: '사과 5kg 1박스',
+  harvest_date: '2026-10-28', brix: '15.3', brix_measured_at: '2026-10-28', price: 32000, image_url: '/product-photos/apple_home_3kg.webp', notice: { origin: '국내산 (경상남도 거창군)' },
+}
+const demoItem = { status: 'active', category: '과일', recipes: [
+  { title: '사과 샐러드', ingredients: '사과·채소', method: '썰어서 채소와 함께 곁들이기', image: '/recipe-photos/apple-1.webp' },
+  { title: '사과 조림', ingredients: '사과·설탕', method: '졸이기', image: '/recipe-photos/apple-2.webp' },
+  { title: '사과 주스', ingredients: '사과', method: '갈기', image: '/recipe-photos/apple-3.webp' },
+] }
+const demoSeller = { name: '[예시] 거창 사과재', region: '경상남도 거창군 고제면', story: '해발 600m 고랭지 과수원이에요. 3대째 사과를 길러요. 세 번째 문장은 빼요.' }
+const plan = planDemoBlocks(demoProduct, demoItem, demoSeller)
+check('예시 블록: 대표 사진 + 레시피 2개 = 사진·글 3쌍', plan.pairs.length === 3 && plan.pairs[0].photo === demoProduct.image_url && plan.pairs[1].photo === '/recipe-photos/apple-1.webp', JSON.stringify(plan.pairs.map((x) => x.photo)))
+const allText = plan.pairs.map((x) => `${x.title} ${x.body}`).join(' ') 
+check('예시 블록 글에 [예시]·가격이 없음', !allText.includes('[예시]') && !/\d[\d,]*\s*원/.test(allText), allText)
+check("받침에 맞춘 '이에요/예요' (5kg이에요 · 후지예요 · 1박스예요)", allText.includes('거창 부사 가정용 5kg이에요') && allText.includes('품종은 후지예요') && allText.includes('사과 5kg 1박스예요'), allText)
+check('저장된 사실만: 수확일·당도 측정일', allText.includes('10월 28일에 수확했어요') && allText.includes('10월 28일에 잰 당도는 15.3Brix예요'), allText)
+check('농가 이야기는 블록으로 쓰지 않음 (아래 칸에 이미 나옴), 농가 이름의 [예시] 는 뗌', !('tail' in plan) && allText.includes('거창 사과재에서 보내는') && !allText.includes('[예시]'), allText)
+check('검수 전 품목은 레시피를 쓰지 않음 (손님 화면에서 숨김)', planDemoBlocks(demoProduct, { ...demoItem, status: 'pending' }, demoSeller).pairs.length === 1)
+check('가공품은 수확일 문장 없음', !planDemoBlocks(demoProduct, { ...demoItem, category: '가공품' }, demoSeller).pairs[0].body.includes('수확했어요'))
+check('대표 사진이 없으면 소개 쌍 없음', planDemoBlocks({ ...demoProduct, image_url: null }, demoItem, demoSeller).pairs.every((x) => x.photo.startsWith('/recipe-photos/')))
+// 사진을 복사한 뒤 모양: 사진 → 글 순서, [예시] 참고 사진 표시 → 블록 검사 통과 + 지그재그 3줄
+const built = plan.pairs.flatMap((x, i) => [{ type: 'image', url: photo(`b0000000000${i}`), alt: x.alt, caption: DEMO_CAPTION }, { type: 'text', title: x.title, body: x.body }])
+const builtCheck = readBlocks(built, CODE)
+check('예시 블록이 블록 검사·금지어를 통과', builtCheck.blocks?.length === 6 && findBanned(blocksText(built)).length === 0, JSON.stringify(builtCheck.errors))
+check('예시 블록은 지그재그 3줄 (가운데 줄만 사진이 오른쪽)', (() => { const r = pairBlocks(builtCheck.blocks); return r.length === 3 && !r[0].flip && r[1].flip && !r[2].flip })())
 
 console.log(`\n${count - failed}/${count} 통과`)
 process.exit(failed ? 1 : 0)

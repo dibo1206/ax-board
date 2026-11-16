@@ -7,7 +7,7 @@ import { Related } from './Recommend.jsx'
 import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
 import { addToCart, get, getPolicy, post, preorderNote, thumbUrl, unitPrice } from './shop/shared.js'
 import { BrixCard, KeyFactsCard, OptionsCard } from './shop/DetailCards.jsx'
-import { storageSteps } from './shop/detailFacts.js'
+import { pairBlocks, storageSteps } from './shop/detailFacts.js'
 import { FarmPage, FarmsPage } from './shop/Farms.jsx'
 import { Guide } from './shop/Guide.jsx'
 import { NotFound } from './shop/NotFound.jsx'
@@ -92,19 +92,36 @@ function Description({ text }) {
 }
 
 // 블록형 상세페이지 (2026-11-14): 글 블록과 사진 블록을 판매자가 정한 순서대로. 글은 글자 그대로 보여 준다 (HTML로 해석하지 않음)
+function BlockPhoto({ block, alt }) {
+  return (
+    <figure className="detail-block-photo">
+      <img src={block.url} alt={block.alt || block.caption || alt} loading="lazy" decoding="async" />
+      {block.caption && <figcaption>{block.caption}</figcaption>}
+    </figure>
+  )
+}
+
+function BlockText({ block }) {
+  return (
+    <div className="detail-block-text">
+      {block.title && <h4 className="para-title">{block.title}</h4>}
+      {block.body.split(/\n{2,}/).map((para, j) => <p key={j} className="para">{para}</p>)}
+    </div>
+  )
+}
+
 function DetailBlocks({ blocks, name }) {
   if (!blocks?.length) return null
   return (
     <section className="box detail-blocks">
-      {blocks.map((b, i) => (b.type === 'image' ? (
-        <figure key={`${i}-${b.url}`} className="detail-block-photo">
-          <img src={b.url} alt={b.alt || b.caption || `${name} 상세 사진 ${i + 1}`} loading="lazy" decoding="async" />
-          {b.caption && <figcaption>{b.caption}</figcaption>}
-        </figure>
+      {pairBlocks(blocks).map((row, i) => (row.single ? (
+        row.single.type === 'image'
+          ? <BlockPhoto key={`${i}-${row.single.url}`} block={row.single} alt={`${name} 상세 사진 ${i + 1}`} />
+          : <BlockText key={i} block={row.single} />
       ) : (
-        <div key={i} className="detail-block-text">
-          {b.title && <h4 className="para-title">{b.title}</h4>}
-          {b.body.split(/\n{2,}/).map((para, j) => <p key={j} className="para">{para}</p>)}
+        <div key={`${i}-${row.image.url}`} className={`detail-block-pair${row.flip ? ' flip' : ''}`}>
+          <BlockPhoto block={row.image} alt={`${name} 상세 사진 ${i + 1}`} />
+          <BlockText block={row.text} />
         </div>
       )))}
     </section>

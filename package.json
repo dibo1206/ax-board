@@ -18,6 +18,7 @@
     "sim-admin": "node scripts/admin-sim.js",
     "live-sim": "node scripts/live-sim.js",
     "attach-photos": "node scripts/attach-photos.js",
+    "demo-blocks": "node scripts/demo-blocks.js",
     "company-content": "node scripts/company-content.js",
     "build": "vite build",
     "lint": "oxlint",
