@@ -332,3 +332,9 @@ input.invalid { border-color: #b3261e; }
 .farm-row { cursor: pointer; }
 .farm-row:hover td { background: var(--bg); }
 .toolbar select { padding: 9px 12px; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+
+/* 판매자 머리 부분: 휴대폰에서 [글씨 크게]·[로그아웃]이 한 글자씩 세로로 쌓이던 것 (2026-11-16)
+   버튼 글자는 줄바꿈하지 않고, 자리가 모자라면 계정 줄 전체가 다음 줄로 넘어간다 */
+.console .admin-head .account { flex-wrap: wrap; row-gap: 6px; }
+.console .admin-head .account .text-size, .console .admin-head .account .link { flex: none; white-space: nowrap; }
+.console .admin-head .account .muted { min-width: 0; overflow-wrap: anywhere; }
