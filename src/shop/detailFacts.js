@@ -81,3 +81,20 @@ export function storageSteps(text) {
   const steps = String(text ?? '').split(/(?<=[.。])\s+|\.$/).map((s) => s.replace(/\.$/, '').trim()).filter(Boolean)
   return steps.length >= 2 ? steps : null
 }
+
+// 쿠팡식 지그재그 (2026-11-16): 사진 블록과 글 블록이 붙어 있으면 한 줄(사진 | 글)로 묶고, 줄마다 사진 쪽을 바꾼다.
+// 혼자 있는 사진(세로로 긴 상세 이미지 등)과 글은 전처럼 가운데 한 칸. 휴대폰에서는 사진 위·글 아래로 쌓인다
+export function pairBlocks(blocks) {
+  const rows = []
+  let pairs = 0
+  for (let i = 0; i < blocks.length; i += 1) {
+    const a = blocks[i]
+    const b = blocks[i + 1]
+    if (b && a.type !== b.type) {
+      rows.push({ image: a.type === 'image' ? a : b, text: a.type === 'image' ? b : a, flip: pairs % 2 === 1 })
+      pairs += 1
+      i += 1
+    } else rows.push({ single: a })
+  }
+  return rows
+}

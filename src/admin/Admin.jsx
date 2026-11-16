@@ -81,6 +81,7 @@ function Admin() {
   const [productQuery, setProductQuery] = useState('')
   // 상품 관리를 '상품으로 보기' / '농가별로 보기'로 (2026-11-09). farm: 한 농가 상품만 볼 때 그 농가 코드
   const [productView, setProductView] = useState('list')
+  const [demoBusy, setDemoBusy] = useState(false) // [예시] 상품 상세 블록 채우는 중 (server/demoBlocks.js)
   const [farm, setFarm] = useState('')
   const [counts, setCounts] = useState(null)
   const setItemCount = useCallback((n) => setCounts((c) => (c ? { ...c, pending_items: n } : c)), [])
@@ -150,6 +151,22 @@ function Admin() {
     setProducts(await adminApi('/products'))
     setEditing(null)
     setMessage(text)
+  }
+
+  // 데모용: 이름이 [예시]인 상품 중 상세 블록이 빈 상품에 사진·글 블록을 채운다. 사진을 줄이며 복사해서 1~2분 걸릴 수 있다
+  async function fillDemoBlocks() {
+    if (!window.confirm('이름이 [예시]인 상품 중 상세 블록이 빈 상품에 데모용 사진·글 블록을 채울까요?\n이미 채운 블록은 바꾸지 않아요. 1~2분 걸릴 수 있어요.')) return
+    setDemoBusy(true)
+    setMessage('예시 상품 상세 블록을 채우는 중이에요…')
+    try {
+      const r = await adminApi('/demo-blocks', { method: 'POST', body: {}, timeoutMs: 300_000 })
+      const extra = [r.skipped && `건너뜀 ${r.skipped}개`, r.failed.length && `실패 ${r.failed.length}개`].filter(Boolean).join(', ')
+      await refresh(`예시 상품 ${r.filled}개에 상세 블록을 채웠어요 (사진 ${r.photos}장${extra ? `, ${extra}` : ''}).`)
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setDemoBusy(false)
+    }
   }
 
   async function logout() {
@@ -313,6 +330,9 @@ function Admin() {
             <div className="actions">
               <input type="search" value={productQuery} onChange={(e) => setProductQuery(e.target.value)} placeholder={farm ? '이 농가 상품 찾기' : '상품·농가 찾기'} aria-label="상품 찾기" />
               <button type="button" className="button" onClick={() => { setEditing('new'); setMessage('') }}>+ 새 상품 등록</button>
+              <MoreMenu label="상품 관리 다른 작업">
+                <button type="button" disabled={demoBusy} onClick={fillDemoBlocks}>{demoBusy ? '채우는 중…' : '[예시] 상품 상세 블록 채우기'}</button>
+              </MoreMenu>
             </div>
           </div>
           <table className="table">

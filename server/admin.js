@@ -8,6 +8,7 @@ import { requireAdmin } from './auth.js'
 import { findBanned } from './banned.js'
 import { blocksSummary, removedBlockImages } from './blocks.js'
 import { fillItem, itemDraft, listTemplates, productDraft } from './content.js'
+import { fillDemoBlocks } from './demoBlocks.js'
 import { createLimiter } from './limit.js'
 import { generateRecipePhoto, imageKeyLoaded, imagesLeftToday, saveRecipePhoto } from './imagegen.js'
 import { pool } from './db.js'
@@ -157,6 +158,14 @@ adminRouter.get('/ai/templates', listTemplates)
 adminRouter.post('/ai/product-draft', productDraft)
 adminRouter.post('/items/:code/fill', fillItem)
 adminRouter.post('/items/:code/draft', itemDraft)
+
+// [예시] 상품 상세 블록 채우기 (데모용, server/demoBlocks.js): 블록이 빈 [예시] 상품만 채우고 이미 있는 블록은 건드리지 않는다
+adminRouter.post('/demo-blocks', async (req, res) => {
+  const result = await fillDemoBlocks()
+  if (result.busy) return res.status(409).json({ error: '이미 채우는 중이에요. 잠시 뒤에 목록을 새로 고쳐 보세요.' })
+  console.log(`[demo-blocks] 관리자 ${req.admin.loginId} · 채움 ${result.filled} · 건너뜀 ${result.skipped} · 사진 ${result.photos} · 실패 ${result.failed.length}`)
+  res.json(result)
+})
 // 새 품목 요청 · 검수 (items.js)
 adminRouter.post('/items/request', requestItem)
 adminRouter.get('/items/review', listReview)
@@ -231,7 +240,7 @@ const OUR_FILE = (code) => new RegExp(`^/uploads/${code}-[0-9a-f]{12}\\.webp$`)
 // (긴 변 1200px 로 줄이면 860×6000 사진이 172×1200 이 되어 사진 속 글씨를 못 읽는다)
 const LARGE = { width: 1200, height: 1200 }
 const WIDE = { width: 1000, height: 6000 }
-async function saveOptimized(code, buffer, { wide = false } = {}) {
+export async function saveOptimized(code, buffer, { wide = false } = {}) {
   const base = `${code}-${randomBytes(6).toString('hex')}`
   const image = sharp(buffer, { limitInputPixels: 40_000_000 }).rotate()
   const [large, thumb] = await Promise.all([
