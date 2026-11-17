@@ -145,15 +145,19 @@ function Settlement() {
   }, [])
   if (!s) return null
   const refunds = s.confirmed_refunds + s.late_refunds
+  // 수수료: 상품 판매액 × 주문할 때의 수수료율, 반품 환불분에 붙었던 수수료는 돌려받는다
+  const fee = Math.max(0, s.confirmed_commission - s.confirmed_refund_commission)
+  const waitingFee = Math.max(0, s.waiting_commission - s.waiting_refund_commission)
   return (
     <section className="settle">
       <h3 className="section-title">정산 <span className="muted">구매 확정된 내 상품 매출 기준{s.has_test ? ' · 테스트 결제 포함' : ''}</span></h3>
       <div className="stat-grid">
-        <StatTile label="이번 달 정산 예정" value={won(s.confirmed_amount + s.confirmed_shipping - refunds)} hint={`${s.confirmed_orders}건 · 배송비 ${won(s.confirmed_shipping)} 포함`} tone="green" />
-        <StatTile label="구매 확정 기다리는 중" value={won(s.waiting_amount + s.waiting_shipping - s.waiting_refunds)} hint={`${s.waiting_orders}건`} tone="blue" />
+        <StatTile label="이번 달 정산 예정" value={won(s.confirmed_amount + s.confirmed_shipping - refunds - fee)} hint={`${s.confirmed_orders}건 · 배송비 ${won(s.confirmed_shipping)} 포함 · 수수료 ${won(fee)} 뺌`} tone="green" />
+        <StatTile label="구매 확정 기다리는 중" value={won(s.waiting_amount + s.waiting_shipping - s.waiting_refunds - waitingFee)} hint={`${s.waiting_orders}건 · 수수료 ${won(waitingFee)} 뺌`} tone="blue" />
         <StatTile label="반품 환불로 뺀 금액" value={won(refunds + s.waiting_refunds)} hint={s.late_refunds > 0 ? `지난달 확정분 ${won(s.late_refunds)} 포함` : '이번 달'} tone="red" />
       </div>
       <p className="muted">배송 완료 {s.confirmDays}일 뒤 자동으로 구매 확정돼요. 손님이 먼저 확정할 수도 있어요.</p>
+      <p className="muted">판매 수수료: 지금 {s.commissionRate}% (상품 판매액에만, 배송비 몫에는 없음). 수수료율이 바뀌어도 이미 들어온 주문은 주문할 때의 수수료율로 정산돼요.</p>
     </section>
   )
 }

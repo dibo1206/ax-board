@@ -49,6 +49,9 @@ const reasonsNow = () => Object.fromEntries(Object.entries(REASONS).filter(([key
 // 관리자 알림 메일 (새 주문·반품 신청·문의·판매자 가입). 손님 화면에는 내보내지 않는다 (SHOP 은 /api/policy 로 공개된다)
 // 받는 곳(to)을 비우면 .env 의 ADMIN_EMAIL 을 쓴다. 참조(cc)는 여러 곳
 export const DEFAULT_NOTIFY = Object.freeze({ to: '', cc: [] })
+// 판매 수수료 (2026-11-17): 농가 상품 판매액에서 회사가 떼는 비율(%). 배송비 몫에는 붙이지 않는다.
+// 처음 값은 0% (회사가 정하기 전까지 지금처럼 전액 정산). 회사 직영 농가는 따로 정하지 않으면 0%
+export const DEFAULT_SETTLEMENT = Object.freeze({ commissionRate: 0 })
 
 // 정책 글 (자리표시는 fillPolicy 가 채운다. 관리자 화면에 쓸 수 있는 자리표시 목록이 나온다)
 export const PLACEHOLDERS = {
@@ -116,6 +119,7 @@ export const SHIPPING = { ...DEFAULT_SHIPPING }
 export const RETURNS = { ...DEFAULT_RETURNS, reasons: {} }
 RETURNS.reasons = reasonsNow()
 export const NOTIFY = { ...DEFAULT_NOTIFY, cc: [] }
+export const SETTLEMENT = { ...DEFAULT_SETTLEMENT }
 export const POLICIES = {}
 let policyTemplates = clone(DEFAULT_POLICIES)
 
@@ -168,13 +172,23 @@ export function applySettings(saved = {}) {
   RETURNS.reasons = reasonsNow()
   Object.assign(NOTIFY, DEFAULT_NOTIFY, saved.notify ?? {})
   NOTIFY.cc = [...(NOTIFY.cc ?? [])]
+  Object.assign(SETTLEMENT, DEFAULT_SETTLEMENT, saved.settlement ?? {})
   policyTemplates = { ...clone(DEFAULT_POLICIES), ...(saved.policies ?? {}) }
   rebuildPolicies()
 }
 const returnsValues = (r) => ({ changeMind: r.changeMind, changeMindDays: r.changeMindDays, defectMonths: r.defectMonths, defectKnownDays: r.defectKnownDays })
 // 관리자 화면에만 보낸다 (notify 는 공개하지 않는 값)
-export const currentSettings = () => ({ shop: { ...SHOP }, shipping: { ...SHIPPING }, returns: returnsValues(RETURNS), notify: { to: NOTIFY.to, cc: [...NOTIFY.cc] }, policies: clone(policyTemplates) })
-export const defaultSettings = () => ({ shop: { ...DEFAULT_SHOP }, shipping: { ...DEFAULT_SHIPPING }, returns: returnsValues(DEFAULT_RETURNS), notify: { to: '', cc: [] }, policies: clone(DEFAULT_POLICIES) })
+export const currentSettings = () => ({ shop: { ...SHOP }, shipping: { ...SHIPPING }, returns: returnsValues(RETURNS), notify: { to: NOTIFY.to, cc: [...NOTIFY.cc] }, settlement: { ...SETTLEMENT }, policies: clone(policyTemplates) })
+export const defaultSettings = () => ({ shop: { ...DEFAULT_SHOP }, shipping: { ...DEFAULT_SHIPPING }, returns: returnsValues(DEFAULT_RETURNS), notify: { to: '', cc: [] }, settlement: { ...DEFAULT_SETTLEMENT }, policies: clone(DEFAULT_POLICIES) })
+
+// 수수료율(%) 검사: 0~50, 소수점 한 자리까지. 맞으면 숫자, 아니면 null
+export function commissionRate(value) {
+  if (value === '' || value === null || value === undefined) return null
+  const n = Number(value)
+  return Number.isFinite(n) && n >= 0 && n <= 50 && Math.abs(Math.round(n * 10) - n * 10) < 1e-9 ? Math.round(n * 10) / 10 : null
+}
+// 이 농가에 지금 적용할 수수료율: 농가에 따로 정한 값 → 없으면 회사 직영 0% → 그 밖은 기본값
+export const sellerCommission = (seller) => (seller?.commission_rate != null ? Number(seller.commission_rate) : seller?.is_company ? 0 : SETTLEMENT.commissionRate)
 
 // ---------- 검사 (관리자가 저장할 때) ----------
 const str = (errors, value, max, name, required = true) => {
@@ -189,7 +203,7 @@ const int = (errors, value, min, max, name) => {
   return n
 }
 const EMAIL = /^[^\s@<>,;]{1,64}@[^\s@<>,;]{1,190}\.[A-Za-z]{2,}$/
-export const SETTING_KEYS = ['shop', 'shipping', 'returns', 'notify', 'policies']
+export const SETTING_KEYS = ['shop', 'shipping', 'returns', 'notify', 'settlement', 'policies']
 export function validateSettings(key, v = {}) {
   const errors = []
   let value = null
@@ -227,6 +241,10 @@ export function validateSettings(key, v = {}) {
     const bad = cc.filter((s) => s.length > 254 || !EMAIL.test(s))
     if (bad.length) errors.push(`참조 메일 모양을 확인해 주세요: ${bad.slice(0, 3).join(', ').slice(0, 120)}`)
     value = { to, cc: cc.slice(0, 5) }
+  } else if (key === 'settlement') {
+    const rate = commissionRate(v.commissionRate)
+    if (rate === null) errors.push('기본 수수료율은 0~50 사이 숫자로 적어 주세요. (소수점 한 자리까지, 예: 10 또는 8.5)')
+    value = { commissionRate: rate ?? 0 }
   } else if (key === 'policies') {
     value = {}
     for (const kind of POLICY_KINDS) {

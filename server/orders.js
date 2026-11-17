@@ -11,7 +11,7 @@ import { pool } from './db.js'
 import { lookupHash, sealText } from './crypto.js'
 import { createLimiter } from './limit.js'
 import { cancelPartial, cancelPayment, checkApproved, clientKey, confirmPayment, isTestPayment, lookupPayment, orderingOpen, paymentMode } from './payments.js'
-import { POLICIES, RETURNS, SHIPPING, SHOP, shippingFee, splitShippingFee } from './policy.js'
+import { POLICIES, RETURNS, sellerCommission, SETTLEMENT, SHIPPING, SHOP, shippingFee, splitShippingFee } from './policy.js'
 import { adminCc, adminEmail, publicUrl, queueMail, retryMails } from './mailer.js'
 import { sweepRestock } from './restock.js'
 import { lockProducts, syncOptionTotals } from './options.js'
@@ -443,8 +443,11 @@ publicOrderRouter.post('/orders', async (req, res) => {
         )
       }
       for (const f of farms) {
-        await client.query('INSERT INTO order_shipments (order_id, seller_code, items_amount, shipping_fee, ship_from) VALUES ($1, $2, $3, $4, $5)',
-          [rows[0].id, f.sellerCode, f.itemsAmount, f.fee, farmShipFrom(lines.filter((l) => l.seller_code === f.sellerCode))])
+        // 주문한 순간의 수수료율을 적어 둔다 (농가에 따로 정한 값 → 회사 직영 0% → 기본값. policy.js sellerCommission 과 같은 순서)
+        await client.query(
+          `INSERT INTO order_shipments (order_id, seller_code, items_amount, shipping_fee, ship_from, commission_rate)
+           SELECT $1, $2, $3, $4, $5, COALESCE(s.commission_rate, CASE WHEN s.is_company THEN 0 ELSE $6::numeric END) FROM sellers s WHERE s.seller_code = $2`,
+          [rows[0].id, f.sellerCode, f.itemsAmount, f.fee, farmShipFrom(lines.filter((l) => l.seller_code === f.sellerCode)), SETTLEMENT.commissionRate])
       }
       const first = `${lines[0].name.replace(/\[예시\]\s*/g, '')}${lines[0].option_name ? ` (${lines[0].option_name})` : ''}`
       return {
@@ -925,6 +928,9 @@ sellerOrderRouter.get('/settlement', async (req, res) => {
        count(DISTINCT o.id) FILTER (WHERE o.confirmed_at >= date_trunc('month', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul')::int AS confirmed_orders,
        COALESCE(sum(oi.subtotal) FILTER (WHERE o.confirmed_at IS NULL), 0)::int AS waiting_amount,
        count(DISTINCT o.id) FILTER (WHERE o.confirmed_at IS NULL)::int AS waiting_orders,
+       -- 수수료: 상품 판매액 × 주문할 때 적어 둔 수수료율 (기능 전 주문은 0%)
+       round(COALESCE(sum(oi.subtotal * COALESCE(sh.commission_rate, 0)) FILTER (WHERE o.confirmed_at >= date_trunc('month', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul'), 0) / 100)::int AS confirmed_commission,
+       round(COALESCE(sum(oi.subtotal * COALESCE(sh.commission_rate, 0)) FILTER (WHERE o.confirmed_at IS NULL), 0) / 100)::int AS waiting_commission,
        bool_or(o.is_test) AS has_test
      FROM order_items oi JOIN orders o ON o.id = oi.order_id
      JOIN order_shipments sh ON sh.order_id = o.id AND sh.seller_code = oi.seller_code
@@ -943,12 +949,18 @@ sellerOrderRouter.get('/settlement', async (req, res) => {
   const refunds = await pool.query(
     `SELECT COALESCE(sum(r.amount) FILTER (WHERE o.confirmed_at >= ${month}), 0)::int AS confirmed_refunds,
             COALESCE(sum(r.amount) FILTER (WHERE o.confirmed_at IS NULL), 0)::int AS waiting_refunds,
-            COALESCE(sum(r.amount) FILTER (WHERE o.confirmed_at < ${month} AND r.done_at >= ${month}), 0)::int AS late_refunds
+            COALESCE(sum(r.amount) FILTER (WHERE o.confirmed_at < ${month} AND r.done_at >= ${month}), 0)::int AS late_refunds,
+            -- 반품으로 돌려준 돈에 붙었던 수수료는 돌려준다 (정산에서 덜 뗀다)
+            round(COALESCE(sum(r.amount * COALESCE(sh.commission_rate, 0)) FILTER (WHERE o.confirmed_at >= ${month} OR (o.confirmed_at < ${month} AND r.done_at >= ${month})), 0) / 100)::int AS confirmed_refund_commission,
+            round(COALESCE(sum(r.amount * COALESCE(sh.commission_rate, 0)) FILTER (WHERE o.confirmed_at IS NULL), 0) / 100)::int AS waiting_refund_commission
      FROM order_refunds r JOIN orders o ON o.id = r.order_id
+     LEFT JOIN order_shipments sh ON sh.order_id = r.order_id AND sh.seller_code = r.seller_code
      WHERE r.seller_code = $1 AND r.kind = 'return' AND r.status = 'done' AND ${SETTLE_ORDER}`,
     [req.seller.sellerCode],
   )
-  res.json({ ...rows[0], ...fees.rows[0], ...refunds.rows[0], confirmDays: CONFIRM_DAYS })
+  // 지금 이 농가에 적용되는 수수료율 (새 주문부터. 화면 안내용)
+  const me = (await pool.query('SELECT commission_rate, is_company FROM sellers WHERE seller_code = $1', [req.seller.sellerCode])).rows[0]
+  res.json({ ...rows[0], ...fees.rows[0], ...refunds.rows[0], commissionRate: sellerCommission(me), confirmDays: CONFIRM_DAYS })
 })
 
 // 내 농가 배송 번호(ref) → 주문번호. 다른 농가 배송이면 null

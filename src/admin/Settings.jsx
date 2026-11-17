@@ -3,7 +3,7 @@ import { adminApi } from './api.js'
 
 // 관리자 [쇼핑몰 설정] (server/settings.js): 사업자 정보 · 배송 · 반품 · 알림 메일 · 약관·정책 글.
 // 저장하면 주문 금액 계산, 반품 기간 검사, 상담 답, 손님 화면(아래쪽 사업자 정보·정책 글·회사 소개 오시는 길)이 바로 새 값을 써요
-const PARTS = [['shop', '사업자 정보'], ['shipping', '배송'], ['returns', '반품'], ['notify', '알림 메일'], ['policies', '약관·정책 글']]
+const PARTS = [['shop', '사업자 정보'], ['shipping', '배송'], ['returns', '반품'], ['settlement', '정산·수수료'], ['notify', '알림 메일'], ['policies', '약관·정책 글']]
 const ccText = (cc) => (typeof cc === 'string' ? cc : (cc ?? []).join('\n'))
 const SHOP_FIELDS = [
   ['name', '쇼핑몰 이름', 40], ['company', '회사 이름', 40], ['ceo', '대표자', 20], ['bizNo', '사업자등록번호 (000-00-00000)', 12],
@@ -35,6 +35,7 @@ export function Settings() {
 
   async function save() {
     if (part === 'shipping' && !window.confirm(`배송비 ${won(draft.shipping.fee)}, ${won(draft.shipping.freeOver)} 이상 무료로 저장할까요? 저장한 뒤 들어오는 주문부터 바로 적용돼요.`)) return
+    if (part === 'settlement' && !window.confirm(`기본 수수료율을 ${draft.settlement.commissionRate}%로 저장할까요? 저장한 뒤 들어오는 주문부터 적용되고, 이미 들어온 주문의 정산은 그대로예요.`)) return
     setBusy(true); setErrors([]); setMessage('')
     try {
       const { current } = await adminApi(`/settings/${part}`, { method: 'PUT', body: draft[part] })
@@ -94,6 +95,22 @@ export function Settings() {
             <p className="muted">지금 입력: 주문 한 번에 {won(draft.shipping.fee)}, 상품 합계가 {won(draft.shipping.freeOver)} 이상이면 무료. 여러 농가 상품을 함께 사도 한 번만 받고, 받은 배송비는 상품 금액 비율로 농가 몫을 나눠 정산해요. 상품 화면의 [1개만 사도 무료배송]도 이 기준을 써요.</p>
             <label>택배사<em className="req">*</em><input value={draft.shipping.courier} maxLength={30} onChange={(e) => put('shipping', { courier: e.target.value })} /></label>
             <label>출고 안내<em className="req">*</em><input value={draft.shipping.leadTime} maxLength={80} onChange={(e) => put('shipping', { leadTime: e.target.value })} /></label>
+          </>
+        )}
+
+        {part === 'settlement' && (
+          <>
+            <p className="muted">농가 상품 판매액에서 회사가 떼는 비율이에요. 판매자 화면의 정산 금액은 <b>상품 판매액 − 수수료 + 배송비 몫 − 반품 환불</b>로 계산돼요.</p>
+            <label>기본 수수료율 (%, 0~50, 소수점 한 자리까지)<em className="req">*</em>
+              <input inputMode="decimal" value={draft.settlement.commissionRate} onChange={(e) => put('settlement', { commissionRate: e.target.value.replace(/[^\d.]/g, '') })} />
+            </label>
+            <p className="muted">예: {draft.settlement.commissionRate || 0}%이면 상품 100,000원이 팔렸을 때 수수료 {won(Math.round(100000 * Number(draft.settlement.commissionRate || 0) / 100))}, 농가 몫 {won(100000 - Math.round(100000 * Number(draft.settlement.commissionRate || 0) / 100))}.</p>
+            <ul className="muted">
+              <li>저장한 뒤 들어오는 주문부터 적용돼요. 주문할 때의 수수료율을 주문마다 적어 두기 때문에, 나중에 바꿔도 이미 들어온 주문의 정산은 바뀌지 않아요. (이 기능 전에 들어온 주문은 0%)</li>
+              <li>배송비 몫에는 수수료를 붙이지 않아요. 반품으로 돌려준 금액에 붙었던 수수료는 정산에서 다시 빼 줘요.</li>
+              <li>농가마다 다르게 하려면 [판매자 관리]에서 농가별 수수료율을 정해요. 회사 직영은 따로 정하지 않으면 0%예요.</li>
+              <li>결제 대행사(토스) 수수료는 여기 들어가지 않아요. 회사와 결제 대행사 사이에서 따로 정산돼요.</li>
+            </ul>
           </>
         )}
 
