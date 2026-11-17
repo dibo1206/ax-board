@@ -107,6 +107,8 @@ export async function saveItem(req, res) {
     recipes: JSON.stringify(recipes),
     source: text(b.source, 1000) || null,
   }
+  // 부가세: free(면세, 가공 안 한 농산물) · taxable(과세, 가공품) · check(확인 필요 → 과세로 처리). 안 보내면 그대로 둔다
+  if (['free', 'taxable', 'check'].includes(b.tax_type)) values.tax_type = b.tax_type
   const columns = Object.keys(values)
   const { rows } = await pool.query(
     `UPDATE items SET ${columns.map((c, i) => `${c} = $${i + 2}`).join(', ')} WHERE item_code = $1 RETURNING *`,

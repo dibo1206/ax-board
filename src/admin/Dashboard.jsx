@@ -119,7 +119,8 @@ export function Dashboard({ onGo }) {
       </div>
       <div className="tiles">
         <div className="tile"><span className="muted">오늘 매출</span><b>{won(summary.today_sales)}</b><span className="muted">주문 {summary.today_orders}건</span></div>
-        <div className="tile"><span className="muted">이번 달 매출</span><b>{won(summary.month_sales)}</b><span className="muted">주문 {summary.month_orders}건{summary.month_refunded > 0 && ` · 취소·환불 ${won(summary.month_refunded)} 뺌`}</span></div>
+        <div className="tile"><span className="muted">이번 달 매출</span><b>{won(summary.month_sales)}</b><span className="muted">주문 {summary.month_orders}건{summary.month_refunded > 0 && ` · 취소·환불 ${won(summary.month_refunded)} 뺌`}</span>
+          <span className="muted">면세 {won(summary.month_tax_free)} · 과세 {won(summary.month_sales - summary.month_tax_free)} (배송비 포함)</span></div>
         <div className="tile"><span className="muted">최근 {days}일 매출</span><b>{won(periodSales)}</b><span className="muted">취소 {todo.cancelled}건</span></div>
       </div>
 

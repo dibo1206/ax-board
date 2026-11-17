@@ -10,7 +10,7 @@ const KST = (column) => `(${column} AT TIME ZONE 'Asia/Seoul')::date`
 const TODAY = "(now() AT TIME ZONE 'Asia/Seoul')::date"
 const LOW_STOCK = 5
 // 주문마다 돌려준 돈 (o 와 함께 쓴다)
-const REFUNDED = `LEFT JOIN (SELECT order_id, sum(amount)::int AS amount FROM order_refunds WHERE status = 'done' GROUP BY order_id) rf ON rf.order_id = o.id`
+const REFUNDED = `LEFT JOIN (SELECT order_id, sum(amount)::int AS amount, sum(tax_free_amount)::int AS tax_free FROM order_refunds WHERE status = 'done' GROUP BY order_id) rf ON rf.order_id = o.id`
 const NET = '(o.total_amount - COALESCE(rf.amount, 0))'
 
 export const dashboardRouter = express.Router()
@@ -26,7 +26,9 @@ dashboardRouter.get('/', async (req, res) => {
         count(*) FILTER (WHERE ${KST('o.paid_at')} = ${TODAY})::int AS today_orders,
         COALESCE(sum(${NET}) FILTER (WHERE date_trunc('month', o.paid_at AT TIME ZONE 'Asia/Seoul') = date_trunc('month', now() AT TIME ZONE 'Asia/Seoul')), 0)::int AS month_sales,
         count(*) FILTER (WHERE date_trunc('month', o.paid_at AT TIME ZONE 'Asia/Seoul') = date_trunc('month', now() AT TIME ZONE 'Asia/Seoul'))::int AS month_orders,
-        COALESCE(sum(rf.amount) FILTER (WHERE date_trunc('month', o.paid_at AT TIME ZONE 'Asia/Seoul') = date_trunc('month', now() AT TIME ZONE 'Asia/Seoul')), 0)::int AS month_refunded
+        COALESCE(sum(rf.amount) FILTER (WHERE date_trunc('month', o.paid_at AT TIME ZONE 'Asia/Seoul') = date_trunc('month', now() AT TIME ZONE 'Asia/Seoul')), 0)::int AS month_refunded,
+        -- 면세 매출 (가공 안 한 농산물): 주문의 면세 금액 − 돌려준 면세 금액. 나머지가 과세 매출 (부가세 신고 참고)
+        COALESCE(sum(o.tax_free_amount - COALESCE(rf.tax_free, 0)) FILTER (WHERE date_trunc('month', o.paid_at AT TIME ZONE 'Asia/Seoul') = date_trunc('month', now() AT TIME ZONE 'Asia/Seoul')), 0)::int AS month_tax_free
       FROM orders o ${REFUNDED} WHERE o.status IN ${PAID} ${test}`),
     pool.query(`SELECT to_char(d.day, 'YYYY-MM-DD') AS day, COALESCE(sum(${NET}), 0)::int AS sales, count(o.id)::int AS orders
       FROM generate_series(${TODAY} - ($1::int - 1), ${TODAY}, interval '1 day') AS d(day)
