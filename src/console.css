@@ -358,3 +358,10 @@ input.invalid { border-color: #b3261e; }
 .farm-photo-list img { width: 120px; height: 120px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); }
 .farm-photo-add { align-self: flex-start; cursor: pointer; }
 .farm-photo-add.disabled { opacity: 0.6; pointer-events: none; }
+
+/* 관리자 정산표 (2026-11-17) */
+.settle-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0 0 12px; }
+.settle-table td, .settle-table th { white-space: nowrap; }
+.settle-table td:first-child { white-space: normal; }
+.settle-table tfoot th { text-align: left; border-top: 2px solid var(--border); }
+.table-wrap { overflow-x: auto; }

@@ -10,6 +10,7 @@ import { accountRouter } from './account.js'
 import { oauthRouter } from './oauth.js'
 import { accessLogger, adminAccessLogRouter } from './accessLog.js'
 import { dashboardRouter } from './dashboard.js'
+import { adminSettlementRouter } from './settlement.js'
 import { adminRouter, UPLOAD_DIR } from './admin.js'
 import { bannedRouter, loadBanned } from './banned.js'
 import { cached, clearCache } from './cache.js'
@@ -434,6 +435,7 @@ app.use('/api/admin/returns', adminReturnRouter)
 app.use('/api/admin/access-logs', adminAccessLogRouter)
 app.use('/api/admin/reviews', adminReviewRouter)
 app.use('/api/admin/dashboard', dashboardRouter)
+app.use('/api/admin/settlement', adminSettlementRouter)
 app.use('/api/admin/banned-words', bannedRouter)
 app.use('/api/admin/sellers', adminSellerRouter)
 app.use('/api/admin/posts', adminPostRouter)

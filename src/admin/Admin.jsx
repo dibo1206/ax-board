@@ -4,6 +4,7 @@ import { BannedWords } from './BannedWords.jsx'
 import { ChatLogs } from './ChatLogs.jsx'
 import { AdminPosts } from './Posts.jsx'
 import { Settings } from './Settings.jsx'
+import { Settlement } from './Settlement.jsx'
 import { Staff } from './Staff.jsx'
 import { SiteContent } from './SiteContent.jsx'
 import { ItemReview } from './ItemReview.jsx'
@@ -89,7 +90,7 @@ function Admin() {
   // ?tab=site 처럼 주소로 바로 열 수 있다 (쇼핑몰 맨 위 관리자 막대에서 들어올 때)
   const [tab, setTab] = useState(() => {
     const t = new URLSearchParams(window.location.search).get('tab')
-    return ['dashboard', 'orders', 'returns', 'products', 'items', 'sellers', 'inbox', 'reviews', 'chat', 'site', 'posts', 'mail', 'access', 'banned', 'settings', 'staff'].includes(t) ? t : 'dashboard'
+    return ['dashboard', 'orders', 'returns', 'settlement', 'products', 'items', 'sellers', 'inbox', 'reviews', 'chat', 'site', 'posts', 'mail', 'access', 'banned', 'settings', 'staff'].includes(t) ? t : 'dashboard'
   })
   const [productFilter, setProductFilter] = useState('all')
   const [productQuery, setProductQuery] = useState('')
@@ -243,7 +244,7 @@ function Admin() {
   // 큰 메뉴(섹션)와 그 안의 화면(탭). 숫자는 할 일 개수 — 큰 메뉴에는 안쪽 화면 숫자를 더해서 보여 준다
   const SECTIONS = [
     { key: 'home', label: '홈', icon: ICONS.home, tabs: [['dashboard', '오늘 할 일', 0]] },
-    { key: 'orders', label: '주문', icon: ICONS.orders, tabs: [['orders', '주문', newOrders], ['returns', '반품', counts?.returns_requested ?? 0]] },
+    { key: 'orders', label: '주문', icon: ICONS.orders, tabs: [['orders', '주문', newOrders], ['returns', '반품', counts?.returns_requested ?? 0], ['settlement', '정산', 0]] },
     { key: 'products', label: '상품', icon: ICONS.products, tabs: [['products', '상품 관리', pending + (counts?.auto_unchecked ?? 0)], ['items', '품목 검수', counts?.pending_items ?? 0], ['sellers', '판매자 승인', counts?.pending_sellers ?? 0]] },
     { key: 'customers', label: '손님', icon: ICONS.customers, tabs: [['inbox', '문의함', waiting], ['reviews', '후기', 0], ['chat', '상담 기록', 0]] },
     { key: 'site', label: '홈페이지', icon: ICONS.site, tabs: [['site', '홈페이지 관리', 0], ['posts', '게시판', 0]] },
@@ -295,6 +296,8 @@ function Admin() {
         <Orders onCount={setCounts} />
       ) : tab === 'returns' ? (
         <Returns />
+      ) : tab === 'settlement' ? (
+        <Settlement />
       ) : tab === 'reviews' ? (
         <AdminReviews />
       ) : tab === 'mail' ? (
