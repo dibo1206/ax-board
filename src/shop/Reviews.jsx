@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { PhotoPicker } from './PhotoPicker.jsx'
+import { uploadPhotos } from './photoUpload.js'
 import { get, post, when } from './shared.js'
 
 // 구매 후기: 별점 표시 · 상품 상세의 후기 목록 · 배송 완료 주문의 후기 쓰기
@@ -12,17 +14,49 @@ export function RatingBadge({ rating, count }) {
   return <span className="rating"><Stars value={rating} /> {rating} <span className="muted">({count})</span></span>
 }
 
+// 후기 사진: 작은 그림(-thumb.webp)을 보여 주고 누르면 큰 사진
+const thumbOf = (url) => url.replace(/\.webp$/, '-thumb.webp')
+function ReviewPhotos({ photos }) {
+  if (!photos?.length) return null
+  return (
+    <div className="review-photos">
+      {photos.map((url, n) => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={thumbOf(url)} alt={`후기 사진 ${n + 1}`} loading="lazy" /></a>)}
+    </div>
+  )
+}
+
+// 상품 화면에서 바로 후기 쓰기: 로그인한 회원이 이 상품을 사서 구매 확정한 주문이 있으면 (2026-11-17)
+function WriteHere({ code, onDone }) {
+  const [state, setState] = useState(null)
+  const [open, setOpen] = useState(false)
+  const [done, setDone] = useState('')
+  useEffect(() => {
+    get(`/products/${code}/reviewable`).then(setState).catch(() => setState(null))
+  }, [code])
+  if (done) return <p className="success">{done}</p>
+  if (!state?.loggedIn || !state.orders.length) return null
+  const order = state.orders[0]
+  return (
+    <div className="review-write-here">
+      {!open
+        ? <button type="button" className="button" onClick={() => setOpen(true)}>구매하신 상품이에요 · 후기 쓰기</button>
+        : <ReviewForm orderNo={order.orderNo} item={{ product_code: code }} onDone={(message) => { setDone(message || '후기를 남겨 주셔서 고마워요.'); onDone() }} />}
+    </div>
+  )
+}
+
 export function ReviewList({ code, embedded = false, onCount }) {
   const [data, setData] = useState(null)
   const [items, setItems] = useState([])
   const [page, setPage] = useState(1)
+  const [reload, setReload] = useState(0)
 
   useEffect(() => {
     get(`/products/${code}/reviews?page=${page}`).then((d) => {
       setData(d)
       setItems((prev) => (page === 1 ? d.items : [...prev, ...d.items]))
     }).catch(() => setData({ count: 0, items: [] }))
-  }, [code, page])
+  }, [code, page, reload])
 
   useEffect(() => { if (data) onCount?.(data.count) }, [data, onCount])
 
@@ -33,13 +67,15 @@ export function ReviewList({ code, embedded = false, onCount }) {
       {embedded
         ? data.count > 0 && <p className="rating">평균 <Stars value={data.avg} /> {data.avg} · 후기 {data.count}개</p>
         : <h3>구매 후기 {data.count}개 {data.count > 0 && <span className="rating"><Stars value={data.avg} /> {data.avg}</span>}</h3>}
-      {data.count === 0 ? <p className="muted">아직 후기가 없어요. 받아 보신 뒤 주문 조회·마이페이지에서 남길 수 있어요.</p> : (
+      <WriteHere code={code} onDone={() => { setPage(1); setReload((n) => n + 1) }} />
+      {data.count === 0 ? <p className="muted">아직 후기가 없어요. 구매 확정한 뒤 이 화면(로그인했을 때)이나 주문 조회·마이페이지에서 남길 수 있어요.</p> : (
         <>
           <ul className="reviews">
             {items.map((r) => (
               <li key={r.id}>
                 <p><Stars value={r.rating} /> <span className="muted">{r.author} · {when(r.created_at)}</span></p>
                 <p>{r.content}</p>
+                <ReviewPhotos photos={r.photos} />
                 {r.reply && <p className="reply">판매자 답글: {r.reply}</p>}
               </li>
             ))}
@@ -51,9 +87,10 @@ export function ReviewList({ code, embedded = false, onCount }) {
   )
 }
 
-export function ReviewForm({ orderNo, phone, item, onDone }) {
+export function ReviewForm({ orderNo, phone = '', item, onDone }) {
   const [rating, setRating] = useState(5)
   const [content, setContent] = useState('')
+  const [files, setFiles] = useState([])
   const [infoMatch, setInfoMatch] = useState('') // 상품 페이지의 당도·수확일 같은 정보와 맞았나요? (고르지 않아도 됨)
   const [errors, setErrors] = useState([])
   const [sending, setSending] = useState(false)
@@ -62,8 +99,10 @@ export function ReviewForm({ orderNo, phone, item, onDone }) {
     event.preventDefault()
     setSending(true)
     try {
-      await post('/reviews', { orderNo, phone, productCode: item.product_code, rating, content, infoMatch: infoMatch || null })
-      onDone()
+      const saved = await post('/reviews', { orderNo, phone, productCode: item.product_code, rating, content, infoMatch: infoMatch || null })
+      // 후기를 저장한 뒤 받은 표로 사진을 올린다. 사진이 실패해도 후기는 남아 있다
+      const failed = files.length ? await uploadPhotos(`/reviews/${saved.id}/photos`, files, saved.photoToken) : 0
+      onDone(failed ? `후기를 남겼어요. 사진 ${failed}장은 올리지 못했어요.` : '')
     } catch (e) {
       setErrors(e.errors ?? [e.message])
     } finally {
@@ -85,8 +124,9 @@ export function ReviewForm({ orderNo, phone, item, onDone }) {
           <label key={label} className="check"><input type="radio" name={`info-${item.product_code}`} checked={infoMatch === value} onChange={() => setInfoMatch(value)} /> {label}</label>
         ))}
       </fieldset>
+      <PhotoPicker files={files} onChange={setFiles} max={3} label="사진" hint="손님 화면에 보여요" />
       {errors.length > 0 && <ul className="error">{errors.map((e) => <li key={e}>{e}</li>)}</ul>}
-      <button type="submit" className="button" disabled={sending}>후기 남기기</button>
+      <button type="submit" className="button" disabled={sending}>{sending ? '올리는 중…' : '후기 남기기'}</button>
     </form>
   )
 }

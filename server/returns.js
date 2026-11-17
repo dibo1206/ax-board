@@ -14,6 +14,8 @@ import { findMyOrder, inTransaction, loadOrder, maskOrderNo, publicOrder, runRef
 import { openOrder, openReturn } from './pii.js'
 import { RETURNS, SHIPPING, SHOP } from './policy.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
+import { rawImage } from './admin.js'
+import { deletePrivate, imageProblem, photoToken, savePrivate, sendPrivate, TOKEN_EXPIRED, tokenFits } from './photos.js'
 
 const text = (v) => (typeof v === 'string' ? v.trim() : '')
 const won = (n) => `${n.toLocaleString('ko-KR')}원`
@@ -153,8 +155,10 @@ async function answerRequest(res, order, body, requestedBy) {
   const done = await requestReturn(order, body, requestedBy)
   if (done.error) return res.status(done.status).json({ error: done.error })
   notifyReturn(order.order_no, 'requested', { seller_code: text(body.sellerCode), items: done.items })
-  res.status(201).json(publicOrder(await loadOrder(order.order_no)))
+  // 받은 상품 사진은 이 표로 이어서 올린다 (POST /api/returns/:id/photos, 15분)
+  res.status(201).json({ ...publicOrder(await loadOrder(order.order_no)), photoUpload: { returnId: done.id, token: photoToken('return', done.id) } })
 }
+
 
 // 비회원: 주문번호 + 주문자 휴대폰이 맞아야 한다 (주문 조회와 같은 확인)
 export const publicReturnRouter = express.Router()
@@ -163,6 +167,31 @@ publicReturnRouter.post('/orders/lookup/returns', async (req, res) => {
   const order = await findMyOrder(req)
   if (!order) return res.status(404).json({ error: '주문을 찾지 못했어요.' })
   await answerRequest(res, order, req.body, '손님(비회원 주문 조회)')
+})
+
+// 반품 사진 한 장 올리기 (X-Upload-Token: 반품을 신청할 때 받은 표). 5장까지, 신청 상태일 때만.
+// 공개 폴더가 아니라 private-photos/ 에 두고 관리자·그 농가 판매자만 본다 (송장·주소가 찍힐 수 있어서)
+const MAX_RETURN_PHOTOS = 5
+publicReturnRouter.post('/returns/:id/photos', rawImage, async (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id) || id < 1 || !tokenFits(req, 'return', id)) return res.status(403).json({ error: TOKEN_EXPIRED })
+  const problem = imageProblem(req)
+  if (problem) return res.status(400).json({ error: problem })
+  let name
+  try {
+    name = await savePrivate(`return-${id}`, req.body)
+  } catch {
+    return res.status(400).json({ error: '사진을 읽지 못했어요. 다른 사진으로 올려 주세요.' })
+  }
+  const { rows } = await pool.query(
+    "UPDATE order_returns SET photos = array_append(photos, $1), updated_at = now() WHERE id = $2 AND status = 'requested' AND cardinality(photos) < $3 RETURNING cardinality(photos) AS n",
+    [name, id, MAX_RETURN_PHOTOS],
+  )
+  if (!rows.length) {
+    await deletePrivate(name)
+    return res.status(400).json({ error: `반품 사진은 ${MAX_RETURN_PHOTOS}장까지, 신청 중일 때만 올릴 수 있어요.` })
+  }
+  res.status(201).json({ count: rows[0].n })
 })
 
 // 회원: 내 주문만
@@ -178,6 +207,12 @@ memberReturnRouter.post('/:orderNo/returns', requireCustomer, async (req, res) =
 // ---------- 관리자: 승인·거절·환불 ----------
 export const adminReturnRouter = express.Router()
 adminReturnRouter.use(requireAdmin)
+
+// 반품 사진 보기 (n: 0부터). 로그인한 관리자만
+adminReturnRouter.get('/:id/photos/:n', async (req, res) => {
+  const { rows } = await pool.query('SELECT photos FROM order_returns WHERE id = $1', [readId(req.params.id)])
+  await sendPrivate(res, rows[0]?.photos?.[Number(req.params.n)])
+})
 
 const LIST_SQL = `
   SELECT r.*, o.order_no, o.buyer_name, o.total_amount, s.name AS seller_name, sh.delivered_at, sh.items_amount, sh.shipping_fee,
@@ -279,7 +314,7 @@ sellerReturnRouter.use(requireSeller)
 
 sellerReturnRouter.get('/', async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT r.id, o.order_no, r.status, r.reason_type, r.reason, r.items, r.seller_note, r.seller_noted_at, r.admin_note, r.refund_amount,
+    `SELECT r.id, o.order_no, r.status, r.reason_type, r.reason, r.items, cardinality(r.photos)::int AS photo_count, r.seller_note, r.seller_noted_at, r.admin_note, r.refund_amount,
             r.created_at, r.decided_at, r.refunded_at, sh.delivered_at
      FROM order_returns r JOIN orders o ON o.id = r.order_id
      LEFT JOIN order_shipments sh ON sh.order_id = r.order_id AND sh.seller_code = r.seller_code
@@ -288,6 +323,12 @@ sellerReturnRouter.get('/', async (req, res) => {
   )
   // 판매자에게는 주문번호를 가려서 보여 준다 (주문번호 + 받는 분 번호로 비회원 주문 조회를 하지 못하게, orders.js maskOrderNo)
   res.json(rows.map(openReturn).map(({ order_no: orderNo, ...r }) => ({ ...r, order_label: maskOrderNo(orderNo), items: r.items.map(({ item_id: _item, ...i }) => i) })))
+})
+
+// 내 농가 반품 사진 보기 (n: 0부터)
+sellerReturnRouter.get('/:id/photos/:n', async (req, res) => {
+  const { rows } = await pool.query('SELECT photos FROM order_returns WHERE id = $1 AND seller_code = $2', [readId(req.params.id), req.seller.sellerCode])
+  await sendPrivate(res, rows[0]?.photos?.[Number(req.params.n)])
 })
 
 sellerReturnRouter.patch('/:id', async (req, res) => {

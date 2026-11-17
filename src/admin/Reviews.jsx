@@ -21,6 +21,11 @@ function ReviewRow({ review, onSaved, onError }) {
     <li className={`box${review.hidden ? ' dim' : ''}`}>
       <p className="muted">{review.product_name} · {review.author} · {review.order_no} · {when(review.created_at)}{review.hidden && ' · 숨김'}</p>
       <p><Stars value={review.rating} /> {review.content}</p>
+      {review.photos?.length > 0 && (
+        <div className="return-photos">
+          {review.photos.map((url, n) => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url.replace(/\.webp$/, '-thumb.webp')} alt={`후기 사진 ${n + 1}`} loading="lazy" /></a>)}
+        </div>
+      )}
       {open ? (
         <div className="form">
           <textarea value={reply} onChange={(e) => setReply(e.target.value)} rows={2} maxLength={1000} placeholder="판매자 답글 (효능 표현은 쓰지 않아요)" />

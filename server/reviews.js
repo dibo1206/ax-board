@@ -1,4 +1,5 @@
-// 구매 후기: 배송 완료된 주문의 상품만 쓸 수 있다 (비회원은 주문번호+휴대폰, 회원은 계정으로 확인)
+// 구매 후기: 구매 확정한 주문의 상품만 쓸 수 있다 (2026-11-17, 전에는 배송 완료). 비회원은 주문번호+휴대폰, 회원은 계정으로 확인
+// 사진은 3장까지: 후기를 저장한 뒤 받은 표로 한 장씩 올린다 (server/photos.js)
 // 식품 표시·광고 규정 때문에 효능·건강 효과 표현은 후기에도 쓰지 않게 한다
 import express from 'express'
 import { currentCustomer } from './account.js'
@@ -8,7 +9,8 @@ import { pool } from './db.js'
 import { openOrder, openReview } from './pii.js'
 import { maskName } from './inquiry.js'
 import { createLimiter } from './limit.js'
-import { ensureShipments } from './orders.js'
+import { rawImage, saveOptimized } from './admin.js'
+import { imageProblem, photoToken, TOKEN_EXPIRED, tokenFits } from './photos.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
 import { bannedMessage, findBanned } from './banned.js'
 
@@ -25,7 +27,7 @@ reviewRouter.get('/products/:code/reviews', async (req, res) => {
                        json_build_object('5', count(*) FILTER (WHERE rating = 5), '4', count(*) FILTER (WHERE rating = 4),
                          '3', count(*) FILTER (WHERE rating = 3), '2', count(*) FILTER (WHERE rating = 2), '1', count(*) FILTER (WHERE rating = 1)) AS dist
                 FROM reviews WHERE product_code = $1 AND NOT hidden`, [req.params.code]),
-    pool.query(`SELECT id, author, rating, content, reply, replied_at, created_at FROM reviews
+    pool.query(`SELECT id, author, rating, content, photos, reply, replied_at, created_at FROM reviews
                 WHERE product_code = $1 AND NOT hidden ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
     [req.params.code, PAGE, (page - 1) * PAGE]),
   ])
@@ -57,12 +59,10 @@ reviewRouter.post('/reviews', async (req, res) => {
   const customer = await currentCustomer(req)
   const mine = order && ((customer && order.customer_id === customer.id) || (phone && order.buyer_phone === phone))
   if (!mine) return res.status(404).json({ error: '주문을 찾지 못했어요. 주문번호와 휴대폰 번호를 확인해 주세요.' })
-  const item = await pool.query('SELECT seller_code FROM order_items WHERE order_id = $1 AND product_code = $2', [order.id, productCode])
+  const item = await pool.query('SELECT 1 FROM order_items WHERE order_id = $1 AND product_code = $2', [order.id, productCode])
   if (!item.rowCount) return res.status(404).json({ error: '이 주문에 없는 상품이에요.' })
-  // 농가마다 따로 보내니, 주문 전체가 아니라 그 상품을 보낸 농가의 배송이 끝났으면 후기를 쓸 수 있다
-  await ensureShipments(order.id)
-  const arrived = await pool.query("SELECT 1 FROM order_shipments WHERE order_id = $1 AND seller_code = $2 AND status = 'delivered'", [order.id, item.rows[0].seller_code])
-  if (order.status !== 'delivered' && !arrived.rowCount) return res.status(409).json({ error: '배송이 끝난 상품에만 후기를 쓸 수 있어요.' })
+  // 구매 확정한 주문만 (받은 뒤 직접 확정하거나, 배송 완료 며칠 뒤 자동 확정). 반품 중이거나 받기 전 후기를 막는다
+  if (!order.confirmed_at) return res.status(409).json({ error: '구매 확정한 뒤에 후기를 쓸 수 있어요. 주문 상세에서 [구매 확정]을 눌러 주세요.' })
   const inserted = await pool.query(
     `INSERT INTO reviews (order_id, product_code, customer_id, author, rating, content, info_match) VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (order_id, product_code) DO NOTHING RETURNING id`,
@@ -70,7 +70,43 @@ reviewRouter.post('/reviews', async (req, res) => {
   )
   if (!inserted.rowCount) return res.status(409).json({ error: '이 상품에는 이미 후기를 남겼어요.' })
   console.log(`[review] 후기 #${inserted.rows[0].id} ${productCode} ★${rating}`)
-  res.status(201).json({ id: inserted.rows[0].id, message: '후기를 남겨 주셔서 고마워요.' })
+  res.status(201).json({ id: inserted.rows[0].id, photoToken: photoToken('review', inserted.rows[0].id), message: '후기를 남겨 주셔서 고마워요.' })
+})
+
+// 후기 사진 한 장 올리기 (X-Upload-Token: 후기를 저장할 때 받은 표). 3장까지, 손님 화면에 바로 보인다
+const MAX_REVIEW_PHOTOS = 3
+reviewRouter.post('/reviews/:id/photos', rawImage, async (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id) || id < 1 || !tokenFits(req, 'review', id)) return res.status(403).json({ error: TOKEN_EXPIRED })
+  const problem = imageProblem(req)
+  if (problem) return res.status(400).json({ error: problem })
+  let url
+  try {
+    url = await saveOptimized(`review-${id}`, req.body)
+  } catch {
+    return res.status(400).json({ error: '사진을 읽지 못했어요. 다른 사진으로 올려 주세요.' })
+  }
+  const { rows } = await pool.query(
+    'UPDATE reviews SET photos = array_append(photos, $1) WHERE id = $2 AND cardinality(photos) < $3 RETURNING photos',
+    [url, id, MAX_REVIEW_PHOTOS],
+  )
+  if (!rows.length) return res.status(400).json({ error: `후기 사진은 ${MAX_REVIEW_PHOTOS}장까지 올릴 수 있어요.` })
+  res.status(201).json({ photos: rows[0].photos })
+})
+
+// 상품 화면에서 바로 후기 쓰기: 로그인한 회원의 구매 확정 주문 중 이 상품이 있고 아직 후기를 안 쓴 주문
+reviewRouter.get('/products/:code/reviewable', async (req, res) => {
+  const customer = await currentCustomer(req)
+  if (!customer) return res.json({ loggedIn: false, orders: [] })
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ON (o.id) o.order_no, o.created_at FROM orders o JOIN order_items oi ON oi.order_id = o.id
+     WHERE o.customer_id = $1 AND oi.product_code = $2 AND o.confirmed_at IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM reviews r WHERE r.order_id = o.id AND r.product_code = $2)
+     ORDER BY o.id DESC LIMIT 5`,
+    [customer.id, req.params.code],
+  )
+  res.set('Cache-Control', 'no-store')
+  res.json({ loggedIn: true, orders: rows.map((r) => ({ orderNo: r.order_no, orderedAt: r.created_at })) })
 })
 
 // ---------- 관리자: 후기 숨기기·답글 ----------

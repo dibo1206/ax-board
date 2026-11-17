@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { PhotoPicker } from './PhotoPicker.jsx'
+import { uploadPhotos } from './photoUpload.js'
 import { ReviewForm } from './Reviews.jsx'
 import { getPolicy, isPreorder, ORDER_STATUS, post, readCart, REFUND_KIND, RETURN_STATUS, shipDay, takePending, todayKst, when, won, writeCart } from './shared.js'
 
@@ -11,6 +13,7 @@ function ReturnForm({ order, shipment, onSubmit, onClose }) {
   const [reasonType, setReasonType] = useState('')
   const [reason, setReason] = useState('')
   const [picked, setPicked] = useState({}) // 주문 상품 순서 → 수량 (0이면 빼기)
+  const [files, setFiles] = useState([]) // 받은 상품 사진 (관리자·그 농가 판매자만 봐요)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   useEffect(() => {
@@ -30,7 +33,11 @@ function ReturnForm({ order, shipment, onSubmit, onClose }) {
     if (!chosen.length) return setError('돌려보낼 상품을 골라 주세요.')
     setBusy(true)
     try {
-      await onSubmit({ sellerCode: shipment.seller_code, reasonType, reason, lines: chosen })
+      const saved = await onSubmit({ sellerCode: shipment.seller_code, reasonType, reason, lines: chosen })
+      // 신청을 저장한 뒤 받은 표로 사진을 올린다. 사진이 실패해도 신청은 접수돼 있다
+      const upload = saved?.photoUpload
+      const failed = upload && files.length ? await uploadPhotos(`/returns/${upload.returnId}/photos`, files, upload.token) : 0
+      if (failed) window.alert(`반품 신청은 접수됐어요. 사진 ${failed}장은 올리지 못했어요. 고객센터로 주문번호와 함께 보내 주세요.`)
       onClose()
     } catch (e) {
       setError(e.message)
@@ -58,7 +65,7 @@ function ReturnForm({ order, shipment, onSubmit, onClose }) {
       {reasonType === 'change_mind' && fee && (
         <p className="warn">단순 변심이면 왕복 배송비를 손님이 부담해요: 돌려보내는 배송비 {won(fee)}을 빼고{order.shipping_fee === 0 ? `, 처음 무료로 보낸 배송비 ${won(fee)}도 빼요` : ', 처음 낸 배송비는 돌려드리지 않아요'}. 신선식품은 단순 변심 반품이 제한될 수 있어요.</p>
       )}
-      {reasonType && reasonType !== 'change_mind' && <p className="muted">상품 하자·파손·오배송이면 배송비는 판매자가 부담해요. 받은 상품 사진을 고객센터로 주문번호와 함께 보내 주세요.</p>}
+      {reasonType && reasonType !== 'change_mind' && <p className="muted">상품 하자·파손·오배송이면 배송비는 판매자가 부담해요. 받은 상품 사진을 아래에 올려 주시면 확인이 빨라져요.</p>}
       <ul className="order-items">
         {lines.map(({ item, line }) => (
           <li key={line}>
@@ -72,10 +79,11 @@ function ReturnForm({ order, shipment, onSubmit, onClose }) {
         ))}
       </ul>
       <label>사유 (5~500자)<textarea value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} rows={3} placeholder="어떤 문제가 있었는지 적어 주세요. 주민등록번호·카드번호는 쓰지 마세요." /></label>
+      <PhotoPicker files={files} onChange={setFiles} max={5} label="받은 상품 사진" hint="담당자와 판매자만 봐요" />
       <p className="muted">신청만으로 환불되지는 않아요. 담당자가 확인해 승인한 뒤 돌려받은 상품을 보고 환불해요.</p>
       {error && <p className="error">{error}</p>}
       <div className="actions">
-        <button type="submit" className="button" disabled={busy}>반품 신청하기</button>
+        <button type="submit" className="button" disabled={busy}>{busy ? '보내는 중…' : '반품 신청하기'}</button>
         <button type="button" className="button ghost" onClick={onClose}>닫기</button>
       </div>
     </form>
@@ -120,11 +128,12 @@ function ReturnSection({ order, onReturn }) {
 export function OrderDetail({ order, phone = '', onConfirm = null, onReturn = null }) {
   const [writing, setWriting] = useState(null)
   const [written, setWritten] = useState([])
-  // 농가마다 따로 오니, 그 상품을 보낸 농가의 배송이 끝났으면 후기를 쓸 수 있다
-  const arrived = (i) => order.status === 'delivered' || order.shipments?.some((s) => s.seller_code === i.seller_code && s.status === 'delivered')
+  // 후기는 구매 확정한 주문만 (2026-11-17, 전에는 배송 완료). 확정 전이면 안내만 한다
+  const confirmed = Boolean(order.confirmed_at)
+  const anyArrived = order.status === 'delivered' || order.shipments?.some((s) => s.status === 'delivered')
   // 후기는 주문·상품마다 하나라서, 같은 상품을 옵션 여러 개로 샀으면 첫 줄에서만 쓴다
   const firstOf = (i, index) => order.items.findIndex((x) => x.product_code === i.product_code) === index
-  const canReview = (i, index) => arrived(i) && !i.reviewed && !written.includes(i.product_code) && firstOf(i, index)
+  const canReview = (i, index) => confirmed && !i.reviewed && !written.includes(i.product_code) && firstOf(i, index)
   return (
     <>
       <dl className="detail-list">
@@ -173,10 +182,11 @@ export function OrderDetail({ order, phone = '', onConfirm = null, onReturn = nu
             {canReview(i, index) && writing !== i.product_code && <button type="button" className="link" onClick={() => setWriting(i.product_code)}> 후기 쓰기</button>}
             {written.includes(i.product_code) && firstOf(i, index) && <span className="success"> 후기를 남겼어요</span>}
             {writing === i.product_code && firstOf(i, index) && (
-              <ReviewForm orderNo={order.order_no} phone={phone} item={i} onDone={() => { setWritten((w) => [...w, i.product_code]); setWriting(null) }} />
+              <ReviewForm orderNo={order.order_no} phone={phone} item={i} onDone={(message) => { setWritten((w) => [...w, i.product_code]); setWriting(null); if (message) window.alert(message) }} />
             )}
           </li>
         ))}
+        {anyArrived && !confirmed && <li className="muted">구매 확정하면 상품마다 후기(사진 포함)를 남길 수 있어요.</li>}
         <li className="muted">상품 {won(order.items_amount)} + 배송비 {won(order.shipping_fee)}{order.shipments?.length > 1 && ` (농가 ${order.shipments.length}곳)`} = <b>{won(order.total_amount)}</b>
           {order.refunded_amount > 0 && <> · 돌려받은 금액 {won(order.refunded_amount)}</>}</li>
       </ul>
@@ -380,7 +390,7 @@ export function OrderLookup() {
         <div className="lookup-result">
           <OrderSteps status={order.status} />
           <OrderDetail order={order} phone={phone} onConfirm={confirmPurchase}
-            onReturn={async (body) => setOrder(await post('/orders/lookup/returns', { orderNo: order.order_no, phone, ...body }))} />
+            onReturn={async (body) => { const saved = await post('/orders/lookup/returns', { orderNo: order.order_no, phone, ...body }); setOrder(saved); return saved }} />
           {order.status === 'paid' && (
             <div className="actions">
               <button type="button" className="button ghost" onClick={cancel} disabled={busy}>주문 취소하기</button>
