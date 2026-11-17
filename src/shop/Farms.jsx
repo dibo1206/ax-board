@@ -140,6 +140,12 @@ export function FarmPage({ code }) {
         )}
       </header>
 
+      {farm.photos?.length > 0 && (
+        <div className="farm-photos">
+          {farm.photos.map((url, n) => <img key={url} src={url} alt={`${clean(farm.name)} 농가 사진 ${n + 1}`} loading="lazy" />)}
+        </div>
+      )}
+
       {story && (
         <div className={`farm-story${longStory && !openStory ? ' folded' : ''}`}>
           <h2>농가 이야기</h2>

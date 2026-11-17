@@ -342,6 +342,70 @@ function ChangePassword() {
   )
 }
 
+// 농가 사진: 올리거나 빼면 바로 저장된다 (글은 아래 [저장]을 눌러야 저장)
+const MAX_FARM_PHOTOS = 4
+const thumbOf = (url) => url.replace(/\.webp$/, '-thumb.webp')
+function FarmPhotos({ seller }) {
+  const [photos, setPhotos] = useState(seller.photos ?? [])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function add(event) {
+    const files = [...event.target.files].slice(0, MAX_FARM_PHOTOS - photos.length)
+    event.target.value = ''
+    if (!files.length) return
+    setBusy(true)
+    setError('')
+    try {
+      for (const file of files) {
+        const done = await sellerApi('/profile/photo', { method: 'POST', headers: { 'Content-Type': file.type }, body: file })
+        setPhotos(done.photos)
+      }
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function remove(url) {
+    if (!window.confirm('이 사진을 뺄까요? 손님 화면에서도 바로 사라져요.')) return
+    setBusy(true)
+    setError('')
+    try {
+      setPhotos((await sellerApi('/profile/photo', { method: 'DELETE', body: { url } })).photos)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="farm-photo-edit">
+      <p className="farm-photo-title">농가 사진 <span className="muted">농가 페이지와 상품 상세의 '판매 농가 이야기'에 보여요 · {MAX_FARM_PHOTOS}장까지 · 올리면 바로 저장돼요</span></p>
+      {photos.length > 0 && (
+        <ul className="farm-photo-list">
+          {photos.map((url, n) => (
+            <li key={url}>
+              <img src={thumbOf(url)} alt={`농가 사진 ${n + 1}`} />
+              <button type="button" className="link danger" onClick={() => remove(url)} disabled={busy}>빼기</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {photos.length < MAX_FARM_PHOTOS && (
+        <label className={`button ghost small farm-photo-add${busy ? ' disabled' : ''}`}>
+          {busy ? '올리는 중…' : '+ 사진 올리기'}
+          <input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={add} disabled={busy} />
+        </label>
+      )}
+      <p className="muted">밭·과수원·작업하는 모습처럼 농가를 보여 주는 사진이 좋아요 (jpg·png·webp, 2MB 이하). 사진 속 촬영 위치 정보는 자동으로 지워져요.</p>
+      {error && <p className="error">{error}</p>}
+    </div>
+  )
+}
+
 function Profile({ seller, onSaved, onError }) {
   const [intro, setIntro] = useState(seller.intro ?? '')
   const [story, setStory] = useState(seller.story ?? '')
@@ -361,6 +425,7 @@ function Profile({ seller, onSaved, onError }) {
   return (
     <form className="box form" onSubmit={save}>
       <h3>{seller.name} · {seller.region}</h3>
+      <FarmPhotos seller={seller} />
       <label>한 줄 소개<input value={intro} onChange={(e) => setIntro(e.target.value)} maxLength={100} /></label>
       <label>농가 이야기 <span className="muted">상품 상세의 '판매 농가 이야기'에 보여요</span>
         <textarea value={story} onChange={(e) => setStory(e.target.value)} rows={6} maxLength={1500} />

@@ -349,3 +349,12 @@ input.invalid { border-color: #b3261e; }
 }
 .side-nav .account .logout-btn, .console .admin-head .account .logout-btn { flex: none; width: auto; padding: 5px 14px; font: inherit; font-size: 0.85rem; font-weight: 600; white-space: nowrap; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; }
 .side-nav .account .logout-btn:hover, .console .admin-head .account .logout-btn:hover { border-color: var(--text); }
+
+/* 농가 사진 (판매자 [농가 소개·계정], 2026-11-17) */
+.farm-photo-edit { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 8px; }
+.farm-photo-title { margin: 0; }
+.farm-photo-list { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.farm-photo-list li { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.farm-photo-list img { width: 120px; height: 120px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); }
+.farm-photo-add { align-self: flex-start; cursor: pointer; }
+.farm-photo-add.disabled { opacity: 0.6; pointer-events: none; }

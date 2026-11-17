@@ -1471,3 +1471,8 @@
 .shop .signup-form > button[type="submit"] { display: flex; justify-content: center; margin: 20px auto 0; min-width: 300px; padding-block: 14px; font-size: 18px; border-radius: 8px; }
 /* 회원가입 카드: 모서리를 둥글게, 배경은 더 밝게 */
 .shop .signup-form.box { max-width: 520px; border-radius: 14px; background: #fff; }
+
+/* 농가 사진 (농가 페이지 · 상품 상세 '판매 농가 이야기', 2026-11-17) */
+.shop .farm-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin: 0 0 18px; }
+.shop .farm-photos img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; background: var(--surface); }
+@media (max-width: 600px) { .shop .farm-photos { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }

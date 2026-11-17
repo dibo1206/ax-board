@@ -390,6 +390,11 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
 
         <section className="box">
           <h3>판매 농가 이야기</h3>
+          {seller.photos?.length > 0 && (
+            <div className="farm-photos">
+              {seller.photos.map((url, n) => <img key={url} src={url} alt={`${seller.name.replace(/\[예시\]\s*/g, '')} 농가 사진 ${n + 1}`} loading="lazy" />)}
+            </div>
+          )}
           <p>{seller.story}</p>
           <a className="farm-more-link" href={`/farm/${encodeURIComponent(seller.seller_code)}`}>{seller.name.replace(/\[예시\]\s*/g, '')}의 다른 상품 모두 보기 →</a>
         </section>

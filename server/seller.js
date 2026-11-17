@@ -2,11 +2,12 @@
 // 새 상품은 '검토 대기'로 올라가고 회사 관리자가 승인해야 판매된다. 이미 판매 중인 상품의 수정(가격·재고 등)은 바로 반영된다.
 import { notifyAnswer } from './inquiry.js'
 import express from 'express'
-import { checkOptions, codeSets, deleteBlockImages, insertProduct, itemRanges, noticeProblem, rawImage, recordChanges, removeImage, stoppedNote, storeImage, updateProduct } from './admin.js'
+import { checkOptions, codeSets, deleteBlockImages, deleteFiles, IMAGE_TYPES, insertProduct, itemRanges, looksLike, noticeProblem, rawImage, recordChanges, removeImage, saveOptimized, stoppedNote, storeImage, updateProduct } from './admin.js'
 import { writeAccessLog } from './accessLog.js'
 import { hashPassword, issueStaffSession, passwordMatches, requireSeller, reserveAttempt, undoAttempt } from './auth.js'
 import { bannedMessage, findBanned } from './banned.js'
 import { sameBlocks } from './blocks.js'
+import { clearCache } from './cache.js'
 import { fillItem, listTemplates, productDraft } from './content.js'
 import { pool } from './db.js'
 import { maskName } from './inquiry.js'
@@ -108,7 +109,7 @@ sellerRouter.get('/summary', async (req, res) => {
 })
 
 sellerRouter.get('/me', async (req, res) => {
-  const { rows } = await pool.query('SELECT seller_code, name, region, intro, story, status, reject_note FROM sellers WHERE seller_code = $1', [mine(req)])
+  const { rows } = await pool.query('SELECT seller_code, name, region, intro, story, photos, status, reject_note FROM sellers WHERE seller_code = $1', [mine(req)])
   res.json({ loginId: req.seller.loginId, role: 'seller', seller: rows[0], mfa: Boolean(req.seller.mfa) })
 })
 
@@ -139,11 +140,58 @@ sellerRouter.patch('/profile', async (req, res) => {
   if (bad.length) errors.push(bannedMessage(bad))
   if (errors.length) return res.status(400).json({ error: errors.join(' '), errors })
   const { rows } = await pool.query(
-    'UPDATE sellers SET intro = $1, story = $2 WHERE seller_code = $3 RETURNING seller_code, name, region, intro, story',
+    'UPDATE sellers SET intro = $1, story = $2 WHERE seller_code = $3 RETURNING seller_code, name, region, intro, story, photos',
     [intro || null, story || null, mine(req)],
   )
   console.log(`[seller] ${req.seller.loginId} 농가 소개 수정`)
   res.json(rows[0])
+})
+
+// 농가 소개 사진 (2026-11-17): 올리면 바로 저장되고 농가 페이지 · 상품 상세 '판매 농가 이야기'에 보인다.
+// 상품 사진과 같은 방식(server/admin.js saveOptimized)으로 줄여 WebP로 바꾸고, 사진 속 촬영 위치(GPS) 같은 정보는 지운다.
+// 파일 이름은 farm-<농가코드>-<무작위>.webp (상품 사진과 섞이지 않게)
+const MAX_FARM_PHOTOS = 4
+const farmFileKey = (code) => `farm-${code}`
+sellerRouter.post('/profile/photo', rawImage, async (req, res) => {
+  const type = req.headers['content-type']
+  if (!IMAGE_TYPES[type] || !Buffer.isBuffer(req.body) || req.body.length === 0 || !looksLike(type, req.body)) {
+    return res.status(400).json({ error: '사진은 jpg, png, webp 파일만 올릴 수 있어요. (2MB 이하)' })
+  }
+  const code = mine(req)
+  const current = await pool.query('SELECT photos FROM sellers WHERE seller_code = $1', [code])
+  if ((current.rows[0]?.photos ?? []).length >= MAX_FARM_PHOTOS) return res.status(400).json({ error: `농가 사진은 ${MAX_FARM_PHOTOS}장까지 올릴 수 있어요. 하나를 빼고 올려 주세요.` })
+  let url
+  try {
+    url = await saveOptimized(farmFileKey(code), req.body)
+  } catch {
+    return res.status(400).json({ error: '사진을 읽지 못했어요. 다른 사진으로 올려 주세요.' })
+  }
+  // 동시에 여러 장을 올려도 4장을 넘지 않게, 넣을 때 한 번 더 센다
+  const { rows } = await pool.query(
+    'UPDATE sellers SET photos = array_append(photos, $1) WHERE seller_code = $2 AND cardinality(photos) < $3 RETURNING photos',
+    [url, code, MAX_FARM_PHOTOS],
+  )
+  if (!rows.length) {
+    await deleteFiles(farmFileKey(code), url)
+    return res.status(400).json({ error: `농가 사진은 ${MAX_FARM_PHOTOS}장까지 올릴 수 있어요.` })
+  }
+  clearCache() // 손님 화면(농가 페이지·상품 상세)에 바로 보이게
+  console.log(`[seller] ${req.seller.loginId} 농가 사진 추가`)
+  res.status(201).json({ photos: rows[0].photos })
+})
+
+sellerRouter.delete('/profile/photo', async (req, res) => {
+  const url = typeof req.body?.url === 'string' ? req.body.url : ''
+  const code = mine(req)
+  const { rows } = await pool.query(
+    'UPDATE sellers SET photos = array_remove(photos, $1) WHERE seller_code = $2 AND $1 = ANY(photos) RETURNING photos',
+    [url, code],
+  )
+  if (!rows.length) return res.status(404).json({ error: '그 사진을 찾지 못했어요.' })
+  await deleteFiles(farmFileKey(code), url)
+  clearCache()
+  console.log(`[seller] ${req.seller.loginId} 농가 사진 빼기`)
+  res.json({ photos: rows[0].photos })
 })
 
 sellerRouter.get('/options', async (req, res) => {
