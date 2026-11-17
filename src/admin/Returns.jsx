@@ -38,6 +38,11 @@ function ReturnRow({ ret, onDone, onError }) {
     <li className="box">
       <p><b>#{ret.id}</b> · {ret.order_no} · {ret.seller_name} · <b>{RETURN_STATUS[ret.status]}</b> · 신청 {when(ret.created_at)} ({ret.requested_by})</p>
       <p>{REASONS[ret.reason_type]} · {ret.reason}</p>
+      {ret.photos?.length > 0 && (
+        <div className="return-photos">
+          {ret.photos.map((_, n) => <a key={n} href={`/api/admin/returns/${ret.id}/photos/${n}`} target="_blank" rel="noreferrer"><img src={`/api/admin/returns/${ret.id}/photos/${n}`} alt={`반품 사진 ${n + 1}`} loading="lazy" /></a>)}
+        </div>
+      )}
       <ul>{ret.items.map((i) => <li key={i.item_id}>{i.name}{i.option_name && ` · ${i.option_name}`} × {i.quantity} — {won(i.price * i.quantity)}</li>)}</ul>
       <p className="muted">주문자 {ret.buyer_name} · 받은 날 {when(ret.delivered_at)} · 돌려보낼 상품 {won(items)} · 이 농가 배송 상품 {won(ret.items_amount)} + 배송비 {won(ret.shipping_fee)}</p>
       {ret.seller_note && <p>판매자 의견: {ret.seller_note} <span className="muted">({when(ret.seller_noted_at)})</span></p>}

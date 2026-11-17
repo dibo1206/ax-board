@@ -1476,3 +1476,15 @@
 .shop .farm-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin: 0 0 18px; }
 .shop .farm-photos img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; background: var(--surface); }
 @media (max-width: 600px) { .shop .farm-photos { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
+
+/* 손님 사진 고르기·후기 사진 (2026-11-17) */
+.photo-pick { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
+.photo-pick-title { margin: 0; font-size: 14px; }
+.photo-pick-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.photo-pick-list li { position: relative; }
+.photo-pick-list img { display: block; width: 84px; height: 84px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); }
+.photo-pick-x { position: absolute; top: -6px; right: -6px; width: 24px; height: 24px; padding: 0; font-size: 15px; line-height: 22px; color: #fff; background: #333; border: 0; border-radius: 50%; cursor: pointer; }
+.photo-pick-add { align-self: flex-start; cursor: pointer; }
+.review-photos { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+.review-photos img { display: block; width: 96px; height: 96px; object-fit: cover; border-radius: 10px; }
+.review-write-here { margin: 0 0 14px; }

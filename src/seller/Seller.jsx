@@ -296,6 +296,11 @@ function MyReturns({ onMessage, onError }) {
         <li key={r.id} className={`box${['rejected', 'refunded'].includes(r.status) ? ' dim' : ''}`}>
           <p><b>#{r.id}</b> · {r.order_label} · {RETURN_STATUS[r.status]} · 신청 {when(r.created_at)} · 받은 날 {when(r.delivered_at)}</p>
           <p>{REASONS[r.reason_type]} · {r.reason}</p>
+          {r.photo_count > 0 && (
+            <div className="return-photos">
+              {Array.from({ length: r.photo_count }, (_, n) => <a key={n} href={`/api/seller/returns/${r.id}/photos/${n}`} target="_blank" rel="noreferrer"><img src={`/api/seller/returns/${r.id}/photos/${n}`} alt={`반품 사진 ${n + 1}`} loading="lazy" /></a>)}
+            </div>
+          )}
           <ul>{r.items.map((i) => <li key={`${i.name}:${i.option_name ?? ''}`}>{i.name} ({i.option_name ?? i.unit}) × {i.quantity}</li>)}</ul>
           {r.admin_note && <p className="muted">회사 메모: {r.admin_note}</p>}
           {r.status === 'refunded' && <p className="muted">{won(r.refund_amount)} 환불 ({when(r.refunded_at)})</p>}
