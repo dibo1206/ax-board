@@ -168,7 +168,8 @@ export function OrderDetail({ order, phone = '', onConfirm = null, onReturn = nu
       <ul className="order-items">
         {order.items.map((i, index) => (
           <li key={`${i.product_code}:${i.option_name ?? ''}`}>
-            {i.name} ({i.option_name ?? i.unit}) × {i.quantity} — {won(i.subtotal)}
+            {/* 산 상품 화면으로 바로 가기 (다시 사거나 상품 정보를 다시 볼 때) */}
+            <a href={`/p/${encodeURIComponent(i.product_code)}`}>{i.name}</a> ({i.option_name ?? i.unit}) × {i.quantity} — {won(i.subtotal)}
             {canReview(i, index) && writing !== i.product_code && <button type="button" className="link" onClick={() => setWriting(i.product_code)}> 후기 쓰기</button>}
             {written.includes(i.product_code) && firstOf(i, index) && <span className="success"> 후기를 남겼어요</span>}
             {writing === i.product_code && firstOf(i, index) && (
