@@ -71,7 +71,7 @@ const PLAN = JSON.parse(readFileSync(new URL('../data/sample_farms.json', import
 const SIM_CODES = PLAN.products.map((x) => x.product_code)
 const PHONE = '01055668800'
 const orderBody = (items, phone = PHONE) => ({
-  items, buyerName: '시험', buyerPhone: phone, receiverName: '시험', receiverPhone: '01055660000', zipcode: '31066', address1: '시험로 1', agreeTerms: true, agreePrivacy: true,
+  items, buyerName: '시험', buyerPhone: phone, receiverName: '시험', receiverPhone: '01055660000', zipcode: '31066', address1: '시험로 1', agreeTerms: true, agreePrivacy: true, agreeAge: true,
 })
 const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`
 

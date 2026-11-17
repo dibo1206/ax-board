@@ -111,7 +111,7 @@ const created = []
 async function newOrder(child, productCode = 'carrot_3kg', quantity = 1) {
   const r = await call(child, 'POST', '/orders', {
     items: [{ productCode, quantity }], buyerName: '복원시험', buyerPhone: '01077770000', receiverName: '복원시험',
-    receiverPhone: '01077770000', zipcode: '31066', address1: '시험로 1', agreeTerms: true, agreePrivacy: true,
+    receiverPhone: '01077770000', zipcode: '31066', address1: '시험로 1', agreeTerms: true, agreePrivacy: true, agreeAge: true,
   })
   if (r.status !== 201) throw new Error(`주문 생성 실패 ${r.status} ${JSON.stringify(r.data)}`)
   created.push(r.data.orderNo)

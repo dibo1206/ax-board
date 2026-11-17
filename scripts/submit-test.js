@@ -70,7 +70,7 @@ async function placeOrder(body) {
   return response
 }
 const orderBody = (items, phone = PHONE) => ({
-  items, buyerName: '시험', buyerPhone: phone, receiverName: '시험', receiverPhone: '01055660000', zipcode: '31066', address1: '시험로 1', agreeTerms: true, agreePrivacy: true,
+  items, buyerName: '시험', buyerPhone: phone, receiverName: '시험', receiverPhone: '01055660000', zipcode: '31066', address1: '시험로 1', agreeTerms: true, agreePrivacy: true, agreeAge: true,
 })
 
 const outboxBefore = (await db.query('SELECT COALESCE(max(id), 0) AS id FROM email_outbox')).rows[0].id

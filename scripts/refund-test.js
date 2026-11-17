@@ -134,7 +134,7 @@ const PHONE = '01066660000'
 async function newPaidOrder(items, who = null) {
   const r = await call(who, 'POST', '/orders', {
     items, buyerName: '환불시험', buyerPhone: PHONE, receiverName: '환불시험', receiverPhone: PHONE, email: `refund-test-${tag}@example.com`,
-    zipcode: '31066', address1: '시험로 1', agreeTerms: true, agreePrivacy: true,
+    zipcode: '31066', address1: '시험로 1', agreeTerms: true, agreePrivacy: true, agreeAge: true,
   })
   if (r.status !== 201) throw new Error(`주문 생성 실패 ${r.status} ${JSON.stringify(r.data)}`)
   created.push(r.data.orderNo)
@@ -303,7 +303,7 @@ try {
   const member = {}
   const other = {}
   for (const [who, n] of [[member, 1], [other, 2]]) {
-    r = await call(who, 'POST', '/account/signup', { email: `rt-${tag}-${n}@example.com`, password: PASSWORD, name: `반품시험${n}`, phone: `0106666000${n}`, agreeTerms: true, agreePrivacy: true })
+    r = await call(who, 'POST', '/account/signup', { email: `rt-${tag}-${n}@example.com`, password: PASSWORD, name: `반품시험${n}`, phone: `0106666000${n}`, agreeTerms: true, agreePrivacy: true, agreeAge: true })
     if (r.status !== 201) throw new Error(`가입 실패 ${r.status} ${JSON.stringify(r.data)}`)
   }
   o = await newPaidOrder([{ productCode: 'carrot_3kg', quantity: 2 }])

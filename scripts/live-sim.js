@@ -274,7 +274,7 @@ async function buy(v, seen, listed) {
   const order = await call(v, 'POST', '/orders', {
     items: items.map(({ productCode, optionId, quantity }) => ({ productCode, optionId, quantity })),
     buyerName: `[예시] ${v.name}`, buyerPhone: v.phone, receiverName: `[예시] ${v.name}`, receiverPhone: v.phone,
-    zipcode: pick(['31066', '06236', '48058', '61470', '35208']), address1: `[예시] ${pick(['충남 천안시', '서울 강남구', '부산 해운대구', '광주 동구', '대전 서구'])} 시험로 ${v.no}`, agreeTerms: true, agreePrivacy: true,
+    zipcode: pick(['31066', '06236', '48058', '61470', '35208']), address1: `[예시] ${pick(['충남 천안시', '서울 강남구', '부산 해운대구', '광주 동구', '대전 서구'])} 시험로 ${v.no}`, agreeTerms: true, agreePrivacy: true, agreeAge: true,
   })
   metrics.orders += 1
   if (order.status !== 201) return note(`손님 ${v.no} ${v.name}`, '주문', `${order.status} ${order.data?.error ?? ''}`, order.status === 409)
@@ -330,7 +330,7 @@ at(SPAN * 0.15, async () => {
   if (exists) return note(name, '가입 신청', '이미 가입한 아이디라 건너뜀')
   const password = `Yj!${randomBytes(12).toString('base64url')}9a`
   const me = { ip: '10.82.1.10' }
-  const signup = await call(me, 'POST', '/seller-signup', { ...NEW_FARM, loginId: NEW_FARM.login, password, agreeTerms: true, agreePrivacy: true })
+  const signup = await call(me, 'POST', '/seller-signup', { ...NEW_FARM, loginId: NEW_FARM.login, password, agreeTerms: true, agreePrivacy: true, agreeAge: true })
   if (signup.status !== 201) return note(name, '가입 신청', `${signup.status} ${signup.data?.error ?? ''}`, false)
   const all = existsSync(ACCOUNTS_FILE) ? JSON.parse(readFileSync(ACCOUNTS_FILE, 'utf8')) : {}
   all[NEW_FARM.login] = { farmName: NEW_FARM.farmName, password, note: '예시 농가 계정 (npm run live-sim). 저장소에 올리지 않는다' }
