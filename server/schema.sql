@@ -583,3 +583,13 @@ ALTER TABLE sellers ADD COLUMN IF NOT EXISTS photos TEXT[] NOT NULL DEFAULT '{}'
 -- 이 기능 전에 들어온 주문은 비어 있음(NULL) = 수수료 0%
 ALTER TABLE sellers ADD COLUMN IF NOT EXISTS commission_rate NUMERIC(4, 1) CHECK (commission_rate IS NULL OR (commission_rate >= 0 AND commission_rate <= 50));
 ALTER TABLE order_shipments ADD COLUMN IF NOT EXISTS commission_rate NUMERIC(4, 1);
+
+-- 정산 지급 기록 (2026-11-17, server/settlement.js): 관리자가 은행으로 보낸 뒤 [지급 완료]를 누르면 농가·달마다 한 줄
+CREATE TABLE IF NOT EXISTS settlement_payouts (
+  seller_code TEXT NOT NULL REFERENCES sellers(seller_code),
+  month DATE NOT NULL, -- 그 달 1일
+  amount INT NOT NULL,
+  paid_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  paid_by TEXT NOT NULL,
+  PRIMARY KEY (seller_code, month)
+);
