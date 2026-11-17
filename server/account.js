@@ -72,6 +72,8 @@ accountRouter.post('/signup', async (req, res) => {
   const sensitive = findSensitive(name)
   if (sensitive) errors.push(SENSITIVE_MESSAGE(sensitive))
   if (req.body.agreeTerms !== true || req.body.agreePrivacy !== true) errors.push('이용약관과 개인정보 수집·이용에 동의해 주세요.')
+  // 개인정보 보호법: 만 14세 미만의 개인정보는 법정대리인 동의가 있어야 처리할 수 있다 → 그 절차가 없으니 만 14세 이상만 받는다 (2026-11-17)
+  if (req.body.agreeAge !== true) errors.push('만 14세 이상만 가입할 수 있어요. (만 14세 미만은 법정대리인 동의가 필요해서 지금은 가입을 받지 않아요)')
   if (errors.length) return res.status(400).json({ error: errors.join(' '), errors })
   if (tooManySignups(req)) return res.status(429).json({ error: '가입 시도가 너무 많아요. 잠시 후 다시 시도해 주세요.' })
   const { rows } = await pool.query(

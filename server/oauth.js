@@ -197,6 +197,7 @@ oauthRouter.post('/complete', async (req, res) => {
   const sensitive = findSensitive(name)
   if (sensitive) errors.push(SENSITIVE_MESSAGE(sensitive))
   if (req.body.agreeTerms !== true || req.body.agreePrivacy !== true) errors.push('이용약관과 개인정보 수집·이용에 동의해 주세요.')
+  if (req.body.agreeAge !== true) errors.push('만 14세 이상만 가입할 수 있어요. (만 14세 미만은 법정대리인 동의가 필요해서 지금은 가입을 받지 않아요)') // 만 14세 미만은 법정대리인 동의 절차가 없어서 받지 않는다
   if (errors.length) return res.status(400).json({ error: errors.join(' '), errors })
   if (tooManySignups(req)) return res.status(429).json({ error: '가입 시도가 너무 많아요. 잠시 후 다시 시도해 주세요.' })
 

@@ -7,11 +7,13 @@ import { EMAIL_DOMAINS, emailProblem, passwordRules } from './rules.js'
 export const Req = () => <em className="req" title="필수">*</em>
 
 // 약관 '모두 동의': 누르면 아래 필수 동의(이용약관·개인정보)를 한 번에 켜고 끈다. 둘 다 켜져 있으면 함께 켜진 것으로 보인다 (2026-11-07 피드백)
-export function AgreeAll({ form, setForm }) {
-  const all = form.agreeTerms && form.agreePrivacy
+// age: 만 14세 이상 확인 칸(agreeAge)도 함께 켜고 끌지. 기본은 form 에 그 칸이 있을 때 (비회원 주문은 로그인 안 했을 때만)
+export function AgreeAll({ form, setForm, age = 'agreeAge' in form }) {
+  const hasAge = age
+  const all = form.agreeTerms && form.agreePrivacy && (!hasAge || form.agreeAge)
   return (
     <label className="check agree-all">
-      <input type="checkbox" checked={all} onChange={(e) => setForm((prev) => ({ ...prev, agreeTerms: e.target.checked, agreePrivacy: e.target.checked }))} />
+      <input type="checkbox" checked={all} onChange={(e) => setForm((prev) => ({ ...prev, agreeTerms: e.target.checked, agreePrivacy: e.target.checked, ...(hasAge ? { agreeAge: e.target.checked } : {}) }))} />
       <strong>약관에 모두 동의해요</strong> <span className="muted">(아래 필수 항목 전체)</span>
     </label>
   )

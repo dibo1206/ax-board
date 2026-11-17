@@ -83,7 +83,7 @@ export function Checkout() {
   const cart = useCartLines(lines)
   const [form, setForm] = useState({
     buyerName: '', buyerPhone: '', same: true, receiverName: '', receiverPhone: '',
-    zipcode: '', address1: '', address2: '', memo: '', email: '', saveAddress: false, agreeTerms: false, agreePrivacy: false,
+    zipcode: '', address1: '', address2: '', memo: '', email: '', saveAddress: false, agreeTerms: false, agreePrivacy: false, agreeAge: false,
   })
   const [account, setAccount] = useState(null)
 
@@ -190,9 +190,10 @@ export function Checkout() {
         {account && <label className="check"><input type="checkbox" checked={form.saveAddress} onChange={set('saveAddress')} />이 주소를 기본 배송지로 저장</label>}
       </section>
       <section className="box form">
-        <AgreeAll form={form} setForm={setForm} />
+        <AgreeAll form={form} setForm={setForm} age={!account} />
         <label className="check"><input type="checkbox" checked={form.agreeTerms} onChange={set('agreeTerms')} />[필수] 주문 상품과 결제 금액을 확인했고, <a href="/policy/terms" target="_blank" rel="noreferrer">이용약관</a>·<a href="/policy/refund" target="_blank" rel="noreferrer">교환·환불 정책</a>에 동의해요</label>
         <label className="check"><input type="checkbox" checked={form.agreePrivacy} onChange={set('agreePrivacy')} />[필수] 배송을 위한 <a href="/policy/privacy" target="_blank" rel="noreferrer">개인정보 수집·이용</a>에 동의해요 (이름·휴대폰·주소, 법에 따라 5년 보관)</label>
+        {!account && <label className="check"><input type="checkbox" checked={Boolean(form.agreeAge)} onChange={set('agreeAge')} />[필수] 만 14세 이상이에요 <span className="muted">(만 14세 미만은 법정대리인 동의가 필요해서 비회원 주문을 받지 않아요)</span></label>}
       </section>
       {errors.length > 0 && <ul className="error">{errors.map((e) => <li key={e}>{e}</li>)}</ul>}
       <button type="submit" className="button" disabled={sending}>{sending ? '주문 만드는 중…' : `${won(cart.total)} 결제하러 가기`}</button>

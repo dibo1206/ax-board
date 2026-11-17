@@ -114,7 +114,7 @@ export function LoginPage() {
 // 간편 로그인으로 처음 온 손님: 약관 동의와 연락처를 받고 가입 (카카오·네이버에서 받은 이메일·이름은 미리 채운다)
 export function SocialSignupPage() {
   const [pending, setPending] = useState(undefined)
-  const [form, setForm] = useState({ email: '', name: '', phone: '', agreeTerms: false, agreePrivacy: false })
+  const [form, setForm] = useState({ email: '', name: '', phone: '', agreeTerms: false, agreePrivacy: false, agreeAge: false })
   const [errors, setErrors] = useState([])
   const [existing, setExisting] = useState(false)
   useEffect(() => {
@@ -147,6 +147,7 @@ export function SocialSignupPage() {
       <AgreeAll form={form} setForm={setForm} />
       <label className="check"><input type="checkbox" checked={form.agreeTerms} onChange={set('agreeTerms')} />[필수] <a href="/policy/terms" target="_blank" rel="noreferrer">이용약관</a>에 동의해요</label>
       <label className="check"><input type="checkbox" checked={form.agreePrivacy} onChange={set('agreePrivacy')} />[필수] <a href="/policy/privacy" target="_blank" rel="noreferrer">개인정보 수집·이용</a>에 동의해요 (간편 로그인 회원 번호·이메일·이름·휴대폰, 탈퇴 시 삭제)</label>
+      <label className="check"><input type="checkbox" checked={form.agreeAge} onChange={set('agreeAge')} />[필수] 만 14세 이상이에요</label>
       <Errors list={errors} />
       {existing && <p className="muted"><a href="/account/login?next=/account">이메일로 로그인</a>한 뒤 마이페이지 [로그인·탈퇴]에서 {pending.providerName} 계정을 연결할 수 있어요.</p>}
       <button type="submit" className="button">동의하고 가입</button>
@@ -234,12 +235,12 @@ function SellerSignup() {
 
 export function SignupPage() {
   const [type, setType] = useState(() => (new URLSearchParams(window.location.search).get('type') === 'seller' ? 'seller' : 'buyer'))
-  const [form, setForm] = useState({ email: '', password: '', password2: '', name: '', phone: '', agreeTerms: false, agreePrivacy: false })
+  const [form, setForm] = useState({ email: '', password: '', password2: '', name: '', phone: '', agreeTerms: false, agreePrivacy: false, agreeAge: false })
   const [errors, setErrors] = useState([])
   const [show, setShow] = useState(false) // 가입하기를 눌렀는데 빈 칸이 있으면 빈 칸도 빨갛게
   const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
   const put = (key) => (value) => setForm((prev) => ({ ...prev, [key]: value }))
-  const ready = !emailProblem(form.email) && passwordOk(form.password, form.password2, form.email) && form.name.trim() && phoneOk(form.phone) && form.agreeTerms && form.agreePrivacy
+  const ready = !emailProblem(form.email) && passwordOk(form.password, form.password2, form.email) && form.name.trim() && phoneOk(form.phone) && form.agreeTerms && form.agreePrivacy && form.agreeAge
 
   async function submit(event) {
     event.preventDefault()
@@ -292,6 +293,7 @@ export function SignupPage() {
       <AgreeAll form={form} setForm={setForm} />
       <label className={`check${show && !form.agreeTerms ? ' bad-check' : ''}`}><input type="checkbox" checked={form.agreeTerms} onChange={set('agreeTerms')} /><em className="req">[필수]</em> <a href="/policy/terms" target="_blank" rel="noreferrer">이용약관</a>에 동의해요</label>
       <label className={`check${show && !form.agreePrivacy ? ' bad-check' : ''}`}><input type="checkbox" checked={form.agreePrivacy} onChange={set('agreePrivacy')} /><em className="req">[필수]</em> <a href="/policy/privacy" target="_blank" rel="noreferrer">개인정보 수집·이용</a>에 동의해요 (이메일·이름·휴대폰, 탈퇴 시 삭제)</label>
+      <label className={`check${show && !form.agreeAge ? ' bad-check' : ''}`}><input type="checkbox" checked={form.agreeAge} onChange={set('agreeAge')} /><em className="req">[필수]</em> 만 14세 이상이에요</label>
       <Errors list={errors} />
       <button type="submit" className="button">가입하기</button>
     </form>

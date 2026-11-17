@@ -374,6 +374,8 @@ publicOrderRouter.post('/orders', async (req, res) => {
     return res.status(429).json({ error: `결제하지 않은 주문이 이미 ${pending}건 있어요. 먼저 결제하거나 ${PENDING_MINUTES}분 뒤에 다시 주문해 주세요.` })
   }
   const customer = await currentCustomer(req) // 로그인한 회원이면 주문을 계정에 묶는다
+  // 비회원 주문도 이름·연락처·주소를 받으니 만 14세 이상인지 확인한다 (회원은 가입할 때 확인했다, 2026-11-17)
+  if (!customer && req.body.agreeAge !== true) return res.status(400).json({ error: '만 14세 이상인지 확인해 주세요. (만 14세 미만은 법정대리인 동의가 필요해서 지금은 비회원 주문을 받지 않아요)', errors: ['만 14세 이상인지 확인해 주세요. (만 14세 미만은 법정대리인 동의가 필요해서 지금은 비회원 주문을 받지 않아요)'] })
 
   try {
     const order = await inTransaction(async (client) => {
