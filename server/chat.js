@@ -583,6 +583,59 @@ function manyProducts(products, facts, catalog) {
   return { answer, sources, productCode: sources[0]?.code ?? products[0].product_code }
 }
 
+// 이어서 용도·무게만 말한 경우 (2026-11-17): "단감 팔아?" → "선물용", "3kg" 처럼 품목 없이 짧게 좁히면
+// 앞선 대화(또는 보고 있는 상품)의 품목 안에서 상품 이름·옵션으로 좁혀 AI 없이 답한다.
+// 메시지 전체가 좁히는 말 하나일 때만 ("선물용 추천해 주세요", "선물 포장 돼요?" 같은 문장은 원래 규칙으로)
+const FOLLOW_UP = /^\s*(?:(선물|가정|집|업소|카페|식당|소포장|맛보기|대용량|못난이|흠과)\s?(?:용|으로|용으로|이요|요|용이요|용요|용은|용은요)?|(\d+(?:\.\d+)?)\s?(kg|키로|킬로|g|그램)(?:\s?(?:짜리|정도))?(?:로|으로|요|이요|은요|는요)?)\s*[?.!~]*\s*$/i
+const FOLLOW_NAMES = {
+  선물: ['선물'], 가정: ['가정용'], 집: ['가정용'], 업소: ['업소용', '대용량'], 카페: ['업소용', '대용량'], 식당: ['업소용', '대용량'],
+  대용량: ['대용량', '업소용'], 소포장: ['소포장', '맛보기'], 맛보기: ['맛보기', '소포장'], 못난이: ['못난이', '흠과', '파지'], 흠과: ['흠과', '못난이', '파지'],
+}
+const FOLLOW_WANTS = {
+  선물: '선물용', 가정: '가정용', 집: '집에서 먹을', 업소: '업소용', 카페: '카페·업소용', 식당: '업소용',
+  대용량: '대용량', 소포장: '소포장', 맛보기: '맛보기', 못난이: '못난이', 흠과: '흠과',
+}
+function answerFollowUp(message, catalog, ctx) {
+  const m = message.match(FOLLOW_UP)
+  if (!m || !ctx.items.length || findItems(message, catalog.items).length) return null
+  const item = ctx.current ? catalog.items.find((i) => i.item_code === ctx.current.item_code) : ctx.items[0]
+  if (!item) return null
+  const live = catalog.products.filter((p) => p.item_code === item.item_code && !p.sold_out)
+  if (!live.length) return null
+  const label = (p) => p.name.replace(/\[예시\]\s*/g, '')
+  const texts = (p) => [label(p), ...(p.options ?? []).map((o) => String(o.name))]
+  let wants // 답 첫머리 ("선물용 단감 상품은 …")
+  let word // 못 찾았을 때 ("이름이나 옵션에 '선물'이 들어간 …")
+  let fitsText
+  if (m[1]) {
+    const names = FOLLOW_NAMES[m[1]]
+    wants = FOLLOW_WANTS[m[1]]
+    word = names.join('·')
+    fitsText = (t) => names.some((n) => t.includes(n))
+  } else {
+    const grams = /^(g|그램)$/i.test(m[3]) ? Number(m[2]) : Number(m[2]) * 1000
+    wants = `${m[2]}${/^(g|그램)$/i.test(m[3]) ? 'g' : 'kg'}`
+    word = wants
+    const forms = [`${grams / 1000}\\s?kg`, `${grams}\\s?g(?!a)`].map((f) => new RegExp(`(^|[^\\d.])${f.replace('.', '\\.')}`, 'i'))
+    fitsText = (t) => forms.some((re) => re.test(t))
+  }
+  const fits = (p) => texts(p).some(fitsText)
+  const hit = live.filter(fits).sort((a, b) => a.price - b.price)
+  // 옵션 상품은 맞는 옵션만 (5kg 를 물었는데 10kg 옵션 가격까지 늘어놓지 않게). 맞는 옵션이 없으면(이름이 맞은 경우) 모든 옵션
+  const priceFor = (p) => {
+    if (!p.options?.length) return won(p.price)
+    const opts = p.options.filter((o) => fitsText(String(o.name)))
+    return (opts.length ? opts : p.options).map((o) => `${o.name} ${won(o.price)}`).join(', ')
+  }
+  const listOf = (arr) => arr.slice(0, 3).map((p) => `${label(p)} ${priceFor(p)}`).join(', ')
+  const shown = hit.length ? hit.slice(0, 3) : [...live].sort((a, b) => a.price - b.price).slice(0, 3)
+  const answer = hit.length
+    ? `${wants} ${item.name} 상품은 ${hit.length}개예요: ${listOf(hit)}${hit.length > 3 ? ' 등' : ''}이에요.${hit.length === 1 ? ' 구성과 출고 날짜는 상품 페이지에서 확인해 주세요.' : ''}`
+    : `${item.name} 상품 중에 이름이나 옵션에 '${word}'${hasBatchim(word) ? '이' : '가'} 들어간 상품은 없어요. 지금 살 수 있는 ${item.name} 상품은 ${live.length}개이고, 싼 순으로 ${listOf(shown)}이에요.`
+  const sources = shown.map((p) => ({ code: p.product_code, name: p.name }))
+  return { answer, sources, productCode: sources[0]?.code ?? null, handoff: false, action: null, model: 'rule:follow-up', blocked: false }
+}
+
 // 자료에 없을 수 있는 속성을 묻는 말: 파는지·재고 답으로 넘겨짚지 않는다
 const ATTRIBUTE_WORD = /유기농|무농약|농약|친환경|인증|왁스|설탕|첨가|gap|원액|국산|섞어|혼합|묶어/i
 function answerFact(message, catalog, ctx) {
@@ -1338,6 +1391,8 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
   }
   const season = answerSeason(said, catalog)
   if (season) return season
+  const followUp = answerFollowUp(said, catalog, ctx)
+  if (followUp) return followUp
   const odd = allowAi ? null : answerOddWords(message, catalog, ctx)
   if (odd) return odd
   // 두 품목(또는 같은 품목의 두 품종) 비교·선택: 규칙 답에서 [AI에게 물어보기]를 누른 경우(allowAi)에만 아래 규칙을 건너뛰고 AI에게 간다
