@@ -268,7 +268,7 @@ function Admin() {
           <div className="account">
             <span>{me.loginId} 로그인 중</span>
             {!me.mfa && <Chip tone="amber" title="관리자 계정 화면에서 등록해요">2단계 인증 미등록</Chip>}
-            <button type="button" className="link" onClick={logout}>로그아웃</button>
+            <button type="button" className="logout-btn" onClick={logout}>로그아웃</button>
           </div>
         </div>
       </aside>

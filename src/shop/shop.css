@@ -1271,6 +1271,8 @@
 /* 관리자·판매자로 쇼핑몰을 볼 때 맨 위 막대 */
 .shop .staff-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 16px; padding: 7px 16px; background: #1f3a2a; color: #f4f1e8; font-size: 13px; }
 .shop .staff-bar a { color: #e9d9a6; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.shop .staff-bar .staff-logout { padding: 3px 12px; font: inherit; font-weight: 600; color: #f4f1e8; background: none; border: 1px solid rgb(244 241 232 / 0.6); border-radius: 999px; cursor: pointer; }
+.shop .staff-bar .staff-logout:hover { background: rgb(244 241 232 / 0.12); }
 
 /* 상품 화면 (/products, 2026-11-08): 카테고리(드롭다운 품목) · 걸러 보기 칩 · 정렬 · 개수 · 보기 방식 */
 .shop .page:has(.plist) { max-width: 1440px; }

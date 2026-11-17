@@ -459,7 +459,7 @@ export default function Seller() {
           <button type="button" className="text-size" aria-pressed={bigText} onClick={toggleBigText}>{bigText ? '글씨 보통으로' : '가 글씨 크게'}</button>
           <span className="muted">{me.seller.name} · {me.loginId}</span>
           {!me.mfa && <Chip tone="amber" title="회사 담당자에게 2단계 인증 등록을 요청하세요">2단계 인증 미등록</Chip>}
-          <button type="button" className="link" onClick={logout}>로그아웃</button>
+          <button type="button" className="logout-btn" onClick={logout}>로그아웃</button>
         </div>
       </div>
       {message && <p className="success">{message}</p>}
