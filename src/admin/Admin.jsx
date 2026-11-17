@@ -36,16 +36,21 @@ export function Login({ onLogin, title = '관리자 로그인' }) {
   const [password, setPassword] = useState('')
   const [otp, setOtp] = useState('')
   const [needOtp, setNeedOtp] = useState(false)
+  const [setup, setSetup] = useState(null) // 2단계 인증이 필수인데 아직 등록 안 한 계정: 처음 로그인 때 여기서 등록 (/account/login 과 같은 흐름)
   const [error, setError] = useState('')
 
   async function submit(event) {
     event.preventDefault()
     try {
-      const me = await adminApi('/login', { method: 'POST', body: { loginId, password, otp } })
+      const me = setup
+        ? await adminApi('/2fa-first', { method: 'POST', body: { setup: setup.setup, code: otp } })
+        : await adminApi('/login', { method: 'POST', body: { loginId, password, otp } })
       onLogin(me)
     } catch (e) {
-      // 2단계 인증을 등록한 계정이면 인증 앱 코드 칸을 보여 준다
+      // 2단계 인증을 등록한 계정이면 인증 앱 코드 칸을, 아직 등록 안 했으면 등록 키를 보여 준다
       if (e.needOtp) setNeedOtp(true)
+      if (e.data?.needSetup2fa) setSetup({ setup: e.data.setup, key: e.data.key, uri: e.data.uri })
+      if (setup && /시간이 지났|더 이상 맞지/.test(e.message)) setSetup(null)
       setOtp('')
       setError(e.message)
     }
@@ -56,7 +61,16 @@ export function Login({ onLogin, title = '관리자 로그인' }) {
       <h2>{title}</h2>
       <label>아이디<input value={loginId} onChange={(e) => setLoginId(e.target.value)} autoComplete="username" /></label>
       <label>비밀번호<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></label>
-      {needOtp && (
+      {setup && (
+        <div className="twofa-first">
+          <ol className="twofa-steps">
+            <li>휴대폰 인증 앱(Google Authenticator 등)에서 <b>설정 키 입력</b>을 고르세요. 휴대폰이라면 <a href={setup.uri}>인증 앱에 바로 추가</a>.</li>
+            <li>키: <span className="twofa-key">{setup.key}</span> (다른 사람에게 보여 주지 마세요)</li>
+            <li>앱에 나온 6자리 코드를 아래에 넣고 [로그인]을 누르세요 (10분 안에).</li>
+          </ol>
+        </div>
+      )}
+      {(needOtp || setup) && (
         <label>인증 앱 코드 (6자리)<input value={otp} onChange={(e) => setOtp(e.target.value)} inputMode="numeric" autoComplete="one-time-code" maxLength={7} autoFocus /></label>
       )}
       {error && <p className="error">{error}</p>}
