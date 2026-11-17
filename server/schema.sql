@@ -574,3 +574,6 @@ ALTER TABLE admins ADD COLUMN IF NOT EXISTS totp_enroll_until TIMESTAMPTZ;
 
 -- 블록형 상세페이지 (2026-11-14, server/blocks.js): 상품 설명 아래에 쌓는 글·사진 블록 [{type:'text',title,body} | {type:'image',url,alt,caption}]
 ALTER TABLE products ADD COLUMN IF NOT EXISTS detail_blocks JSONB NOT NULL DEFAULT '[]';
+
+-- 농가 소개 사진 (2026-11-17): 판매자가 [농가 소개·계정]에서 4장까지 올린다. 농가 페이지 · 상품 상세 '판매 농가 이야기' · 농가 목록 카드에 보인다
+ALTER TABLE sellers ADD COLUMN IF NOT EXISTS photos TEXT[] NOT NULL DEFAULT '{}';

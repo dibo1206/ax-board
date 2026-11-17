@@ -357,7 +357,8 @@ app.get('/api/farms', async (req, res) => {
            count(*) FILTER (WHERE p.stock > 0)::int AS in_stock,
            min(p.price)::int AS min_price,
            max(p.created_at) AS newest_at,
-           (array_agg(p.image_url ORDER BY (p.stock = 0), p.created_at DESC) FILTER (WHERE p.image_url IS NOT NULL))[1] AS image_url,
+           -- 농가가 올린 농가 사진이 있으면 그 첫 장, 없으면 판매 중 상품 사진 (2026-11-17)
+           COALESCE(s.photos[1], (array_agg(p.image_url ORDER BY (p.stock = 0), p.created_at DESC) FILTER (WHERE p.image_url IS NOT NULL))[1]) AS image_url,
            (array_agg(DISTINCT i.name))[1:6] AS items
     FROM sellers s
     JOIN products p ON p.seller_code = s.seller_code AND p.status = 'active'
@@ -370,7 +371,7 @@ app.get('/api/farms', async (req, res) => {
 app.get('/api/farms/:code', async (req, res) => {
   const code = req.params.code
   const farm = FARM_CODE.test(code) ? await cached(`farm:${code}`, 15_000, async () => {
-    const { rows } = await pool.query("SELECT seller_code, name, region, intro, story, is_company FROM sellers WHERE seller_code = $1 AND status = 'active'", [code])
+    const { rows } = await pool.query("SELECT seller_code, name, region, intro, story, photos, is_company FROM sellers WHERE seller_code = $1 AND status = 'active'", [code])
     if (!rows.length) return null
     const products = await pool.query(`${PRODUCT_SELECT} AND p.seller_code = $1 ORDER BY (p.stock = 0), p.created_at DESC, p.name`, [code])
     return { ...rows[0], products: products.rows.map(publicProduct) }
@@ -392,7 +393,7 @@ async function loadProductDetail(code) {
   const [item, seller, questions] = await Promise.all([
     pool.query('SELECT * FROM items WHERE item_code = $1', [product.item_code]),
     // 농가 표에는 대표자·연락처·사업자번호도 있다 → 공개 칸만
-    pool.query('SELECT seller_code, name, region, intro, story, is_company FROM sellers WHERE seller_code = $1', [product.seller_code]),
+    pool.query('SELECT seller_code, name, region, intro, story, photos, is_company FROM sellers WHERE seller_code = $1', [product.seller_code]),
     pool.query(
       'SELECT id, author, question, answer, created_at, answered_at, is_private FROM questions WHERE product_code = $1 AND NOT hidden ORDER BY created_at DESC',
       [product.product_code],
