@@ -577,3 +577,9 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS detail_blocks JSONB NOT NULL DEFAU
 
 -- 농가 소개 사진 (2026-11-17): 판매자가 [농가 소개·계정]에서 4장까지 올린다. 농가 페이지 · 상품 상세 '판매 농가 이야기' · 농가 목록 카드에 보인다
 ALTER TABLE sellers ADD COLUMN IF NOT EXISTS photos TEXT[] NOT NULL DEFAULT '{}';
+
+-- 판매 수수료 (2026-11-17): 기본 수수료율은 [쇼핑몰 설정 → 정산·수수료](shop_settings 'settlement'), 농가마다 따로 정하면 sellers.commission_rate.
+-- 주문할 때의 수수료율을 농가 배송(order_shipments)에 적어 둔다 → 나중에 수수료율을 바꿔도 이미 들어온 주문의 정산은 그대로.
+-- 이 기능 전에 들어온 주문은 비어 있음(NULL) = 수수료 0%
+ALTER TABLE sellers ADD COLUMN IF NOT EXISTS commission_rate NUMERIC(4, 1) CHECK (commission_rate IS NULL OR (commission_rate >= 0 AND commission_rate <= 50));
+ALTER TABLE order_shipments ADD COLUMN IF NOT EXISTS commission_rate NUMERIC(4, 1);

@@ -41,6 +41,21 @@ export function SellerApproval({ onCount }) {
 
   // 판매자 계정 지원: 비밀번호를 잊었거나 유출됐을 때, 휴대폰을 잃어버렸을 때. 내 비밀번호를 한 번 더 확인한다
   const openSupport = (seller, mode) => { setSupport({ seller, mode }); setForm({ my: '', pw: '', again: '' }); setError(''); setMessage('') }
+  // 농가별 수수료율: 숫자를 적으면 이 농가만 그 값, 비우면 기본값. 바꾼 뒤 들어오는 주문부터
+  async function setCommission(seller) {
+    const now = seller.commission_rate == null ? '' : String(seller.commission_rate)
+    const input = window.prompt(`${seller.name}의 수수료율(%)을 적어 주세요.
+비우면 기본값(${seller.is_company ? '회사 직영 0' : seller.default_commission}%)을 따라요. 바꾼 뒤 들어오는 주문부터 적용돼요.`, now)
+    if (input === null) return
+    setError('')
+    try {
+      await adminApi(`/sellers/${seller.seller_code}/commission`, { method: 'PUT', body: { rate: input.trim() } })
+      load()
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
   async function runSupport() {
     const { seller, mode } = support
     setError('')
@@ -84,13 +99,15 @@ export function SellerApproval({ onCount }) {
       )}
       {shown.length === 0 && <p className="muted">맞는 농가가 없어요.</p>}
       <table className="table">
-        <thead><tr><th>농가</th><th>대표자·연락처</th><th>사업자등록번호</th><th>상태</th><th></th></tr></thead>
+        <thead><tr><th>농가</th><th>대표자·연락처</th><th>사업자등록번호</th><th>수수료</th><th>상태</th><th></th></tr></thead>
         <tbody>
           {paging.rows.map((s) => (
             <tr key={s.seller_code}>
               <td><strong>{s.name}</strong><br /><span className="muted">{s.region} · 아이디 {s.login_ids ?? '-'} · 상품 {s.products}개</span></td>
               <td>{s.owner_name ?? '-'}<br /><span className="muted">{s.phone ?? ''} {s.email ?? ''}</span></td>
               <td>{s.business_no ?? '-'}</td>
+              <td><button type="button" className="link" onClick={() => setCommission(s)} title="눌러서 이 농가 수수료율 정하기">{s.effective_commission}%</button>
+                <br /><span className="muted">{s.commission_rate == null ? (s.is_company ? '회사 직영' : '기본값') : '이 농가만'}</span></td>
               <td>{s.status === 'pending' ? <span className="badge pending">{LABEL[s.status]}</span> : LABEL[s.status]}
                 {s.reject_note && <><br /><span className="muted">{s.reject_note}</span></>}</td>
               <td className="row-actions">

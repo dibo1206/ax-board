@@ -11,6 +11,7 @@ import { pool } from './db.js'
 import { createLimiter } from './limit.js'
 import { adminCc, adminEmail, publicUrl, queueMail } from './mailer.js'
 import { openSeller } from './pii.js'
+import { commissionRate, sellerCommission, SETTLEMENT } from './policy.js'
 import { findSensitive, SENSITIVE_MESSAGE } from './privacy.js'
 import { confirmMe, passwordProblem } from './staff.js'
 
@@ -91,11 +92,26 @@ adminSellerRouter.use(requireAdmin)
 
 adminSellerRouter.get('/', async (req, res) => {
   const { rows } = await pool.query(`
-    SELECT s.seller_code, s.name, s.region, s.is_company, s.status, s.owner_name, s.phone, s.business_no, s.email, s.reject_note, s.applied_at, s.approved_at,
+    SELECT s.seller_code, s.name, s.region, s.is_company, s.status, s.owner_name, s.phone, s.business_no, s.email, s.reject_note, s.applied_at, s.approved_at, s.commission_rate,
            (SELECT string_agg(a.login_id, ', ') FROM admins a WHERE a.seller_code = s.seller_code) AS login_ids,
            (SELECT count(*) FROM products p WHERE p.seller_code = s.seller_code)::int AS products
     FROM sellers s ORDER BY (s.status = 'pending') DESC, s.applied_at DESC NULLS LAST, s.name`)
-  res.json(rows.map(openSeller))
+  res.json(rows.map(openSeller).map((s) => ({ ...s, commission_rate: s.commission_rate == null ? null : Number(s.commission_rate), effective_commission: sellerCommission(s), default_commission: SETTLEMENT.commissionRate })))
+})
+
+// 농가별 수수료율 {rate}: 숫자면 이 농가만 그 값, 비우면(null·'') 기본값을 따른다. 바꾼 뒤 들어오는 주문부터 적용
+adminSellerRouter.put('/:code/commission', async (req, res) => {
+  const raw = req.body?.rate
+  const rate = commissionRate(raw)
+  const clear = raw === null || raw === ''
+  if (!clear && rate === null) return res.status(400).json({ error: '수수료율은 0~50 사이 숫자로 적어 주세요. (소수점 한 자리까지)' })
+  const { rows } = await pool.query(
+    'UPDATE sellers SET commission_rate = $2 WHERE seller_code = $1 RETURNING seller_code, name, commission_rate, is_company',
+    [req.params.code, clear ? null : rate],
+  )
+  if (!rows.length) return res.status(404).json({ error: '판매자를 찾지 못했어요.' })
+  console.log(`[seller] ${req.admin.loginId} 판매자 ${rows[0].seller_code} 수수료율 → ${clear ? '기본값' : `${rate}%`}`)
+  res.json({ seller_code: rows[0].seller_code, commission_rate: rows[0].commission_rate == null ? null : Number(rows[0].commission_rate), effective_commission: sellerCommission(rows[0]) })
 })
 
 async function decide(req, res, status, note) {
