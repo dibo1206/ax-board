@@ -462,6 +462,10 @@ CREATE TABLE IF NOT EXISTS order_returns (
 CREATE UNIQUE INDEX IF NOT EXISTS order_returns_open_key ON order_returns (order_id, seller_code) WHERE status IN ('requested', 'approved');
 CREATE INDEX IF NOT EXISTS order_returns_status_idx ON order_returns (status, created_at DESC);
 CREATE INDEX IF NOT EXISTS order_returns_seller_idx ON order_returns (seller_code, created_at DESC);
+-- 후기 사진(공개, 3장까지)과 반품 사진(비공개, 5장까지) (2026-11-17, server/photos.js)
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS photos TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE order_returns ADD COLUMN IF NOT EXISTS photos TEXT[] NOT NULL DEFAULT '{}';
+
 
 -- 돌려준 돈 기록: 토스 결제 취소 한 번이 한 줄 (누가 언제 얼마를). 매출·정산은 결제 금액에서 이 금액을 뺀다
 -- kind: cancel(아직 안 보낸 농가 몫 부분 취소) · return(반품 환불) · full(주문 전체 취소)
@@ -577,7 +581,3 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS detail_blocks JSONB NOT NULL DEFAU
 
 -- 농가 소개 사진 (2026-11-17): 판매자가 [농가 소개·계정]에서 4장까지 올린다. 농가 페이지 · 상품 상세 '판매 농가 이야기' · 농가 목록 카드에 보인다
 ALTER TABLE sellers ADD COLUMN IF NOT EXISTS photos TEXT[] NOT NULL DEFAULT '{}';
-
--- 후기 사진(공개, 3장까지)과 반품 사진(비공개, 5장까지) (2026-11-17, server/photos.js)
-ALTER TABLE reviews ADD COLUMN IF NOT EXISTS photos TEXT[] NOT NULL DEFAULT '{}';
-ALTER TABLE order_returns ADD COLUMN IF NOT EXISTS photos TEXT[] NOT NULL DEFAULT '{}';

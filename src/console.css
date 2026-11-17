@@ -200,6 +200,10 @@ button.stat-tile:hover { border-color: var(--accent); transform: translateY(-1px
 .twofa-key { display: inline-block; margin: 6px 0; padding: 6px 10px; border-radius: 6px; background: #f1efe9; font-family: ui-monospace, Consolas, monospace; font-size: 16px; letter-spacing: 1px; word-break: break-all; }
 .button.danger { background: #b3261e; border-color: #b3261e; color: #fff; }
 input.invalid { border-color: #b3261e; }
+/* 반품·후기 사진 (관리자·판매자, 2026-11-17) */
+.return-photos { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+.return-photos img { display: block; width: 110px; height: 110px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+
 
 /* ---------- 2026-11-08 관리자 화면 정리 1차: 큰 메뉴 5개 + 설정, 위쪽 탭, 할 일 카드, 쪽 나누기, [⋯] ---------- */
 .side-nav { gap: 14px; }
@@ -358,7 +362,3 @@ input.invalid { border-color: #b3261e; }
 .farm-photo-list img { width: 120px; height: 120px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); }
 .farm-photo-add { align-self: flex-start; cursor: pointer; }
 .farm-photo-add.disabled { opacity: 0.6; pointer-events: none; }
-
-/* 반품·후기 사진 (관리자·판매자, 2026-11-17) */
-.return-photos { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
-.return-photos img { display: block; width: 110px; height: 110px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
