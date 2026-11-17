@@ -142,8 +142,14 @@ function StaffBar() {
     return () => window.removeEventListener('popstate', onPop)
   }, [])
   if (!staff) return null
+  // 로그아웃하면 이 화면을 손님 화면으로 다시 읽는다 (막대도 사라진다)
+  const logout = async () => {
+    await post('/admin/logout', {}).catch(() => {})
+    window.location.reload()
+  }
+  const out = <button type="button" className="staff-logout" onClick={logout}>로그아웃</button>
   if (staff.role === 'seller') {
-    return <div className="staff-bar" role="region" aria-label="판매자 메뉴"><span>판매자({staff.loginId})로 보는 중</span><a href="/seller">판매자 센터로</a></div>
+    return <div className="staff-bar" role="region" aria-label="판매자 메뉴"><span>판매자({staff.loginId})로 보는 중</span><a href="/seller">판매자 센터로</a>{out}</div>
   }
   const code = path.startsWith('/p/') ? decodeURIComponent(path.slice(3)) : null
   return (
@@ -153,6 +159,7 @@ function StaffBar() {
       <a href="/admin?tab=site">홈페이지 관리</a>
       <a href="/admin?tab=posts">게시판</a>
       {code && <a href={`/admin?tab=products&edit=${encodeURIComponent(code)}`}>이 상품 고치기</a>}
+      {out}
     </div>
   )
 }

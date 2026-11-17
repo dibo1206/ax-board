@@ -338,3 +338,14 @@ input.invalid { border-color: #b3261e; }
 .console .admin-head .account { flex-wrap: wrap; row-gap: 6px; }
 .console .admin-head .account .text-size, .console .admin-head .account .link { flex: none; white-space: nowrap; }
 .console .admin-head .account .muted { min-width: 0; overflow-wrap: anywhere; }
+
+/* 로그아웃이 잘 안 보이던 것 (2026-11-17)
+   관리자: 왼쪽 메뉴가 화면보다 길면 맨 아래 로그아웃까지 페이지를 끝까지 내려야 했다 → 메뉴 부분만 스크롤하고 계정 칸은 늘 보이게
+   판매자: 위쪽 오른쪽 로그아웃이 작은 글자 링크라 눈에 안 띄었다 → 테두리 있는 버튼으로 */
+@media (min-width: 901px) {
+  .side-nav { max-height: calc(100vh - 92px); }
+  .side-nav .nav-main { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .side-nav .nav-foot { flex: none; }
+}
+.side-nav .account .logout-btn, .console .admin-head .account .logout-btn { flex: none; width: auto; padding: 5px 14px; font: inherit; font-size: 0.85rem; font-weight: 600; white-space: nowrap; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; }
+.side-nav .account .logout-btn:hover, .console .admin-head .account .logout-btn:hover { border-color: var(--text); }
