@@ -369,3 +369,6 @@ input.invalid { border-color: #b3261e; }
 .settle-table td:first-child { white-space: normal; }
 .settle-table tfoot th { text-align: left; border-top: 2px solid var(--border); }
 .table-wrap { overflow-x: auto; }
+
+/* 사진 고르기 버튼 안의 파일 칸: 폼 공통 input 규칙(display:block)이 hidden 속성을 덮어 기본 "파일 선택" 칸이 보이던 것 (2026-11-18) */
+.form .farm-photo-add input[type="file"], .farm-photo-add input[type="file"] { display: none; }
