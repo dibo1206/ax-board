@@ -11,6 +11,7 @@ const splitCommas = (text) => text.split(',').map((s) => s.trim()).filter(Boolea
 function toForm(item) {
   return {
     show_brix: item.show_brix,
+    tax_type: item.tax_type ?? (item.category === '가공품' && !['곶감', '고춧가루'].includes(item.name) ? 'taxable' : 'free'),
     brix_standards: (item.brix_standards ?? []).map((s) => `${s.varieties.join(', ')} : ${s.high} : ${s.top}`).join('\n'),
     brix_standard_source: item.brix_standard_source ?? '',
     brix_min: item.brix_min ?? '',
@@ -235,6 +236,14 @@ function ItemCard({ item, photoAi, onPhotoUsed, onDone }) {
         <label>알레르기 표시 (쉼표로, 없으면 비우기)<input value={form.allergens} onChange={set('allergens')} /></label>
         <label className="check"><input type="checkbox" checked={form.show_brix} onChange={set('show_brix')} /> 당도 표시</label>
       </div>
+      <label>부가세
+        <select value={form.tax_type} onChange={set('tax_type')}>
+          <option value="free">면세 — 가공하지 않은 농산물 (씻기·자르기·말리기·빻기 같은 단순 손질 포함)</option>
+          <option value="taxable">과세 10% — 청·잼·즙처럼 가공한 제품</option>
+          <option value="check">확인 필요 — 세무사 확인 전까지 과세로 처리</option>
+        </select>
+      </label>
+      {form.tax_type === 'check' && <p className="warn">확인 필요 품목은 결제할 때 과세로 잡혀요. 세무사에게 확인한 뒤 면세·과세로 바꿔 주세요. 바꾼 뒤 들어오는 주문부터 적용돼요.</p>}
       {form.show_brix && (
         <div className="row">
           <label>보통 당도 최소 (Brix)<input value={form.brix_min} onChange={set('brix_min')} inputMode="decimal" placeholder="출처 확인 후" /></label>

@@ -10,7 +10,7 @@ import { COURIERS, trackingUrl } from './couriers.js'
 import { pool } from './db.js'
 import { lookupHash, sealText } from './crypto.js'
 import { createLimiter } from './limit.js'
-import { cancelPartial, cancelPayment, checkApproved, clientKey, confirmPayment, isTestPayment, lookupPayment, orderingOpen, paymentMode } from './payments.js'
+import { cancelPartial, cancelPayment, checkApproved, clientKey, confirmPayment, isTestPayment, lookupPayment, orderingOpen, paymentMode, taxFreeEnabled } from './payments.js'
 import { POLICIES, RETURNS, sellerCommission, SETTLEMENT, SHIPPING, SHOP, shippingFee, splitShippingFee } from './policy.js'
 import { adminCc, adminEmail, publicUrl, queueMail, retryMails } from './mailer.js'
 import { sweepRestock } from './restock.js'
@@ -425,23 +425,32 @@ publicOrderRouter.post('/orders', async (req, res) => {
       // 옵션 상품의 가격·재고 합을 옵션에 맞춘다 (목록의 품절 표시가 바로 맞게)
       await syncOptionTotals(client, [...new Set(lines.filter((l) => l.option_id).map((l) => l.product_code))])
       const itemsAmount = lines.reduce((sum, l) => sum + l.subtotal, 0)
+      // 면세 여부: 품목 설정(free·taxable·check), 비어 있으면 가공품은 과세·나머지는 면세. '확인 필요'는 과세로 둔다. 배송비는 과세
+      const { rows: taxRows } = await client.query(
+        `SELECT p.product_code, (COALESCE(i.tax_type, CASE WHEN i.name IN ('곶감', '고춧가루') OR i.category <> '가공품' THEN 'free' ELSE 'taxable' END) = 'free') AS tax_free
+         FROM products p JOIN items i ON i.item_code = p.item_code WHERE p.product_code = ANY($1)`,
+        [[...new Set(lines.map((l) => l.product_code))]],
+      )
+      const freeCodes = new Set(taxRows.filter((r) => r.tax_free).map((r) => r.product_code))
+      for (const l of lines) l.tax_free = freeCodes.has(l.product_code)
+      const taxFreeAmount = lines.reduce((sum, l) => sum + (l.tax_free ? l.subtotal : 0), 0)
       const farms = farmShipping(lines)
       const fee = farms.reduce((sum, f) => sum + f.fee, 0)
       const orderNo = newOrderNo()
       const { rows } = await client.query(
         `INSERT INTO orders (order_no, buyer_name, buyer_phone, receiver_name, receiver_phone, zipcode, address1, address2, memo,
-                             items_amount, shipping_fee, total_amount, is_test, agreed_at, customer_id, buyer_email, buyer_phone_hash)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now(), $14, $15, $16) RETURNING id`,
+                             items_amount, shipping_fee, total_amount, is_test, agreed_at, customer_id, buyer_email, buyer_phone_hash, tax_free_amount)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now(), $14, $15, $16, $17) RETURNING id`,
         [orderNo, sealText(input.buyerName), sealText(input.buyerPhone), sealText(input.receiverName), sealText(input.receiverPhone), sealText(input.zipcode), sealText(input.address1),
           sealText(input.address2 || null), sealText(input.memo || null), itemsAmount, fee, itemsAmount + fee, isTestPayment(),
-          customer?.id ?? null, sealText(customer?.email ?? (input.email || null)), lookupHash(input.buyerPhone)],
+          customer?.id ?? null, sealText(customer?.email ?? (input.email || null)), lookupHash(input.buyerPhone), taxFreeAmount],
       )
       // 예약 상품은 주문한 순간의 출고 시작일을 남긴다 (오늘보다 뒤인 날짜만). 농가 배송은 그 농가 상품 중 가장 늦은 날짜에 한꺼번에 보낸다
       for (const l of lines) {
         await client.query(
-          `INSERT INTO order_items (order_id, product_code, seller_code, name, unit, price, quantity, subtotal, option_id, option_name, ship_from)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-          [rows[0].id, l.product_code, l.seller_code, l.name, l.unit, l.price, l.quantity, l.subtotal, l.option_id, l.option_name, isPreorder(l.ship_from) ? l.ship_from : null],
+          `INSERT INTO order_items (order_id, product_code, seller_code, name, unit, price, quantity, subtotal, option_id, option_name, ship_from, tax_free)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+          [rows[0].id, l.product_code, l.seller_code, l.name, l.unit, l.price, l.quantity, l.subtotal, l.option_id, l.option_name, isPreorder(l.ship_from) ? l.ship_from : null, l.tax_free],
         )
       }
       for (const f of farms) {
@@ -459,6 +468,7 @@ publicOrderRouter.post('/orders', async (req, res) => {
         shippingFee: fee,
         farms: farms.length,
         amount: itemsAmount + fee,
+        taxFreeAmount,
       }
     })
     console.log(`[order] 주문 생성 ${order.orderNo} · ${order.amount}원${customer ? ' · 회원' : ''}`)
@@ -467,7 +477,9 @@ publicOrderRouter.post('/orders', async (req, res) => {
       await pool.query('UPDATE customers SET zipcode = $2, address1 = $3, address2 = $4 WHERE id = $1',
         [customer.id, sealText(input.zipcode), sealText(input.address1), sealText(input.address2 || null)])
     }
-    res.status(201).json({ ...order, payToken: payTokenFor(order.orderNo), payment: { mode: paymentMode(), clientKey: clientKey(), test: isTestPayment() } })
+    // 결제창에 보낼 면세 금액: 토스와 복합과세 계약을 하고 켰을 때만 (payments.js taxFreeEnabled)
+    const { taxFreeAmount: _taxFree, ...visible } = order
+    res.status(201).json({ ...visible, payToken: payTokenFor(order.orderNo), payment: { mode: paymentMode(), clientKey: clientKey(), test: isTestPayment(), ...(taxFreeEnabled() && order.taxFreeAmount > 0 ? { taxFreeAmount: order.taxFreeAmount } : {}) } })
   } catch (error) {
     if (error.status === 409) return res.status(409).json({ error: error.message })
     throw error
@@ -627,9 +639,10 @@ function cancelOrderTx(orderNo, reason, allowed, by) {
     const rest = order.total_amount - sums.done
     if (rest <= 0) return { status: 409, error: '이미 결제 금액을 모두 돌려드린 주문이에요.' }
     const key = sums.done ? `cancel-${order.order_no}-rest` : `cancel-${order.order_no}`
+    const restTaxFree = Math.min(rest, await taxFreeLeft(client, order))
     try {
       if (sums.done) {
-        await cancelPartial({ paymentKey: order.payment_key, orderId: order.order_no, amount: rest, reason, idempotencyKey: key, canceledBefore: sums.done })
+        await cancelPartial({ paymentKey: order.payment_key, orderId: order.order_no, amount: rest, taxFreeAmount: restTaxFree, reason, idempotencyKey: key, canceledBefore: sums.done })
       } else {
         await cancelPayment({ paymentKey: order.payment_key, orderId: order.order_no, reason })
       }
@@ -644,13 +657,40 @@ function cancelOrderTx(orderNo, reason, allowed, by) {
     )
     await client.query("UPDATE order_shipments SET status = 'cancelled', updated_at = now() WHERE order_id = $1", [order.id])
     await client.query(
-      `INSERT INTO order_refunds (order_id, kind, amount, status, idempotency_key, reason, processed_by, done_at)
-       VALUES ($1, 'full', $2, 'done', $3, $4, $5, now())`,
-      [order.id, rest, key, reason.slice(0, 200), by ?? '알 수 없음'],
+      `INSERT INTO order_refunds (order_id, kind, amount, status, idempotency_key, reason, processed_by, done_at, tax_free_amount)
+       VALUES ($1, 'full', $2, 'done', $3, $4, $5, now(), $6)`,
+      [order.id, rest, key, reason.slice(0, 200), by ?? '알 수 없음', restTaxFree],
     )
     console.log(`[order] 주문 취소 ${order.order_no}`)
     return { status: 200 }
   })
+}
+
+// ---------- 면세 금액 나누기 (2026-11-17) ----------
+// 아직 돌려주지 않은 면세 금액 (완료 + 결과 기다리는 환불을 뺀 값)
+async function taxFreeLeft(client, order) {
+  const { rows } = await client.query(
+    "SELECT COALESCE(sum(tax_free_amount) FILTER (WHERE status IN ('done', 'requested')), 0)::int AS used FROM order_refunds WHERE order_id = $1",
+    [order.id],
+  )
+  return Math.max(0, (order.tax_free_amount ?? 0) - rows[0].used)
+}
+// 이번에 돌려줄 돈 중 면세 금액: 돌려주는 상품 중 면세 상품 금액까지, 돌려줄 금액·남은 면세 금액을 넘지 않게
+async function taxFreeOfTarget(client, order, target) {
+  let free = 0
+  if (target.kind === 'cancel') {
+    const { rows } = await client.query('SELECT COALESCE(sum(subtotal) FILTER (WHERE tax_free), 0)::int AS free FROM order_items WHERE order_id = $1 AND seller_code = $2', [order.id, target.sellerCode])
+    free = rows[0].free
+  } else if (target.kind === 'return') {
+    const { rows } = await client.query(
+      `SELECT COALESCE(sum((x->>'price')::int * (x->>'quantity')::int) FILTER (WHERE oi.tax_free), 0)::int AS free
+       FROM order_returns r CROSS JOIN LATERAL jsonb_array_elements(r.items) x JOIN order_items oi ON oi.id = (x->>'item_id')::int
+       WHERE r.id = $1`,
+      [target.returnId],
+    )
+    free = rows[0].free
+  }
+  return Math.max(0, Math.min(free, target.amount, await taxFreeLeft(client, order)))
 }
 
 // ---------- 돌려주기: 농가별 부분 취소·반품 환불 공통 ----------
@@ -699,10 +739,11 @@ export async function runRefund(orderNo, by, prepare, onDone) {
       return { status: 409, error: `돌려줄 수 있는 금액을 넘어요. 결제 ${won(order.total_amount)} 중 ${won(sums.done)}을 이미 돌려드렸어요.` }
     }
     const key = `${target.kind}-${order.order_no}-${target.kind === 'return' ? `r${target.returnId}` : target.sellerCode}-${tried.length + 1}`
+    const taxFree = await taxFreeOfTarget(client, order, target)
     const { rows: [refund] } = await client.query(
-      `INSERT INTO order_refunds (order_id, seller_code, return_id, kind, amount, idempotency_key, reason, processed_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [order.id, target.sellerCode, target.returnId ?? null, target.kind, target.amount, key, target.reason.slice(0, 200), by],
+      `INSERT INTO order_refunds (order_id, seller_code, return_id, kind, amount, idempotency_key, reason, processed_by, tax_free_amount)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [order.id, target.sellerCode, target.returnId ?? null, target.kind, target.amount, key, target.reason.slice(0, 200), by, taxFree],
     )
     return { order, refund, canceledBefore: sums.done }
   })
@@ -710,7 +751,7 @@ export async function runRefund(orderNo, by, prepare, onDone) {
   const { order, refund } = start
   let failure = null
   try {
-    await cancelPartial({ paymentKey: order.payment_key, orderId: order.order_no, amount: refund.amount, reason: refund.reason, idempotencyKey: refund.idempotency_key, canceledBefore: start.canceledBefore })
+    await cancelPartial({ paymentKey: order.payment_key, orderId: order.order_no, amount: refund.amount, taxFreeAmount: refund.tax_free_amount, reason: refund.reason, idempotencyKey: refund.idempotency_key, canceledBefore: start.canceledBefore })
   } catch (error) {
     failure = error
   }

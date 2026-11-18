@@ -57,6 +57,8 @@ function PaymentStep({ order, buyer }) {
         failUrl: `${window.location.origin}/order/fail`,
         customerName: buyer.name,
         customerMobilePhone: buyer.phone,
+        // 면세 상품 금액 (토스와 복합과세 계약을 하고 서버에서 켰을 때만 온다)
+        ...(order.payment.taxFreeAmount ? { taxFreeAmount: order.payment.taxFreeAmount } : {}),
       })
     } catch (e) {
       setError(e.message || '결제를 진행하지 못했어요.')

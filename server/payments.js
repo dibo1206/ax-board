@@ -128,12 +128,17 @@ export async function cancelPayment({ paymentKey, orderId, reason }) {
 // idempotencyKey 는 부르는 쪽이 환불 기록마다 정해 둔 값 → 같은 기록으로 몇 번을 다시 보내도 토스는 한 번만 취소하고 첫 응답을 돌려준다.
 // 통신이 끊기면 결제 조회로 확인한다: 토스에서 취소된 누적 금액이 canceledBefore(우리 기록상 이미 돌려준 돈) + amount 와 같으면 성공.
 // 그래도 모르면 uncertain 오류를 그대로 던진다 → 부르는 쪽은 실패로 처리하지 말고 '결과 확인 중'으로 두고 같은 키로 다시 확인한다
-export async function cancelPartial({ paymentKey, orderId, amount, reason, idempotencyKey, canceledBefore }) {
+// 면세 금액을 토스에 보낼지: 토스와 '면세 또는 복합과세 상점'으로 계약한 뒤에만 켠다 (.env TOSS_TAX_FREE=1).
+// 토스 문서: 면세 금액은 그 계약을 한 상점에만 적용된다. 켜기 전에도 우리 DB 에는 면세 금액을 계산해 적어 둔다 (매출 화면·신고 자료)
+export const taxFreeEnabled = () => process.env.TOSS_TAX_FREE === '1'
+
+export async function cancelPartial({ paymentKey, orderId, amount, taxFreeAmount = 0, reason, idempotencyKey, canceledBefore }) {
   const mode = paymentMode()
   if (mode === 'mock' || paymentKey?.startsWith('mock_')) return { canceledAt: new Date().toISOString() }
   if (mode === 'off') throw Object.assign(new Error('결제 설정이 아직 안 됐어요.'), { code: 'NOT_CONFIGURED' })
   try {
-    const data = await request('POST', `/${encodeURIComponent(paymentKey)}/cancel`, { cancelReason: reason.slice(0, 200), cancelAmount: amount }, idempotencyKey)
+    const body = { cancelReason: reason.slice(0, 200), cancelAmount: amount, ...(taxFreeEnabled() && taxFreeAmount > 0 ? { taxFreeAmount } : {}) }
+    const data = await request('POST', `/${encodeURIComponent(paymentKey)}/cancel`, body, idempotencyKey)
     if (Number.isInteger(data.balanceAmount) && data.totalAmount - data.balanceAmount !== canceledBefore + amount) {
       console.warn(`[pay] ${orderId} 토스 누적 취소액이 우리 기록과 달라요 — 직접 확인 필요 (토스 ${data.totalAmount - data.balanceAmount} / 우리 ${canceledBefore + amount})`)
     }

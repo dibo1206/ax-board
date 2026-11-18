@@ -597,3 +597,15 @@ CREATE TABLE IF NOT EXISTS settlement_payouts (
   paid_by TEXT NOT NULL,
   PRIMARY KEY (seller_code, month)
 );
+
+-- 부가세 면세·과세 (2026-11-17): 가공하지 않은 농산물(말리기·빻기 같은 단순 손질 포함)은 면세, 청·잼·즙 같은 가공품은 과세.
+-- items.tax_type: free(면세) · taxable(과세) · check(확인 필요 → 과세로 처리). 비어 있으면 종류로 정한다 (가공품 과세, 나머지 면세)
+ALTER TABLE items ADD COLUMN IF NOT EXISTS tax_type TEXT;
+ALTER TABLE items DROP CONSTRAINT IF EXISTS items_tax_type_check;
+ALTER TABLE items ADD CONSTRAINT items_tax_type_check CHECK (tax_type IS NULL OR tax_type IN ('free', 'taxable', 'check'));
+-- 처음 값: 곶감(말림)·고춧가루(빻음)는 '가공품' 종류지만 원래 성질이 그대로인 단순 손질이라 면세, 절임배추는 확인 필요 [가설: 세무사 확인]
+UPDATE items SET tax_type = CASE WHEN name = '절임배추' THEN 'check' WHEN name IN ('곶감', '고춧가루') THEN 'free' WHEN category = '가공품' THEN 'taxable' ELSE 'free' END WHERE tax_type IS NULL;
+-- 주문할 때의 면세 여부를 줄마다 적어 두고(품목 설정을 나중에 바꿔도 지난 주문은 그대로), 주문의 면세 금액과 돌려준 면세 금액을 적는다
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS tax_free BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_free_amount INT NOT NULL DEFAULT 0;
+ALTER TABLE order_refunds ADD COLUMN IF NOT EXISTS tax_free_amount INT NOT NULL DEFAULT 0;
