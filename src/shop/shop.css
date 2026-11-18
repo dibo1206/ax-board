@@ -1488,3 +1488,6 @@
 .review-photos { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
 .review-photos img { display: block; width: 96px; height: 96px; object-fit: cover; border-radius: 10px; }
 .review-write-here { margin: 0 0 14px; }
+
+/* 사진 고르기 버튼 안의 파일 칸은 숨긴다 (폼 공통 input 규칙이 hidden 속성을 덮지 않게, 2026-11-18) */
+.shop .form .photo-pick-add input[type="file"], .shop .photo-pick-add input[type="file"] { display: none; }
