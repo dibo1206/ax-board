@@ -64,3 +64,5 @@ jobs:
         run: npm run test-sqli
       - name: XSS 공격 시험 (저장형 스크립트·HTML 이스케이프·CSP)
         run: npm run test-xss
+      - name: 그 밖의 공격 시험 (권한상승·주문조작·경로탈출·리다이렉트·CSRF·IDOR)
+        run: npm run test-abuse
