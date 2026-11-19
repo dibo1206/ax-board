@@ -54,3 +54,15 @@ jobs:
         run: npm run test-refund
       - name: 주문 제출 시험
         run: npm run test-submit
+      - name: 라이브러리 취약점 검사 (높음 이상이면 실패)
+        run: npm audit --omit=dev --audit-level=high
+      - name: 권한 검사 시험 (로그인 없이 관리자·판매자·회원 주소가 열리는지)
+        run: npm run test-authz
+      - name: 관리자 로그인 보안 시험 (쿠키·세션 타임아웃·잠금 알림)
+        run: npm run test-session
+      - name: SQL 인젝션 공격 시험 (시간지연·참거짓·오류·로그인·주문조회)
+        run: npm run test-sqli
+      - name: XSS 공격 시험 (저장형 스크립트·HTML 이스케이프·CSP)
+        run: npm run test-xss
+      - name: 그 밖의 공격 시험 (권한상승·주문조작·경로탈출·리다이렉트·CSRF·IDOR)
+        run: npm run test-abuse

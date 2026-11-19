@@ -10,6 +10,10 @@ import { adminCc, adminEmail, queueMail } from './mailer.js'
 const scrypt = promisify(scryptCb)
 const COOKIE = 'admin_session'
 const SESSION_HOURS = 8
+// 아무것도 안 하고 이만큼 지나면 로그인이 끊긴다 (세션 타임아웃, OWASP A07 · 2026-11-19 보안 점검).
+// 8시간 만료만 있으면 자리를 비운 사이 열린 화면을 남이 그대로 쓸 수 있다. 긴 상품 글을 쓰는 농가를 생각해 넉넉히 2시간
+const IDLE_MINUTES = Number(process.env.STAFF_IDLE_MINUTES) || 120
+const TOUCH_EVERY_MS = 5 * 60_000 // 쓰는 중이면 5분에 한 번씩 '마지막으로 쓴 시각'을 쿠키에 새로 적는다
 const MAX_FAILS = 5
 const LOCK_MINUTES = 10
 
@@ -61,12 +65,40 @@ export function readCookie(req, name) {
   return found ? decodeURIComponent(found.slice(name.length + 1)) : null
 }
 
-export function setCookie(res, name, value, maxAgeSeconds) {
+// sameSite: 손님 쿠키는 Lax (카카오·네이버 로그인과 토스 결제에서 우리 사이트로 돌아올 때도 로그인이 이어져야 해서).
+// 관리자·판매자 쿠키는 Strict: 다른 사이트에서 넘어온 요청에는 아예 붙지 않는다 (CSRF 이중 잠금, 2026-11-19 보안 점검)
+export function setCookie(res, name, value, maxAgeSeconds, sameSite = 'Lax') {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''
-  res.append('Set-Cookie', `${name}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${secure}`)
+  res.append('Set-Cookie', `${name}=${value}; HttpOnly; SameSite=${sameSite}; Path=/; Max-Age=${maxAgeSeconds}${secure}`)
 }
 
-const setSessionCookie = (res, value, maxAgeSeconds) => setCookie(res, COOKIE, value, maxAgeSeconds)
+const setSessionCookie = (res, value, maxAgeSeconds) => setCookie(res, COOKIE, value, maxAgeSeconds, 'Strict')
+
+// 세션 타임아웃: 예전 쿠키(seen 없음)는 로그인한 때부터 센다
+const lastSeen = (token) => token.seen ?? token.exp - SESSION_HOURS * 3_600_000
+const idleTooLong = (token) => Date.now() - lastSeen(token) > IDLE_MINUTES * 60_000
+
+// 관리자·판매자 API 를 쓸 때마다 '마지막으로 쓴 시각'을 갱신한다 (만료 시각 exp 는 그대로 → 8시간은 넘지 못한다)
+function touchStaffSession(req, res) {
+  const token = currentAdmin(req)
+  if (!token || Date.now() - lastSeen(token) < TOUCH_EVERY_MS) return
+  const left = Math.floor((token.exp - Date.now()) / 1000)
+  if (left > 0) setSessionCookie(res, signToken({ ...token, seen: Date.now() }), left)
+}
+
+// 로그인이 잠기면 계정 주인에게 알린다 (보안 로그·알림, OWASP A09 · 2026-11-19 보안 점검).
+// 메일 설정이 없어도 관리자 [설정 > 알림 기록]에 남는다. 같은 아이디는 잠금 시간 동안 한 번만 보낸다
+const lockAlerts = new Map()
+async function alertLocked(row, ip) {
+  const last = lockAlerts.get(row.login_id)
+  if (last && Date.now() - last < LOCK_MINUTES * 60_000) return
+  lockAlerts.set(row.login_id, Date.now())
+  const seller = row.seller_code ? (await pool.query('SELECT email FROM sellers WHERE seller_code = $1', [row.seller_code])).rows[0] : null
+  await queueMail({
+    kind: 'security_login_locked', to: seller ? openText(seller.email) : adminEmail(), cc: seller ? [] : adminCc(), subject: '로그인이 잠겼어요',
+    body: `계정 ${row.login_id}에 비밀번호나 인증 코드가 여러 번 틀려서 ${LOCK_MINUTES}분 동안 로그인을 막았어요.\n접속한 곳(IP): ${ip}\n직접 틀린 게 아니라면 비밀번호를 바꾸고 회사 관리자에게 알려 주세요.\n`,
+  })
+}
 
 // 로그인 잠금 (서버 메모리 기준, 10분):
 //  - 같은 곳(IP)에서 같은 아이디를 5번 틀리면 그 곳에서만 막는다. 아이디만 세면 아무나 5번 틀려서 진짜 주인까지 잠글 수 있었다 (2026-11-11 보안 점검)
@@ -154,6 +186,7 @@ export async function login(req, res) {
   const attemptKey = rows[0]?.role === 'admin' && !adminIpAllowed(req.ip) ? null : loginId
   if (!reserveAttempt(attemptKey, req.ip)) {
     log('login_locked')
+    if (rows[0] && attemptKey !== null) alertLocked(rows[0], req.ip).catch((e) => console.error(`[auth] 잠금 알림 실패 · ${e.message}`))
     return res.status(429).json({ error: `로그인을 여러 번 틀렸어요. ${LOCK_MINUTES}분 뒤에 다시 시도해 주세요.` })
   }
   const ok = (await passwordMatches(password, rows[0]?.password_hash)) && rows.length === 1
@@ -205,7 +238,7 @@ export async function login(req, res) {
 // 로그인 쿠키 만들기 (로그인할 때, 그리고 [관리자 계정]에서 내 비밀번호·2단계 인증을 바꿔 session_version 이 올라갔을 때 이 브라우저를 이어 가려고)
 export function issueStaffSession(res, row) {
   const { id, session_version: sv, login_id: loginId, role, seller_code: sellerCode, totp_secret_enc: sealed } = row
-  setSessionCookie(res, signToken({ kind: 'staff', id, sv, loginId, role, sellerCode, mfa: Boolean(sealed), exp: Date.now() + SESSION_HOURS * 3_600_000 }), SESSION_HOURS * 3600)
+  setSessionCookie(res, signToken({ kind: 'staff', id, sv, loginId, role, sellerCode, mfa: Boolean(sealed), seen: Date.now(), exp: Date.now() + SESSION_HOURS * 3_600_000 }), SESSION_HOURS * 3600)
 }
 
 // POST /api/admin/2fa-first {setup, code}: 처음 로그인 때 받은 등록 표 + 인증 앱 코드 → 2단계 인증을 저장하고 로그인
@@ -269,7 +302,7 @@ export function currentAdmin(req) {
 // → 계정을 지우거나 비밀번호·2단계 인증을 바꾸면(session_version 증가) 이미 로그인한 쿠키도 바로 끊긴다. 역할·농가도 DB 값을 쓴다
 export async function currentStaff(req) {
   const token = currentAdmin(req)
-  if (!token?.id) return null
+  if (!token?.id || idleTooLong(token)) return null
   const { rows } = await pool.query(
     `SELECT a.login_id, a.role, a.seller_code, a.session_version, a.totp_secret_enc IS NOT NULL AS mfa, s.status AS seller_status
      FROM admins a LEFT JOIN sellers s ON s.seller_code = a.seller_code WHERE a.id = $1`,
@@ -287,6 +320,7 @@ export async function requireAdmin(req, res, next) {
   if (admin.role === 'seller') return res.status(403).json({ error: '관리자만 쓸 수 있어요. 판매자 화면(/seller)을 이용해 주세요.' })
   if (!adminIpAllowed(req.ip)) return res.status(403).json({ error: '허용된 곳에서만 관리자 화면을 쓸 수 있어요.' })
   req.admin = admin
+  touchStaffSession(req, res)
   next()
 }
 
@@ -298,5 +332,6 @@ export async function requireSeller(req, res, next) {
   // 승인 전 판매자는 내 상태(/me)와 비밀번호 바꾸기만 쓸 수 있다 (상품·주문은 승인 뒤에)
   if (account.sellerStatus !== 'active' && !['/me', '/password'].includes(req.path)) return res.status(403).json({ error: '판매자 승인 뒤에 쓸 수 있어요.', notApproved: true })
   req.seller = account
+  touchStaffSession(req, res)
   next()
 }

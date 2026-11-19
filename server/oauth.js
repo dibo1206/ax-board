@@ -57,7 +57,8 @@ const STATE_COOKIE = 'oauth_state'
 const PENDING_COOKIE = 'oauth_pending'
 const redirectUri = (provider) => `${publicUrl()}/api/account/oauth/${provider}/callback`
 // 돌아갈 곳: 우리 사이트 안의 경로만 (다른 사이트로 보내는 데 쓰이지 않게)
-const safeNext = (v) => (typeof v === 'string' && /^\/(?![/\\])[\w\-/?=&.%]*$/.test(v) && v.length <= 200 ? v : '/account')
+// 로그인 뒤 돌아갈 곳: 우리 사이트 안 경로만 허용한다(열린 리다이렉트 방지). 보안 시험에서도 쓰려고 내보낸다
+export const safeNext = (v) => (typeof v === 'string' && /^\/(?![/\\])[\w\-/?=&.%]*$/.test(v) && v.length <= 200 ? v : '/account')
 const back = (res, reason) => res.redirect(302, `/account/login?error=${encodeURIComponent(reason)}`)
 const identityKey = (provider, id) => lookupHash(`oauth:${provider}:${id}`)
 
