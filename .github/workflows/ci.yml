@@ -54,3 +54,9 @@ jobs:
         run: npm run test-refund
       - name: 주문 제출 시험
         run: npm run test-submit
+      - name: 라이브러리 취약점 검사 (높음 이상이면 실패)
+        run: npm audit --omit=dev --audit-level=high
+      - name: 권한 검사 시험 (로그인 없이 관리자·판매자·회원 주소가 열리는지)
+        run: npm run test-authz
+      - name: 관리자 로그인 보안 시험 (쿠키·세션 타임아웃·잠금 알림)
+        run: npm run test-session

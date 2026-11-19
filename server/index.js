@@ -104,6 +104,9 @@ app.disable('x-powered-by')
 // 기본 보안 헤더: 파일 종류를 바꿔 해석하지 않기, 다른 사이트의 틀(iframe) 안에 넣지 않기
 app.use((req, res, next) => {
   res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin' })
+  // 쓰지 않는 브라우저 기능(카메라·마이크·위치 등)은 아예 꺼 둔다: 악성 스크립트가 들어와도 몰래 켜지 못하게 (2026-11-19 보안 점검).
+  // 사진 올리기의 <input type=file> 은 이 설정과 상관없이 된다. 결제(payment)는 토스 결제창이 쓸 수 있어 막지 않는다
+  res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), usb=(), serial=(), bluetooth=(), magnetometer=(), gyroscope=(), accelerometer=()')
   if (req.secure) res.set('Strict-Transport-Security', 'max-age=31536000') // HTTPS로 들어온 손님은 1년 동안 HTTPS로만
   next()
 })
