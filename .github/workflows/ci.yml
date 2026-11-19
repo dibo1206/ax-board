@@ -62,3 +62,5 @@ jobs:
         run: npm run test-session
       - name: SQL 인젝션 공격 시험 (시간지연·참거짓·오류·로그인·주문조회)
         run: npm run test-sqli
+      - name: XSS 공격 시험 (저장형 스크립트·HTML 이스케이프·CSP)
+        run: npm run test-xss

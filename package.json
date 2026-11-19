@@ -32,6 +32,7 @@
     "test-authz": "node scripts/authz-sweep.js",
     "test-session": "node scripts/session-test.js",
     "test-sqli": "node scripts/sqli-test.js",
+    "test-xss": "node scripts/xss-test.js",
     "eval-chat": "node scripts/eval-chat.js",
     "count-ai": "node scripts/count-ai.js",
     "chat-eval": "node scripts/chat-eval.js",

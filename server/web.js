@@ -15,7 +15,8 @@ const PRIVATE_PAGES = /^\/(admin|seller|account|cart|checkout|order|restock)(\/|
 const PUBLIC_PAGES = ['/', '/products', '/farms', '/about', '/notice', '/press', '/guide', '/sitemap', '/policy/terms', '/policy/privacy', '/policy/refund', '/policy/noemail']
 const CODE = /^[A-Za-z0-9_-]{1,64}$/
 // 화면에서 불러도 되는 곳: 우리 서버, 토스페이먼츠(결제창), 카카오(다음) 우편번호(주소 검색 창), 구글·jsDelivr 글꼴. 나머지 스크립트·틀(iframe)은 막는다
-const CSP = [
+// 보안 시험(scripts/xss-test.js)에서도 쓰려고 내보낸다. 서버 동작은 그대로
+export const CSP = [
   "default-src 'self'",
   "script-src 'self' https://js.tosspayments.com https://*.tosspayments.com https://t1.kakaocdn.net",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
@@ -35,7 +36,7 @@ const CSP = [
 // (req.host 는 믿을 수 있는 앞단 프록시가 붙인 X-Forwarded-Host 를 먼저 본다)
 const siteUrl = (req) => (process.env.PUBLIC_URL || `${req.protocol}://${req.host}`).replace(/\/$/, '')
 
-const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+export const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 const clip = (text, n) => {
   const flat = String(text ?? '').replace(/\s+/g, ' ').trim()
   return flat.length > n ? `${flat.slice(0, n - 1)}…` : flat

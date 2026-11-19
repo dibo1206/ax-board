@@ -22,7 +22,7 @@
 | A08 소프트웨어·데이터 무결성 | ✅ | `package-lock.json` + CI `npm ci`, PR 마다 자동 검사, main 합칠 때만 배포 |
 | A09 로깅·모니터링 실패 | ✅ **보강** | 관리자·판매자 접속 기록(access_logs, 2년) → **로그인이 잠기면 계정 주인에게 알림 추가** |
 | A10 SSRF | ✅ | 서버가 부르는 바깥 주소는 토스·카카오·네이버·Cloudflare 고정 주소뿐, 손님이 준 URL 을 서버가 열지 않음 |
-| XSS | ✅ **보강** | HttpOnly 쿠키, CSP(`script-src` 에 inline 없음), React 자동 이스케이프, `dangerouslySetInnerHTML` 0곳, 서버 렌더 글자 이스케이프 → **Permissions-Policy 추가** |
+| XSS | ✅ **공격 확인** | 실제로 상품 문의에 `<script>`·`<img onerror>`·`<svg onload>` 5종을 저장해 전부 글자 그대로만 반환(`test-xss`). HttpOnly 쿠키, CSP(`script-src` inline·eval 없음), React 자동 이스케이프, `dangerouslySetInnerHTML` 0곳, 서버 렌더 meta 이스케이프 확인 → **Permissions-Policy 추가** |
 | CSRF | ✅ **보강** | 바꾸는 요청은 Origin 이 우리 주소일 때만(다른 사이트 → 403 확인), GET 으로 바꾸는 주소 없음 → **관리자·판매자 쿠키 SameSite=Strict** |
 | MITM | ✅ | HTTPS 강제 + HSTS + Secure 쿠키. HSTS preload 는 `up.railway.app` 이 우리 도메인이 아니라 해당 없음 (자체 도메인 연결 시 추가) |
 | 토큰 보관 | ✅ | 로그인 표는 HttpOnly 쿠키에만. localStorage 에는 장바구니·글씨 크기·챗봇 대화만 (로그인 정보 없음) |
@@ -48,6 +48,7 @@
 | `npm run test-authz` (새로) | 로그인 필요 주소 108개 모두 401 |
 | `npm run test-session` (새로) | 11/11 — Strict 쿠키, Permissions-Policy, 2시간 넘은 쿠키 401, 30분 쿠키 통과·갱신, 6번 틀리면 429, 잠금 알림 1건만 |
 | `npm run test-sqli` (새로) | 5/5 — 시간지연·참거짓·오류노출·로그인우회·주문조회우회 전부 막힘. 배포 주소에도 같은 공격을 직접 넣어 확인(읽기·시간지연만) |
+| `npm run test-xss` (새로) | 9/9 — 상품 문의에 스크립트 5종 저장 후 글자 그대로만 반환, 응답 JSON(HTML 아님), 서버 meta 이스케이프, CSP inline·eval 차단. 만든 문의는 id 로 정리 |
 | `npm audit --omit=dev` | 0건 |
 | 기존 결제 장애 · 주문 제출 · 환불 | 13/13 · 10/10 · 36/36 |
 | 배포 주소 읽기 점검 | HTTPS 301, HSTS · CSP · X-Frame-Options · nosniff 있음, 다른 사이트 POST 403, 관리자 주소 401, 민감한 파일 404 |
