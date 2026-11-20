@@ -24,7 +24,7 @@ import { publicItem } from './items.js'
 import { GRADE_LABEL } from './brix.js'
 import { checkDataKey } from './crypto.js'
 import { orderingOpen, paymentMode } from './payments.js'
-import { encryptExisting, openQuestion } from './pii.js'
+import { encryptExisting, openQuestion, openSeller } from './pii.js'
 import { startRetention } from './retention.js'
 import { buildNotice } from './notice.js'
 import { ACTIVE_OPTIONS_SQL } from './options.js'
@@ -378,7 +378,9 @@ app.get('/api/farms/:code', async (req, res) => {
     const { rows } = await pool.query("SELECT seller_code, name, region, intro, story, photos, is_company FROM sellers WHERE seller_code = $1 AND status = 'active'", [code])
     if (!rows.length) return null
     const products = await pool.query(`${PRODUCT_SELECT} AND p.seller_code = $1 ORDER BY (p.stock = 0), p.created_at DESC, p.name`, [code])
-    return { ...rows[0], products: products.rows.map(publicProduct) }
+    // 단골 수 (2026-11-20): 이 농가를 단골로 맺은 회원 수 (탈퇴하면 지워진다). 15초 캐시라 누른 바로 뒤에는 화면이 1을 더해 보여 준다
+    const followers = await pool.query('SELECT count(*)::int AS n FROM farm_follows WHERE seller_code = $1', [code])
+    return { ...rows[0], followers: followers.rows[0].n, products: products.rows.map(publicProduct) }
   }) : null
   if (!farm) return res.status(404).json({ error: '농가를 찾지 못했어요.' })
   res.json(farm)
@@ -390,14 +392,29 @@ app.get('/api/products/:code', async (req, res) => {
   res.json(detail)
 })
 
+// 판매자 정보 (2026-11-20): 통신판매중개 시 판매자 신원 정보를 손님에게 알린다 (전자상거래법 제20조) [회사·법률 확인 필요]
+//  - 회사 직영: null → 화면이 회사 사업자 정보(/api/policy 의 shop)를 보여 준다
+//  - 사업자등록번호가 있는 농가: 상호·대표자·사업자등록번호·지역
+//  - 개인 농가: 상호·지역만 (개인의 이름·연락처는 공개하지 않고, 필요하면 고객센터가 알려 준다)
+//  연락처·이메일은 어느 경우에도 보내지 않는다
+const publicSeller = ({ owner_name: _o, business_no: _b, ...seller }) => seller
+function sellerInfo(row) {
+  if (!row || row.is_company) return null
+  const s = openSeller(row)
+  const bizNo = s.business_no?.trim()
+  return bizNo
+    ? { kind: 'business', name: s.name, owner: s.owner_name?.trim() || null, business_no: bizNo, region: s.region || null }
+    : { kind: 'individual', name: s.name, region: s.region || null }
+}
+
 async function loadProductDetail(code) {
   const { rows } = await pool.query(`${PRODUCT_SELECT} AND p.product_code = $1`, [code])
   if (rows.length === 0) return null
   const product = publicProduct(rows[0])
   const [item, seller, questions] = await Promise.all([
     pool.query('SELECT * FROM items WHERE item_code = $1', [product.item_code]),
-    // 농가 표에는 대표자·연락처·사업자번호도 있다 → 공개 칸만
-    pool.query('SELECT seller_code, name, region, intro, story, photos, is_company FROM sellers WHERE seller_code = $1', [product.seller_code]),
+    // 농가 표에는 대표자·연락처·사업자번호도 있다 → 공개 칸만 (대표자·사업자번호는 아래 sellerInfo 가 사업자 농가만 골라 쓴다)
+    pool.query('SELECT seller_code, name, region, intro, story, photos, is_company, owner_name, business_no FROM sellers WHERE seller_code = $1', [product.seller_code]),
     pool.query(
       'SELECT id, author, question, answer, created_at, answered_at, is_private FROM questions WHERE product_code = $1 AND NOT hidden ORDER BY created_at DESC',
       [product.product_code],
@@ -408,7 +425,8 @@ async function loadProductDetail(code) {
     detail_blocks: rows[0].detail_blocks ?? [], // 블록형 상세페이지 (server/blocks.js)
     notice_table: buildNotice(product, publicItem(item.rows[0]), seller.rows[0]), // 상품정보 제공 고시 표
     item: publicItem(item.rows[0]), // 검수 전 품목은 보관·안전 정보를 빼고 보낸다
-    seller: seller.rows[0],
+    seller: publicSeller(seller.rows[0]),
+    seller_info: sellerInfo(seller.rows[0]),
     // 비밀글은 글쓴이 첫 글자와 답변 여부만 (이 상세는 모두에게 같은 캐시). 내용은 쓴 회원만 /my-questions 로 받는다
     questions: questions.rows.map(openQuestion).map((q) => (q.is_private
       ? { id: q.id, author: maskName(q.author), is_private: true, question: null, answer: null, answered: Boolean(q.answer), created_at: q.created_at, answered_at: q.answered_at }

@@ -7,6 +7,8 @@ import { Related } from './Recommend.jsx'
 import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
 import { addToCart, get, getPolicy, post, preorderNote, thumbUrl, unitPrice } from './shop/shared.js'
 import { BrixCard, KeyFactsCard, OptionsCard } from './shop/DetailCards.jsx'
+import { DeliveryBox, DeliveryLine, SellerBox } from './shop/DetailExtras.jsx'
+import { WishButton } from './shop/Saved.jsx'
 import { pairBlocks, storageSteps } from './shop/detailFacts.js'
 import { FarmPage, FarmsPage } from './shop/Farms.jsx'
 import { Guide } from './shop/Guide.jsx'
@@ -296,7 +298,11 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {(option || !product.has_options) && unitPrice(price, unit) && <>{unitPrice(price, unit)} · </>}
         {product.price_updated_at && <>가격 기준 {product.price_updated_at.slice(0, 10)}</>}
       </p>
-      <ShareButton name={product.name.replace(/\[예시\]\s*/g, '')} />
+      <DeliveryLine product={product} />
+      <div className="detail-actions">
+        <WishButton code={product.product_code} name={product.name.replace(/\[예시\]\s*/g, '')} variant="detail" />
+        <ShareButton name={product.name.replace(/\[예시\]\s*/g, '')} />
+      </div>
       <RatingBadge rating={product.rating} count={product.review_count} />
       {(product.sold_out || option?.stock === 0) && <p className="badge soldout">품절</p>}
       {product.preorder && !product.sold_out && (
@@ -360,6 +366,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         )}
         {/* 상품 설명 탭 순서 (2026-11-08 피드백): 즐기는 법 → 보관·섭취 → 농가 이야기 → 고시. 자주 묻는 질문·후기·문의는 각자 탭으로 */}
         <RecipeCards recipes={item.recipes} />
+        <DeliveryBox product={product} />
         <section className="box">
           <h3>보관·섭취 안내</h3>
           {item.pending && <p className="muted">새로 들어온 품목이라 담당자가 보관·섭취 정보를 확인하고 있어요. 궁금한 점은 아래 상품 Q&A로 물어봐 주세요.</p>}
@@ -398,6 +405,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
           <p>{seller.story}</p>
           <a className="farm-more-link" href={`/farm/${encodeURIComponent(seller.seller_code)}`}>{seller.name.replace(/\[예시\]\s*/g, '')}의 다른 상품 모두 보기 →</a>
         </section>
+        <SellerBox product={product} />
         {product.notice_table && (
           <section className="box notice-box">
             <h3>상품정보 제공 고시 <span className="muted">{product.notice_table.title}</span></h3>

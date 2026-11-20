@@ -66,3 +66,5 @@ jobs:
         run: npm run test-xss
       - name: 그 밖의 공격 시험 (권한상승·주문조작·경로탈출·리다이렉트·CSRF·IDOR)
         run: npm run test-abuse
+      - name: 배송 달력·소비기한·찜·단골·판매자 정보 시험
+        run: npm run test-extras

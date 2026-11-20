@@ -185,6 +185,8 @@ accountRouter.delete('/me', requireCustomer, async (req, res) => {
   await pool.query('DELETE FROM restock_requests WHERE customer_id = $1', [req.customer.id]) // 탈퇴하면 재입고 알림 신청도 지운다
   await pool.query("UPDATE questions SET customer_id = NULL, author = '탈퇴 회원' WHERE customer_id = $1", [req.customer.id]) // 문의 글은 남기되 계정 연결과 이름은 지운다
   await pool.query('DELETE FROM customer_identities WHERE customer_id = $1', [req.customer.id]) // 간편 로그인 연결도 끊는다
+  await pool.query('DELETE FROM wishlists WHERE customer_id = $1', [req.customer.id]) // 찜한 상품·단골 농가도 지운다
+  await pool.query('DELETE FROM farm_follows WHERE customer_id = $1', [req.customer.id])
   setCookie(res, COOKIE, '', 0)
   console.log(`[account] 회원 탈퇴 #${req.customer.id}`)
   res.status(204).end()
@@ -266,5 +268,37 @@ accountRouter.post('/questions/seen', requireCustomer, async (req, res) => {
   await pool.query('UPDATE questions SET answer_seen_at = now() WHERE customer_id = $1 AND answered_at IS NOT NULL', [req.customer.id])
   res.status(204).end()
 })
+
+// ---------- 찜한 상품·단골 농가 (2026-11-20) ----------
+// 하트·단골 버튼이 켜졌는지 알려고 코드만 돌려준다. 목록 화면은 공개 상품·농가 목록에서 이 코드로 골라 그린다
+const SAVE_CODE = /^[A-Za-z0-9_-]{1,40}$/
+const MAX_SAVED = 300
+accountRouter.get('/saved', requireCustomer, async (req, res) => {
+  const [products, farms] = await Promise.all([
+    pool.query('SELECT product_code FROM wishlists WHERE customer_id = $1 ORDER BY created_at DESC', [req.customer.id]),
+    pool.query('SELECT seller_code FROM farm_follows WHERE customer_id = $1 ORDER BY created_at DESC', [req.customer.id]),
+  ])
+  res.set('Cache-Control', 'private, no-store')
+  res.json({ products: products.rows.map((r) => r.product_code), farms: farms.rows.map((r) => r.seller_code) })
+})
+
+// 담기·빼기는 여러 번 눌러도 결과가 같다 (PUT 은 이미 있으면 그대로, DELETE 는 없어도 204)
+// 판매 중인 상품·운영 중인 농가만 담는다. 너무 많이 쌓이지 않게 각각 MAX_SAVED 개까지
+const saveRoutes = (path, table, column, existsSql, notFound) => {
+  accountRouter.put(`${path}/:code`, requireCustomer, async (req, res) => {
+    const code = req.params.code
+    if (!SAVE_CODE.test(code) || !(await pool.query(existsSql, [code])).rows.length) return res.status(404).json({ error: notFound })
+    const { rows } = await pool.query(`SELECT count(*)::int AS n FROM ${table} WHERE customer_id = $1`, [req.customer.id])
+    if (rows[0].n >= MAX_SAVED) return res.status(409).json({ error: `${MAX_SAVED}개까지 담을 수 있어요. 안 쓰는 것을 먼저 빼 주세요.` })
+    await pool.query(`INSERT INTO ${table} (customer_id, ${column}) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [req.customer.id, code])
+    res.status(204).end()
+  })
+  accountRouter.delete(`${path}/:code`, requireCustomer, async (req, res) => {
+    await pool.query(`DELETE FROM ${table} WHERE customer_id = $1 AND ${column} = $2`, [req.customer.id, String(req.params.code)])
+    res.status(204).end()
+  })
+}
+saveRoutes('/wishlist', 'wishlists', 'product_code', "SELECT 1 FROM products WHERE product_code = $1 AND status = 'active'", '판매 중인 상품을 찾지 못했어요.')
+saveRoutes('/follows', 'farm_follows', 'seller_code', "SELECT 1 FROM sellers WHERE seller_code = $1 AND status = 'active'", '농가를 찾지 못했어요.')
 
 export { requireCustomer }

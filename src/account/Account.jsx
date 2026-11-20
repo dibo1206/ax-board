@@ -3,6 +3,9 @@ import { adminApi } from '../admin/api.js'
 import { clearChat } from '../chatStore.js'
 import { OrderDetail } from '../shop/Orders.jsx'
 import { Logo } from '../shop/ShopLayout.jsx'
+import { ProductCard } from '../shop/home/Home.jsx'
+import { FollowButton } from '../shop/Saved.jsx'
+import { getSaved } from '../shop/savedStore.js'
 import { get, loadScript, ORDER_STATUS, post, send, when, won } from '../shop/shared.js'
 import { AgreeAll, EmailField, NewPasswordFields, Req } from './fields.jsx'
 import { emailProblem, formatPhone, passwordOk, phoneOk } from './rules.js'
@@ -578,10 +581,70 @@ function MyQuestions({ onSeen }) {
   )
 }
 
+// 찜한 상품 (2026-11-20): 찜한 순서대로. 판매가 끝난(내려간) 상품은 목록에 없어서 몇 개 빠졌는지만 알려 준다
+// 하트를 다시 누르면 바로 빠지지 않고 꺼진 하트로 남는다 (실수로 눌렀을 때 다시 켤 수 있게). 탭을 다시 열면 정리된다
+function MyWishlist() {
+  const [list, setList] = useState(null)
+  const [gone, setGone] = useState(0)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    Promise.all([getSaved(), get('/products')]).then(([saved, products]) => {
+      const codes = [...(saved?.products ?? [])]
+      const byCode = new Map(products.map((p) => [p.product_code, p]))
+      setList(codes.map((c) => byCode.get(c)).filter(Boolean))
+      setGone(codes.filter((c) => !byCode.has(c)).length)
+    }).catch((e) => setError(e.message))
+  }, [])
+  if (error) return <p className="error">{error}</p>
+  if (!list) return <p className="muted">불러오는 중…</p>
+  return (
+    <div className="my-saved">
+      {list.length === 0 ? <p className="my-empty">아직 찜한 상품이 없어요. 상품 사진 위 하트를 누르면 여기 모여요.</p> : (
+        <ul className="pgrid">
+          {list.map((p) => <li key={p.product_code}><ProductCard p={p} onOpen={(c) => window.location.assign(`/p/${encodeURIComponent(c)}`)} /></li>)}
+        </ul>
+      )}
+      {gone > 0 && <p className="muted">찜한 상품 중 {gone}개는 지금 판매하지 않아서 보이지 않아요.</p>}
+    </div>
+  )
+}
+
+// 단골 농가 (2026-11-20): 단골 맺은 농가와 지금 판매 중 상품 수. 누르면 농가 페이지
+function MyFarms() {
+  const [list, setList] = useState(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    Promise.all([getSaved(), get('/farms')]).then(([saved, farms]) => {
+      const byCode = new Map(farms.map((f) => [f.seller_code, f]))
+      setList([...(saved?.farms ?? [])].map((c) => byCode.get(c)).filter(Boolean))
+    }).catch((e) => setError(e.message))
+  }, [])
+  if (error) return <p className="error">{error}</p>
+  if (!list) return <p className="muted">불러오는 중…</p>
+  if (list.length === 0) return <p className="my-empty">아직 단골 농가가 없어요. 농가 페이지에서 [단골 맺기]를 누르면 여기 모여요. <a href="/farms">농가 둘러보기 →</a></p>
+  const clean = (name) => name.replace(/\[예시\]\s*/g, '')
+  return (
+    <ul className="my-farms">
+      {list.map((f) => (
+        <li key={f.seller_code}>
+          <a href={`/farm/${encodeURIComponent(f.seller_code)}`} className="my-farm-link">
+            <strong>{clean(f.name)}</strong>
+            <span className="muted">{f.region} · 판매 중 {f.products}개{f.in_stock < f.products && ` (품절 ${f.products - f.in_stock}개)`}</span>
+            {f.items?.length > 0 && <span className="muted">{f.items.slice(0, 5).join(' · ')}</span>}
+          </a>
+          <FollowButton code={f.seller_code} name={clean(f.name)} />
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 // 마이페이지 탭: 키 · 이름 · 아이콘(선으로 그린 상자·말풍선·집·자물쇠)
 const MY_TABS = [
   ['orders', '주문 내역', 'M4 7.5 12 4l8 3.5v9L12 20l-8-3.5zM4 7.5l8 3.5 8-3.5M12 11v9'],
   ['questions', '내 문의', 'M5 5h14v10H9l-4 4z'],
+  ['wishlist', '찜한 상품', 'M12 20.5s-7.5-4.6-9.2-9.4C1.6 7.6 3.9 4.5 7.2 4.5c2 0 3.5 1.1 4.8 2.9 1.3-1.8 2.8-2.9 4.8-2.9 3.3 0 5.6 3.1 4.4 6.6-1.7 4.8-9.2 9.4-9.2 9.4z'],
+  ['farms', '단골 농가', 'M3 20h18M5 20V10l7-5 7 5v10M9 20v-5h6v5'],
   ['profile', '내 정보·배송지', 'M4 11 12 4l8 7M6 9.5V20h12V9.5M10 20v-5h4v5'],
   ['security', '로그인·탈퇴', 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3'],
 ]
@@ -590,7 +653,8 @@ export function MyPage() {
   const [me, setMe] = useState(undefined)
   const [tab, setTab] = useState(() => {
     const query = new URLSearchParams(window.location.search)
-    return query.get('social') ? 'security' : query.get('tab') === 'questions' ? 'questions' : 'orders'
+    const asked = query.get('tab')
+    return query.get('social') ? 'security' : ['questions', 'wishlist', 'farms'].includes(asked) ? asked : 'orders'
   })
 
   useEffect(() => {
@@ -632,6 +696,8 @@ export function MyPage() {
       <div className="my-panel">
         {tab === 'orders' && <MyOrders />}
         {tab === 'questions' && <MyQuestions onSeen={markSeen} />}
+        {tab === 'wishlist' && <MyWishlist />}
+        {tab === 'farms' && <MyFarms />}
         {tab === 'profile' && <Profile me={me} onSaved={setMe} />}
         {tab === 'security' && <Security hasPassword={me.hasPassword !== false} />}
       </div>

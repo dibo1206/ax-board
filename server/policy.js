@@ -17,6 +17,10 @@ export const DEFAULT_SHOP = Object.freeze({
   email: 'olive7083@naver.com',
   hours: '평일 09:00~18:00 (점심 13:00~14:00) · 토·일·공휴일 휴무',
   privacyOfficer: '[개인정보 보호책임자 이름·연락처]',
+  // 판매 방식 (2026-11-20) [회사·법률 확인 필요]: 'broker' 면 농가 상품 상세에 통신판매중개자 고지를 띄운다 (전자상거래법 제20조).
+  // 회사가 직접 사서 파는 방식(직판)으로 정하면 관리자가 'direct' 로 바꾼다 → 고지가 사라지고 회사가 판매자로 보인다
+  saleMode: 'broker',
+  brokerNotice: '통신판매중개자: {회사}. 농가 상품 거래의 당사자는 각 판매 농가이며, 상품 정보와 품질에 대한 책임도 판매 농가에 있습니다. 결제·배송 문의와 교환·환불은 {쇼핑몰} 고객센터에서 함께 도와드려요.',
 })
 
 // 배송비는 주문 한 번에 한 번 (2026-11-12 회사 결정: 4,500원, 상품 합계 30,000원 이상이면 무료, 택배는 CJ대한통운).
@@ -27,6 +31,14 @@ export const DEFAULT_SHIPPING = Object.freeze({
   freeOver: 30000,
   courier: 'CJ대한통운',
   leadTime: '결제 후 1~3일 안에 출고해요 (주말·공휴일 제외)',
+  // 배송 달력 (2026-11-20): 상품 상세의 "지금 주문하면 ○일 출고 · ○일 도착 예정" 계산에 쓴다 (src/shop/delivery.js)
+  //  cutoffHour 시 전 주문은 그날 주문으로 친다 / 그날부터 출고일 leadDays 일 뒤 출고 (0 이면 그날) / 출고 뒤 transitDays 일 걸려 도착
+  //  noShipDays: 출고하지 않는 요일 (0=일 … 6=토) / holidays: 출고·배송 쉬는 날 (YYYY-MM-DD). 택배는 일요일·쉬는 날 배송하지 않는다고 본다
+  cutoffHour: 14,
+  leadDays: 1,
+  transitDays: 1,
+  noShipDays: [0, 6],
+  holidays: ['2026-12-25', '2027-01-01'],
 })
 
 // 반품 신청 기준 (server/returns.js 가 이 값으로 신청 기간을 검사하고 환불 한도를 계산한다. 아래 교환·환불 정책 글도 이 값으로 만든다)
@@ -203,6 +215,24 @@ const int = (errors, value, min, max, name) => {
   if (!Number.isInteger(n) || n < min || n > max) errors.push(`${name}은(는) ${min.toLocaleString('ko-KR')}~${max.toLocaleString('ko-KR')} 사이 정수로 적어 주세요.`)
   return n
 }
+// 출고 안 하는 요일: 0(일)~6(토) 숫자 배열. 7일 모두 쉬면 출고일을 못 정하므로 막는다
+const weekdays = (errors, value) => {
+  const list = Array.isArray(value) ? value.map(Number) : []
+  if (!Array.isArray(value) || list.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) errors.push('출고 안 하는 요일을 다시 골라 주세요.')
+  const days = [...new Set(list.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort()
+  if (days.length >= 7) errors.push('출고하는 요일이 하루는 있어야 해요.')
+  return days
+}
+// 쉬는 날: YYYY-MM-DD 목록 (배열이나 쉼표·줄바꿈으로 나눈 글). 실제 있는 날짜만, 100개까지
+const dateList = (errors, value) => {
+  const raw = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/[\s,;]+/) : null
+  if (!raw) { errors.push('쉬는 날 목록을 다시 적어 주세요.'); return [] }
+  const list = [...new Set(raw.map((s) => (typeof s === 'string' ? s.trim() : '')).filter(Boolean))].sort()
+  const bad = list.filter((s) => !/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(Date.parse(`${s}T00:00:00Z`)) || new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) !== s)
+  if (bad.length) errors.push(`쉬는 날은 2026-12-25 모양으로 적어 주세요: ${bad.slice(0, 3).join(', ').slice(0, 60)}`)
+  if (list.length > 100) errors.push('쉬는 날은 100개까지 넣을 수 있어요.')
+  return list.filter((s) => !bad.includes(s)).slice(0, 100)
+}
 const EMAIL = /^[^\s@<>,;]{1,64}@[^\s@<>,;]{1,190}\.[A-Za-z]{2,}$/
 export const SETTING_KEYS = ['shop', 'shipping', 'returns', 'notify', 'settlement', 'policies']
 export function validateSettings(key, v = {}) {
@@ -218,10 +248,20 @@ export function validateSettings(key, v = {}) {
     if (value.bizNo && !/^\d{3}-\d{2}-\d{5}$/.test(value.bizNo)) errors.push('사업자등록번호는 000-00-00000 모양으로 적어 주세요.')
     if (value.phone && !/^[0-9][0-9-]{7,18}$/.test(value.phone)) errors.push('대표전화는 숫자와 -만 적어 주세요. (예: 041-544-2566)')
     if (value.email && !/^[^\s@<>]+@[^\s@<>]+\.[A-Za-z]{2,}$/.test(value.email)) errors.push('이메일 모양이 아니에요.')
+    // 판매 방식·중개자 고지 (예전 화면은 이 칸을 보내지 않으므로 없으면 지금 값을 그대로 둔다)
+    value.saleMode = v.saleMode === undefined ? SHOP.saleMode : v.saleMode
+    if (!['broker', 'direct'].includes(value.saleMode)) errors.push('판매 방식은 중개 또는 직판 중에서 골라 주세요.')
+    value.brokerNotice = v.brokerNotice === undefined ? SHOP.brokerNotice : str(errors, v.brokerNotice, 400, '통신판매중개자 고지', value.saleMode === 'broker')
   } else if (key === 'shipping') {
     value = {
       fee: int(errors, v.fee, 0, 100_000, '기본 배송비'), freeOver: int(errors, v.freeOver, 0, 10_000_000, '무료 배송 기준'),
       courier: str(errors, v.courier, 30, '택배사'), leadTime: str(errors, v.leadTime, 80, '출고 안내'),
+      // 배송 달력 칸 (없으면 지금 값을 그대로 둔다)
+      cutoffHour: v.cutoffHour === undefined ? SHIPPING.cutoffHour : int(errors, v.cutoffHour, 0, 24, '주문 마감 시각(시)'),
+      leadDays: v.leadDays === undefined ? SHIPPING.leadDays : int(errors, v.leadDays, 0, 10, '출고까지 걸리는 날(출고일 기준)'),
+      transitDays: v.transitDays === undefined ? SHIPPING.transitDays : int(errors, v.transitDays, 1, 7, '배송 걸리는 날'),
+      noShipDays: v.noShipDays === undefined ? [...SHIPPING.noShipDays] : weekdays(errors, v.noShipDays),
+      holidays: v.holidays === undefined ? [...SHIPPING.holidays] : dateList(errors, v.holidays),
     }
   } else if (key === 'returns') {
     // 전자상거래법: 청약철회 7일, 표시·광고와 다르면 받은 날부터 3개월·안 날부터 30일 — 이보다 짧게는 못 정한다
