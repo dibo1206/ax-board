@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Quiz } from '../../Recommend.jsx'
 import { RatingBadge } from '../Reviews.jsx'
+import { WishButton } from '../Saved.jsx'
 import { addToCart, cheapestOption, get, shipDay, thumbUrl, unitPrice, won } from '../shared.js'
 import { FAQ, GROUP_PHOTOS, HERO, SEASON, STORY } from './content.js'
 
@@ -161,6 +162,7 @@ export function ProductCard({ p, onOpen, rank = null }) {
         </span>
       </a>
       <QuickCart p={p} onOpen={onOpen} />
+      <WishButton code={p.product_code} name={p.name.replace(/\[예시\]\s*/g, '')} />
     </div>
   )
 }

@@ -1491,3 +1491,45 @@
 
 /* 사진 고르기 버튼 안의 파일 칸은 숨긴다 (폼 공통 input 규칙이 hidden 속성을 덮지 않게, 2026-11-18) */
 .shop .form .photo-pick-add input[type="file"], .shop .photo-pick-add input[type="file"] { display: none; }
+
+/* ---------- 찜·단골·배송 달력·판매자 정보 (2026-11-20) ---------- */
+/* 하트: 상품 사진 왼쪽 아래 (오른쪽 아래 장바구니 버튼과 짝). 켜지면 빨간 하트 */
+.shop .wish-btn { display: inline-flex; align-items: center; gap: 6px; border: 0; cursor: pointer; color: var(--text); background: none; padding: 0; font: inherit; }
+.shop .wish-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; transition: transform 0.15s; }
+.shop .wish-btn.on svg { fill: #d23c3c; stroke: #d23c3c; }
+.shop .wish-btn:active svg { transform: scale(0.85); }
+.shop .wish-btn:disabled { cursor: wait; }
+.shop .wish-card { position: absolute; left: 10px; top: calc(var(--img-h) - 55px); z-index: 2; justify-content: center; width: 45px; height: 45px; border-radius: 50%; background: rgb(255 255 255 / 0.95); box-shadow: 0 1px 6px rgb(0 0 0 / 0.25); }
+@media (hover: hover) { .shop .wish-card:not(.on) { opacity: 0; transition: opacity 0.2s; } .shop .pcard-wrap:hover .wish-card, .shop .wish-card:focus-visible { opacity: 1; } }
+.shop .wish-detail { padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; font-size: 14px; }
+.shop .wish-detail.on { border-color: #d23c3c; color: #b02a2a; }
+.shop .detail-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 6px 0; }
+.shop .detail-actions .share { margin: 0; }
+
+/* 단골 맺기 */
+.shop .follow-btn { display: inline-flex; align-items: center; gap: 10px; margin-top: 12px; padding: 8px 16px; border: 1px solid var(--accent); border-radius: 999px; background: #fff; color: var(--accent); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+.shop .follow-btn.on { background: var(--accent); color: #fff; }
+.shop .follow-btn:disabled { cursor: wait; }
+.shop .follow-count { font-size: 13px; font-weight: 400; opacity: 0.85; }
+
+/* 배송 달력 한 줄 (가격 밑) */
+.shop .delivery-line { display: flex; align-items: flex-start; gap: 8px; margin: 8px 0; padding: 10px 12px; border-radius: 10px; background: #eef5ec; font-size: 14.5px; line-height: 1.5; }
+.shop .delivery-line svg { flex: none; width: 20px; height: 20px; margin-top: 1px; fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linejoin: round; }
+.shop .delivery-line b { color: var(--accent); }
+
+/* 판매자 정보·중개자 고지 */
+.shop .broker-notice { margin: 12px 0 0; padding: 10px 12px; border-left: 3px solid var(--border); background: var(--surface); font-size: 13.5px; line-height: 1.6; color: var(--muted); }
+
+/* 마이페이지 단골 농가 */
+.shop .my-farms { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.shop .my-farms li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; }
+.shop .my-farm-link { display: grid; gap: 3px; color: inherit; text-decoration: none; }
+.shop .my-farms .follow-btn { margin: 0; flex: none; }
+.shop .my-saved .pgrid { margin-bottom: 12px; }
+/* 마이페이지 탭이 6개가 됨 (찜한 상품·단골 농가 추가): 넓은 화면은 한 줄 6칸, 좁은 화면은 3칸씩 두 줄 */
+.shop .my-tabs { grid-template-columns: repeat(6, 1fr); }
+@media (max-width: 720px) {
+  .shop .my-tabs { grid-template-columns: repeat(3, 1fr); }
+  .shop .my-tabs button:nth-child(4) { border-left: 0; }
+  .shop .my-tabs button:nth-child(n + 4) { border-top: 1px solid var(--border); }
+}

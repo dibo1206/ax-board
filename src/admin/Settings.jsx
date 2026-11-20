@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from './api.js'
+import { dayLabel, deliveryPlan } from '../shop/delivery.js'
 
 // 관리자 [쇼핑몰 설정] (server/settings.js): 사업자 정보 · 배송 · 반품 · 알림 메일 · 약관·정책 글.
 // 저장하면 주문 금액 계산, 반품 기간 검사, 상담 답, 손님 화면(아래쪽 사업자 정보·정책 글·회사 소개 오시는 길)이 바로 새 값을 써요
@@ -12,6 +13,13 @@ const SHOP_FIELDS = [
 ]
 const POLICY_NAMES = { refund: '교환·환불 정책', terms: '이용약관', privacy: '개인정보 처리방침', noemail: '이메일무단수집거부' }
 const won = (n) => `${Number(n || 0).toLocaleString('ko-KR')}원`
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
+const listText = (v) => (typeof v === 'string' ? v : (v ?? []).join('\n'))
+// 배송 달력 미리보기: 입력 중인 글자 값을 숫자로 바꿔 계산한다
+const previewPlan = (s) => deliveryPlan({
+  ...s, cutoffHour: Number(s.cutoffHour), leadDays: Number(s.leadDays), transitDays: Number(s.transitDays),
+  holidays: listText(s.holidays).split(/[\s,;]+/).filter(Boolean),
+})
 
 export function Settings() {
   const [data, setData] = useState(null)
@@ -83,6 +91,17 @@ export function Settings() {
             {SHOP_FIELDS.map(([key, label, max]) => (
               <label key={key}>{label}<em className="req">*</em><input value={draft.shop[key]} maxLength={max} onChange={(e) => put('shop', { [key]: e.target.value })} /></label>
             ))}
+            {/* 판매 방식 (2026-11-20) [회사·법률 확인 필요]: 중개면 농가 상품 상세의 [판매자 정보] 밑에 고지가 나온다 */}
+            <fieldset className="choice">
+              <legend>판매 방식 <span className="muted">[회사·법률 확인 필요]</span></legend>
+              <label><input type="radio" name="saleMode" checked={draft.shop.saleMode !== 'direct'} onChange={() => put('shop', { saleMode: 'broker' })} /> 중개 (농가가 판매자, 회사는 통신판매중개자)</label>
+              <label><input type="radio" name="saleMode" checked={draft.shop.saleMode === 'direct'} onChange={() => put('shop', { saleMode: 'direct' })} /> 직판 (회사가 사서 직접 판매)</label>
+            </fieldset>
+            {draft.shop.saleMode !== 'direct' && (
+              <label>통신판매중개자 고지 (농가 상품 상세에 나와요. {'{회사}'}·{'{쇼핑몰}'}은 위 값으로 바뀌어요)<em className="req">*</em>
+                <textarea rows={3} maxLength={400} value={draft.shop.brokerNotice ?? ''} onChange={(e) => put('shop', { brokerNotice: e.target.value })} />
+              </label>
+            )}
           </>
         )}
 
@@ -95,6 +114,33 @@ export function Settings() {
             <p className="muted">지금 입력: 주문 한 번에 {won(draft.shipping.fee)}, 상품 합계가 {won(draft.shipping.freeOver)} 이상이면 무료. 여러 농가 상품을 함께 사도 한 번만 받고, 받은 배송비는 상품 금액 비율로 농가 몫을 나눠 정산해요. 상품 화면의 [1개만 사도 무료배송]도 이 기준을 써요.</p>
             <label>택배사<em className="req">*</em><input value={draft.shipping.courier} maxLength={30} onChange={(e) => put('shipping', { courier: e.target.value })} /></label>
             <label>출고 안내<em className="req">*</em><input value={draft.shipping.leadTime} maxLength={80} onChange={(e) => put('shipping', { leadTime: e.target.value })} /></label>
+
+            {/* 배송 달력 (2026-11-20): 상품 상세의 "지금 주문하면 ○일 출고 · ○일 도착 예정" 계산 */}
+            <h3>배송 달력</h3>
+            <p className="muted">상품 화면에 "지금 주문하면 ○일 출고 · ○일 도착 예정"과 소비기한 날짜를 보여 줄 때 써요. 실제 출고 일정과 맞게 적어 주세요.</p>
+            <div className="row">
+              <label>주문 마감 (시, 0~24)<em className="req">*</em><input inputMode="numeric" value={draft.shipping.cutoffHour ?? ''} onChange={(e) => put('shipping', { cutoffHour: e.target.value.replace(/\D/g, '') })} /></label>
+              <label>주문일부터 출고까지 (출고일 수, 0이면 당일)<em className="req">*</em><input inputMode="numeric" value={draft.shipping.leadDays ?? ''} onChange={(e) => put('shipping', { leadDays: e.target.value.replace(/\D/g, '') })} /></label>
+              <label>출고 뒤 도착까지 (일)<em className="req">*</em><input inputMode="numeric" value={draft.shipping.transitDays ?? ''} onChange={(e) => put('shipping', { transitDays: e.target.value.replace(/\D/g, '') })} /></label>
+            </div>
+            <fieldset className="choice">
+              <legend>출고하지 않는 요일</legend>
+              {WEEKDAYS.map((name, d) => (
+                <label key={name} className="inline"><input type="checkbox" checked={(draft.shipping.noShipDays ?? []).includes(d)}
+                  onChange={(e) => put('shipping', { noShipDays: e.target.checked ? [...(draft.shipping.noShipDays ?? []), d].sort() : (draft.shipping.noShipDays ?? []).filter((x) => x !== d) })} /> {name}</label>
+              ))}
+            </fieldset>
+            <label>쉬는 날 (공휴일·명절 휴무, 한 줄에 하나씩 2026-12-25 모양)
+              <textarea rows={4} value={listText(draft.shipping.holidays)} onChange={(e) => put('shipping', { holidays: e.target.value })} />
+            </label>
+            {(() => {
+              try {
+                const plan = previewPlan(draft.shipping)
+                return <p className="muted">미리보기: 지금 주문하면 {dayLabel(plan.shipDate)} 출고 → {dayLabel(plan.arriveDate)} 도착 예정</p>
+              } catch {
+                return null
+              }
+            })()}
           </>
         )}
 

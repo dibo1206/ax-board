@@ -34,6 +34,7 @@
     "test-sqli": "node scripts/sqli-test.js",
     "test-xss": "node scripts/xss-test.js",
     "test-abuse": "node scripts/abuse-test.js",
+    "test-extras": "node scripts/extras-test.js",
     "eval-chat": "node scripts/eval-chat.js",
     "count-ai": "node scripts/count-ai.js",
     "chat-eval": "node scripts/chat-eval.js",

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ProductCard } from './home/Home.jsx'
 import { NotFound } from './NotFound.jsx'
+import { FollowButton } from './Saved.jsx'
 import { get, getPolicy, thumbUrl, won } from './shared.js'
 
 // 손님이 농가별로 보기 (2026-11-09)
@@ -131,6 +132,8 @@ export function FarmPage({ code }) {
           <h1>{clean(farm.name)}</h1>
           {farm.intro && <p className="farm-intro-lg">{farm.intro}</p>}
           <p className="farm-stats"><b>판매 중 상품 {farm.products.length}개</b>{inStock.length < farm.products.length && <span> · 품절 {farm.products.length - inStock.length}개</span>}</p>
+          {/* 단골 맺기 (2026-11-20): 마이페이지 [단골 농가]에서 모아 본다 */}
+          <FollowButton code={farm.seller_code} name={clean(farm.name)} count={farm.followers ?? 0} />
         </div>
         {freeOver > 0 && (
           <p className="farm-ship">

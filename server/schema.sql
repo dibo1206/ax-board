@@ -609,3 +609,18 @@ UPDATE items SET tax_type = CASE WHEN name = '절임배추' THEN 'check' WHEN na
 ALTER TABLE order_items ADD COLUMN IF NOT EXISTS tax_free BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_free_amount INT NOT NULL DEFAULT 0;
 ALTER TABLE order_refunds ADD COLUMN IF NOT EXISTS tax_free_amount INT NOT NULL DEFAULT 0;
+-- 찜한 상품·단골 농가 (2026-11-20): 회원만. 탈퇴하면 지운다 (account.js). 상품·농가가 지워지면 함께 지운다
+CREATE TABLE IF NOT EXISTS wishlists (
+  customer_id INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  product_code TEXT NOT NULL REFERENCES products(product_code) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (customer_id, product_code)
+);
+CREATE INDEX IF NOT EXISTS wishlists_product_idx ON wishlists (product_code);
+CREATE TABLE IF NOT EXISTS farm_follows (
+  customer_id INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  seller_code TEXT NOT NULL REFERENCES sellers(seller_code) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (customer_id, seller_code)
+);
+CREATE INDEX IF NOT EXISTS farm_follows_seller_idx ON farm_follows (seller_code);
