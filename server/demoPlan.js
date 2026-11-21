@@ -2,9 +2,11 @@
 // 실제로 사진을 복사하고 저장하는 쪽은 server/demoBlocks.js
 export const DEMO_CAPTION = '[예시] 참고 사진 — 실제 상품과 다를 수 있어요'
 // 이 기능이 채운 블록인지: 사진이 하나 이상 있고 모든 사진에 [예시] 참고 사진이 적혀 있다 (농가가 사진을 바꾸거나 더하면 아니게 된다)
+// 회사 직영 상품 블록의 회사 사진 아래 글 (2026-11-21). 이 글이나 [예시] 참고 사진만 있으면 이 기능이 채운 블록으로 본다
+export const COMPANY_CAPTION = '회사 제공 사진'
 export function isDemoMade(blocks) {
   const images = (Array.isArray(blocks) ? blocks : []).filter((b) => b?.type === 'image')
-  return images.length > 0 && images.every((b) => b.caption === DEMO_CAPTION)
+  return images.length > 0 && images.every((b) => b.caption === DEMO_CAPTION || b.caption === COMPANY_CAPTION)
 }
 const SAMPLE = /^\[예시\]\s*/
 
@@ -105,4 +107,44 @@ export function planDemoBlocks(product, item, seller, scene = null) {
 
   // 농가 이야기·보관법은 상세 화면 아래 칸에 이미 나와서 블록으로 다시 쓰지 않는다 (README 블록형 상세페이지 '쓸 때 주의')
   return { pairs }
+}
+
+// ---------- 회사 직영 상품 (2026-11-21) ----------
+// 회사 상품은 실제 제품이라 글을 지어내지 않고 회사 홈페이지에서 가져온 설명(■ 제목 단위)만 쓴다.
+// 주문·배송(배송 여정 카드가 보여 줌)과 표시 정보(상품정보 제공 고시 표에 있음)는 뺀다.
+// 설명이 한 덩어리뿐이면 DB 에 저장된 판매 구성(옵션 이름 또는 판매 단위)을 한 쌍 더한다.
+// 사진: 회사가 준 깨끗한 제품 사진(-1, 과일 농축액 베이스는 -2 제품 모음도)을 먼저 [회사 제공 사진]으로,
+// 모자라면 품목 장면 사진을 [예시] 참고 사진으로. 장면 중 '자라는 곳'(2번)은 회사가 직접 기르지 않아 쓰지 않는다. 사진이 모자라면 글만 둔다
+const COMPANY_SKIP = /주문·배송|표시 정보/
+const FLAVOR_SCENE = { strawberry: 'strawberry', peach: 'peach', greengrape: 'grape', yuja: 'citron_tea' }
+export function companySections(description) {
+  return String(description ?? '').split(/\n(?=■ )/).map((part) => part.trim()).filter((part) => part.startsWith('■ '))
+    .map((part) => {
+      const [head, ...rest] = part.split('\n')
+      const body = rest.filter((line) => !line.trim().startsWith('※')).join('\n').replace(/\s*\(회사 소개 글\)\s*$/, '').trim()
+      return { title: head.replace(/^■\s*/, '').trim(), body }
+    })
+    .filter((x) => x.title && x.body && !COMPANY_SKIP.test(x.title))
+}
+export function planCompanyPairs(product, scenes = new Map(), optionNames = []) {
+  const code = product.product_code
+  const name = plainName(product.name)
+  const sections = companySections(product.description).map((x) => ({ title: cut(x.title, 30), body: cut(x.body, 1000) }))
+  if (sections.length < 2) {
+    const sizes = optionNames.length ? optionNames.join(', ') : product.unit
+    if (sizes) sections.push({ title: '구성', body: `고를 수 있는 구성은 ${ieyo(sizes)}.` })
+  }
+  const base = product.item_code === 'fruit_base'
+  const photos = [{ url: `/product-photos/${code}-1.webp`, caption: COMPANY_CAPTION, alt: `${name} 사진` }]
+  if (base) photos.push({ url: `/product-photos/${code}-2.webp`, caption: COMPANY_CAPTION, alt: '윤주톡톡 과일 베이스 제품 모음' })
+  const flavor = base ? FLAVOR_SCENE[code.replace(/^yj_base_/, '')] : product.item_code
+  const scene = flavor ? scenes.get(flavor) : null
+  for (const i of scene?.kind === 'fresh' ? [1, 3, 4] : [1, 2, 3, 4]) {
+    const shot = scene?.shots?.[i - 1]
+    if (shot) photos.push({ url: scenePhotoUrl(scene.item_code, i), caption: DEMO_CAPTION, alt: shot[2] })
+  }
+  return sections.slice(0, 4).map((x, i) => ({
+    photo: photos[i]?.url ?? null, caption: photos[i]?.caption ?? null, alt: photos[i]?.alt ?? `${name} 사진`, keepText: true,
+    title: `POINT ${i + 1} · ${x.title}`, body: x.body,
+  }))
 }

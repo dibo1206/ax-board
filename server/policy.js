@@ -30,12 +30,13 @@ export const DEFAULT_SHIPPING = Object.freeze({
   fee: 4500,
   freeOver: 30000,
   courier: 'CJ대한통운',
-  leadTime: '결제 후 1~3일 안에 출고해요 (주말·공휴일 제외)',
+  // 출고 기준 (2026-11-21): 회사 상품 설명(회사 홈페이지)의 "평일 오후 2시까지 결제하면 그날 보내요"에 맞춘다 → 14시 마감 · 당일 출고(leadDays 0)
+  leadTime: '평일 오후 2시까지 결제하면 그날 출고해요 (주말·공휴일 제외, 농가 사정에 따라 달라질 수 있어요)',
   // 배송 달력 (2026-11-20): 상품 상세의 "지금 주문하면 ○일 출고 · ○일 도착 예정" 계산에 쓴다 (src/shop/delivery.js)
   //  cutoffHour 시 전 주문은 그날 주문으로 친다 / 그날부터 출고일 leadDays 일 뒤 출고 (0 이면 그날) / 출고 뒤 transitDays 일 걸려 도착
   //  noShipDays: 출고하지 않는 요일 (0=일 … 6=토) / holidays: 출고·배송 쉬는 날 (YYYY-MM-DD). 택배는 일요일·쉬는 날 배송하지 않는다고 본다
   cutoffHour: 14,
-  leadDays: 1,
+  leadDays: 0,
   transitDays: 1,
   noShipDays: [0, 6],
   holidays: ['2026-12-25', '2027-01-01'],

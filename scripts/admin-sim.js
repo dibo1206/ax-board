@@ -275,7 +275,7 @@ try {
   const hItems = (await db.query('SELECT name, ship_from FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE o.order_no = $1 ORDER BY oi.id', [preTry.data?.orderNo])).rows
   record('예약', '예약 상품 주문: 주문 상품·농가 배송에 출고 시작일 저장 (같은 농가는 함께, 다른 농가는 바로)', `결제 ${prePaid.status}, 해남 배송 ${hShip?.ship_from ?? '-'}, 남원 배송 ${nShip?.ship_from ?? '없음'}, 주문 상품 ${hItems.map((i) => `${i.name.replace('[예시] ', '')} ${i.ship_from ?? '-'}`).join(', ')}`,
     prePaid.status === 200 && hShip?.ship_from === preorder.ship_from && !nShip?.ship_from && hItems.filter((i) => i.ship_from).length === 1)
-  record('예약', '주문 조회의 출고 안내', String(looked?.shipping_note ?? '').replace(/\n/g, ' / '), /11월 20일부터/.test(looked?.shipping_note ?? '') && /나머지 상품은 결제 후 1~3일/.test(looked?.shipping_note ?? ''))
+  record('예약', '주문 조회의 출고 안내', String(looked?.shipping_note ?? '').replace(/\n/g, ' / '), /11월 20일부터/.test(looked?.shipping_note ?? '') && /나머지 상품은 평일 오후 2시까지/.test(looked?.shipping_note ?? ''))
   const afterPre = (await call(admin, 'GET', '/admin/dashboard')).data.todo
   record('예약', '대시보드: 예약 대기 주문은 따로, 남원 몫은 준비할 주문으로', `예약 대기 ${before.preorders_waiting}→${afterPre.preorders_waiting} (가장 빠른 출고 ${afterPre.next_ship_from}), 준비할 주문 ${before.to_prepare}→${afterPre.to_prepare}`,
     afterPre.preorders_waiting === before.preorders_waiting + 1 && afterPre.to_prepare === before.to_prepare + 1)
@@ -307,11 +307,11 @@ try {
   const where = await ask('절임배추 언제 받을 수 있어요?')
   record('상담', '"절임배추 언제 받을 수 있어요?" → 예약 출고일', String(where.answer).slice(0, 120), /11월 20일부터/.test(where.answer))
   const gotgam = await ask('곶감 언제 보내요?')
-  record('상담', '"곶감 언제 보내요?" → 예약 곶감과 바로 보내는 곶감을 나눠 답함', String(gotgam.answer).slice(0, 160), /12월/.test(gotgam.answer) && /1~3일/.test(gotgam.answer))
+  record('상담', '"곶감 언제 보내요?" → 예약 곶감과 바로 보내는 곶감을 나눠 답함', String(gotgam.answer).slice(0, 160), /12월/.test(gotgam.answer) && /오후 2시|그날 출고/.test(gotgam.answer))
   const list = await ask('예약 판매하는 거 있어요?')
   record('상담', '"예약 판매하는 거 있어요?" → 예약 상품 목록', String(list.answer).slice(0, 160), /예약 판매하는 상품은 \d+개/.test(list.answer))
   const normal = await ask('사과 언제 와요?')
-  record('상담', '"사과 언제 와요?" → 결제 후 1~3일', String(normal.answer).slice(0, 120), /1~3일/.test(normal.answer) && !/예약 상품이라/.test(normal.answer))
+  record('상담', '"사과 언제 와요?" → 오후 2시까지 결제하면 그날 출고', String(normal.answer).slice(0, 120), /오후 2시|그날 출고/.test(normal.answer) && !/예약 상품이라/.test(normal.answer))
 } catch (error) {
   console.error(`시뮬레이션 중단: ${error.stack}`)
   exitCode = 1

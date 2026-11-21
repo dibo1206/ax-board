@@ -15,7 +15,7 @@ import { readBlocks } from './blocks.js'
 import { pool } from './db.js'
 import { scheduleRagSync } from './rag.js'
 import { UPLOAD_DIR } from './uploads.js'
-import { DEMO_CAPTION, isDemoMade, planDemoBlocks } from './demoPlan.js'
+import { DEMO_CAPTION, isDemoMade, planCompanyPairs, planDemoBlocks } from './demoPlan.js'
 
 // 품목 장면 목록 (없거나 깨졌으면 장면 없이 예전처럼)
 async function loadScenes() {
@@ -51,11 +51,13 @@ export async function fillDemoBlocks({ force = false, refresh = false, log = () 
               (SELECT count(*) FILTER (WHERE r.info_match = 'no') >= 3 AND count(*) FILTER (WHERE r.info_match = 'no') * 2 >= count(r.info_match)
                  FROM reviews r WHERE r.product_code = p.product_code AND NOT r.hidden) AS info_disputed
          FROM products p LEFT JOIN sellers s ON s.seller_code = p.seller_code
-        WHERE p.name LIKE '[예시]%' ${force || refresh ? '' : "AND p.detail_blocks = '[]'::jsonb"}
+        -- (2026-11-21) 회사 직영 상품도: 회사 홈페이지 설명과 회사 사진으로 같은 POINT 지그재그를 만든다 (planCompanyPairs)
+        WHERE (p.name LIKE '[예시]%' OR (s.is_company AND p.status = 'active')) ${force || refresh ? '' : "AND p.detail_blocks = '[]'::jsonb"}
         ORDER BY p.product_code`,
     )
     const items = new Map((await pool.query('SELECT item_code, status, category, recipes, show_brix FROM items')).rows.map((r) => [r.item_code, r]))
     const scenes = await loadScenes()
+    const optionNames = new Map((await pool.query("SELECT product_code, array_agg(name ORDER BY sort_order, id) AS names FROM product_options WHERE status = 'active' GROUP BY product_code")).rows.map((r) => [r.product_code, r.names]))
     for (const p of rows) {
       try {
         // refresh: 빈 상품과 이 기능이 채운 상품만 (농가·관리자가 쓴 블록은 건드리지 않는다)
@@ -63,15 +65,21 @@ export async function fillDemoBlocks({ force = false, refresh = false, log = () 
         if (refresh && !force && !empty && !isDemoMade(p.detail_blocks)) { result.skipped += 1; continue }
         const seller = p.seller_name ? { name: p.seller_name, region: p.seller_region } : null
         // 회사 직영 상품은 실제 제품이라 품목 장면(AI 사진)을 쓰지 않는다 (대표 사진·레시피 사진으로만)
-        const plan = planDemoBlocks(p, items.get(p.item_code), seller, p.is_company ? null : scenes.get(p.item_code))
+        const company = p.is_company && !/^\[예시\]/.test(p.name) // 실제 회사 제품 ([예시] 회사 상품은 예전처럼)
+        const plan = company
+          ? { pairs: planCompanyPairs(p, scenes, optionNames.get(p.product_code) ?? []) }
+          : planDemoBlocks(p, items.get(p.item_code), seller, p.is_company ? null : scenes.get(p.item_code))
         const blocks = []
-        for (const pair of plan.pairs) {
-          const buffer = await readSource(pair.photo)
+        for (const [n, pair] of plan.pairs.entries()) {
+          // 제목은 모두 "POINT n · 제목" 모양으로 (장면 사진이 없는 품목도 화면 모양을 같게, 2026-11-21)
+          const title = /^POINT\s*\d/.test(pair.title ?? '') ? pair.title : `POINT ${n + 1} · ${pair.title}`
+          const buffer = pair.photo ? await readSource(pair.photo) : null
+          if (!buffer && pair.keepText) { blocks.push({ type: 'text', title, body: pair.body }); continue } // 회사 설명은 사진이 없어도 글은 남긴다
           if (!buffer) continue // 사진이 없으면 그 칸은 빼고 다음으로
           const url = await saveOptimized(p.product_code, buffer, { wide: true })
           result.photos += 1
           // 사진 → 글 순서로 넣으면 화면이 둘을 한 줄로 묶어 지그재그로 보여 준다 (src/App.jsx DetailBlocks)
-          blocks.push({ type: 'image', url, alt: pair.alt, caption: DEMO_CAPTION }, { type: 'text', title: pair.title, body: pair.body })
+          blocks.push({ type: 'image', url, alt: pair.alt, caption: pair.caption ?? DEMO_CAPTION }, { type: 'text', title, body: pair.body })
         }
         const checked = readBlocks(blocks, p.product_code)
         const banned = findBanned(blocks.map((b) => `${b.title ?? ''} ${b.body ?? ''}`).join(' '))
