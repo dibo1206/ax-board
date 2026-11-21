@@ -8,6 +8,7 @@ import { blocksText } from './blocks.js'
 import { embed, keyLoaded } from './ai.js'
 import { cached, clearCache } from './cache.js'
 import { pool } from './db.js'
+import { dropSameText } from './similar.js'
 import { POLICIES, SHIPPING, SHOP } from './policy.js'
 
 export const RAG_MODEL = process.env.RAG_MODEL || 'baai/bge-m3'
@@ -213,10 +214,12 @@ export async function searchChunks(query, { allow = () => true, limit = 5 } = {}
     const index = await loadIndex()
     if (!index.length) return []
     const vector = await cached(`rag:query:${query}`, 3_600_000, async () => normalize((await embed(RAG_MODEL, [query], 4000))[0]))
-    return index.filter(allow)
+    // 같은 글이 두 번 들어 있으면(자주 묻는 질문 + 담당자 Q&A 등) 하나만 남긴다
+    //  → 같은 글끼리 1·2등을 다퉈 답을 못 내거나, AI 자료에 같은 글이 두 번 들어가 토큰을 낭비하지 않게
+    const ranked = index.filter(allow)
       .map((c) => ({ key: c.key, text: c.text, item_code: c.item_code, product_code: c.product_code, trusted: c.trusted, score: dot(vector, c.embedding) }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit)
+      .sort((a, b) => b.score - a.score || Number(b.trusted) - Number(a.trusted))
+    return dropSameText(ranked, limit)
   } catch (error) {
     console.warn(`[rag] 검색 실패: ${error.message}`)
     return []
