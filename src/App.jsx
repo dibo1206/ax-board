@@ -78,10 +78,13 @@ function Gallery({ product }) {
 
 // 상품 설명: 글만 보여 준다 (HTML로 해석하지 않음). 빈 줄로 문단을 나눈다
 function Description({ text }) {
+  const [open, setOpen] = useState(false)
   if (!text) return null
+  const long = text.length > 320 // 긴 설명은 휴대폰에서 접어 둔다 (접기는 CSS 에서 860px 이하만, 컴퓨터 화면은 그대로 다 보인다)
   return (
     <section className="box">
       <h3>상품 설명</h3>
+      <div className={`desc-fold${long && !open ? ' is-folded' : ''}`}>
       {/* "■ 제목" 줄은 섹션 제목으로 (AI 초안의 상세페이지 패턴) */}
       {text.split(/\n{2,}/).map((para, i) => {
         const [first, ...rest] = para.split('\n')
@@ -89,6 +92,8 @@ function Description({ text }) {
           ? <div key={i}><h4 className="para-title">{first.replace(/^■\s*/, '')}</h4>{rest.length > 0 && <p className="para">{rest.join('\n')}</p>}</div>
           : <p key={i} className="para">{para}</p>
       })}
+      </div>
+      {long && <button type="button" className="desc-more" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? '접기' : '상품 설명 더 보기'}</button>}
     </section>
   )
 }
@@ -205,6 +210,20 @@ function RestockForm({ productCode, optionId }) {
 
 function BuyBox({ product, option, onPick, onAsk }) {
   const [quantity, setQuantity] = useState(1)
+  // 휴대폰: 구매 칸이 화면 밖으로 나가면 아래에 가격·장바구니·바로 구매 줄을 붙여 둔다 (CSS 에서 860px 이하만 보인다)
+  const buyRef = useRef(null)
+  const [away, setAway] = useState(false)
+  useEffect(() => {
+    const box = buyRef.current
+    if (!box || typeof IntersectionObserver === 'undefined') return undefined
+    const watch = new IntersectionObserver(([entry]) => setAway(!entry.isIntersecting && entry.boundingClientRect.top < 0))
+    watch.observe(box)
+    return () => watch.disconnect()
+  })
+  useEffect(() => {
+    document.body.classList.toggle('has-buy-bar', away)
+    return () => document.body.classList.remove('has-buy-bar')
+  }, [away])
   const soldOut = (
     <>
       <div className="actions">
@@ -239,8 +258,9 @@ function BuyBox({ product, option, onPick, onAsk }) {
   const price = option ? option.price : product.price
   const max = Math.min(option ? option.stock : product.stock, 99)
   const buyUrl = `/checkout?item=${encodeURIComponent(product.product_code)}${option ? `&option=${option.id}` : ''}&qty=${quantity}`
+  const cartLabel = `${product.name}${option ? ` ${option.name}` : ''}`
   return (
-    <div className="buy">
+    <div className="buy" ref={buyRef}>
       {pick}
       <div className="buy-row">
         <label className="qty">수량
@@ -255,6 +275,13 @@ function BuyBox({ product, option, onPick, onAsk }) {
         <button type="button" className="button ghost" onClick={() => addToCart(product.product_code, quantity, option?.id ?? null, `${product.name}${option ? ` ${option.name}` : ''}`)}>장바구니 담기</button>
         <a className="button" href={buyUrl}>{product.preorder ? '예약 구매' : '바로 구매'}</a>
       </div>
+      {away && (
+        <div className="buy-sticky">
+          <span className="buy-sticky-total"><small>총 금액</small><b>{won(price * quantity)}</b></span>
+          <button type="button" className="button ghost" onClick={() => addToCart(product.product_code, quantity, option?.id ?? null, cartLabel)}>장바구니</button>
+          <a className="button" href={buyUrl}>{product.preorder ? '예약 구매' : '바로 구매'}</a>
+        </div>
+      )}
     </div>
   )
 }
