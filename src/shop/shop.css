@@ -1640,3 +1640,10 @@ body:has(.shop) { background: #fafaf8; }
 .shop .pgrid:not(.pgrid-list) .pcard-wrap .pcard { flex: 1; }
 .shop .pgrid:not(.pgrid-list) .pcard-wrap .quick-cart { margin-top: auto; flex: none; }
 .shop .pgrid:not(.pgrid-list) .pcard-wrap .pcard { padding-bottom: 10px; }
+
+/* 휴대폰: "함께 보면 좋은 상품" 카드 — 사진이 왼쪽으로 쏠리지 않게 가운데로 (글·태그도 같이 가운데) */
+@media (max-width: 640px) {
+  .shop .picks .card { align-items: center; text-align: center; }
+  .shop .picks .card .thumb { width: 100%; max-width: 260px; height: auto; aspect-ratio: 1; object-fit: cover; margin-inline: auto; }
+  .shop .picks .card .reasons { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+}
