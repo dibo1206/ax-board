@@ -1,13 +1,12 @@
 // 상품 상세에 붙는 배송 달력·소비기한·판매자 정보 (2026-11-20)
 //  - DeliveryLine: 가격 밑 한 줄 "지금 주문하면 ○일 출고 · ○일 도착 예정"
-//  - DeliveryBox: 상품 설명 탭의 [배송·소비기한] 칸 (출고·도착 날짜, 마감 시각, 소비기한 날짜 또는 상태로 판단하는 안내)
+//  - ExpiryNote: 상품 설명 탭의 소비기한 (참고) 줄 (배송 여정 카드 아래)
 //  - SellerBox: 판매자 정보 + 통신판매중개자 고지 [회사·법률 확인 필요]
 // 날짜 계산은 src/shop/delivery.js (설정은 관리자 [쇼핑몰 설정 > 배송])
 import { useEffect, useState } from 'react'
 import { dayLabel, deliveryPlan, expiryDate, expiryDays } from './delivery.js'
 import { getPolicy } from './shared.js'
 
-const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토']
 // 사업자등록번호 10자리는 000-00-00000 모양으로
 const bizNo = (v) => { const d = String(v ?? '').replace(/\D/g, ''); return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}` : v }
 
@@ -44,36 +43,27 @@ export function DeliveryLine({ product }) {
   )
 }
 
-export function DeliveryBox({ product }) {
+// 소비기한 (참고) 한 줄 (2026-11-21): 상품 설명 탭의 배송 여정 카드(DeliveryJourney) 바로 아래.
+// 예전 [배송·소비기한] 칸의 출고·도착·마감·택배 줄은 배송 여정 카드가 보여 주므로 소비기한만 남겼다
+export function ExpiryNote({ product }) {
   const policy = usePolicy()
   const now = useNow()
   if (!policy?.shipping) return null
-  const s = policy.shipping
-  const plan = deliveryPlan(s, { now, shipFrom: product.ship_from })
-  const expiryText = product.notice?.expiry ?? ''
+  const plan = deliveryPlan(policy.shipping, { now, shipFrom: product.ship_from })
+  const expiryText = product.notice?.expiry ?? ""
   const until = expiryDate(plan.arriveDate, expiryText)
-  const noShip = [...(s.noShipDays ?? [])].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map((d) => WEEKDAY[d]).join('·') // 월요일부터: 토·일
   return (
-    <section className="box delivery-box">
-      <h3>배송·소비기한</h3>
+    <section className="box expiry-note">
       <table className="notice-table"><tbody>
-        <tr><th scope="row">지금 주문하면</th><td>
-          {product.sold_out ? <span className="muted">품절이라 지금은 주문할 수 없어요</span> : <>
-            <b>{dayLabel(plan.shipDate)}</b> 출고 → <b>{dayLabel(plan.arriveDate)}</b> 도착 예정
-            {plan.preorder && <span className="muted"> (예약 판매: 출고 시작일부터 보내요)</span>}
-          </>}
-        </td></tr>
-        <tr><th scope="row">주문 마감</th><td>출고일 {plan.cutoffHour}시 전 주문은 그날 주문으로 쳐요{noShip && ` · ${noShip}요일·공휴일은 출고하지 않아요`}</td></tr>
-        <tr><th scope="row">택배</th><td>{s.courier} · 출고 뒤 보통 {s.transitDays ?? 1}일 걸려요</td></tr>
         <tr><th scope="row">소비기한 (참고)</th><td>
           {until && !product.sold_out
             ? <><b>{dayLabel(until)}</b>까지 <span className="muted">(도착 예정일부터 {expiryDays(expiryText)}일 기준 · {expiryText})</span></>
             : expiryText
-              ? <>{expiryText}{!until && <span className="muted"> · {product.category === '가공품' ? '받은 상품 라벨에 적힌 날짜를 확인해 주세요' : '신선 농산물은 날짜보다 받은 뒤 상태(색·향·무름)로 판단해 주세요'}</span>}</>
+              ? <>{expiryText}{!until && <span className="muted"> · {product.category === "가공품" ? "받은 상품 라벨에 적힌 날짜를 확인해 주세요" : "신선 농산물은 날짜보다 받은 뒤 상태(색·향·무름)로 판단해 주세요"}</span>}</>
               : <span className="muted">판매자가 아직 적지 않았어요. 아래 보관·섭취 안내를 참고해 주세요</span>}
         </td></tr>
       </tbody></table>
-      <p className="note">날짜는 예상이에요. 택배사 사정·날씨·주문이 몰릴 때는 하루 이틀 늦어질 수 있어요. 소비기한은 보관법을 지켰을 때 기준이고, 제품 라벨에 적힌 날짜가 있으면 라벨이 우선이에요.</p>
+      <p className="note">소비기한은 보관법을 지켰을 때 기준이고, 제품 라벨에 적힌 날짜가 있으면 라벨이 우선이에요.</p>
     </section>
   )
 }
