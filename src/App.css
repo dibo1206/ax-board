@@ -216,6 +216,13 @@ a.card { text-decoration: none; height: 100%; box-sizing: border-box; }
 
 /* AI 초안 · 자주 묻는 질문 · 단위 가격 */
 .ai-draft { display: flex; flex-direction: column; gap: 8px; border-style: solid; border-color: var(--accent); }
+/* 말로 상품 등록하기 (2026-11-21): 새 상품 등록 맨 위, 큰 글씨 · 큰 버튼 (어르신 농가) */
+.speak-fill { display: flex; flex-direction: column; gap: 10px; border-style: solid; border-color: var(--accent); background: #F3F8EE; }
+.speak-fill strong { font-size: 1.15em; }
+.speak-fill textarea { width: 100%; box-sizing: border-box; font-size: 1.1em; line-height: 1.5; padding: 10px 12px; }
+.speak-fill .actions .button { font-size: 1.05em; padding: 10px 18px; }
+.speak-fill .mic.on { background: #C0392B; border-color: #C0392B; color: #fff; }
+.speak-fill .speak-result p { margin: 2px 0; }
 .faq-edit .row { align-items: end; }
 /* 상세 블록 편집 (관리자·판매자 상품 화면, src/admin/DetailBlocks.jsx) */
 .detail-blocks-edit .block-list { display: flex; flex-direction: column; gap: 10px; margin: 8px 0; padding: 0; list-style: none; }

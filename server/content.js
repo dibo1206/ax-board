@@ -13,6 +13,7 @@ import { LIMITS, MAX_BLOCKS } from './blocks.js'
 import { pool } from './db.js'
 import { generateRecipePhoto, imageKeyLoaded } from './imagegen.js'
 import { createLimiter } from './limit.js'
+import { checkAiFields, parseSpoken } from './speakParse.js'
 
 // 상세페이지 패턴: 많이 쓰는 상세페이지 순서를 몇 가지로 정리 (멘토 피드백: 패턴을 고르면 일관되게)
 export const TEMPLATES = {
@@ -340,3 +341,45 @@ export async function itemDraft(req, res) {
 }
 
 export const listTemplates = (req, res) => res.json(Object.entries(TEMPLATES).map(([key, t]) => ({ key, ...t })))
+
+// ---------- 말로 상품 등록하기 (2026-11-21) ----------
+// POST /ai/product-parse { text } → 상품 칸 (채우기만, 저장하지 않음)
+//  1) 규칙으로 뽑는다 (AI 0회). 2) 품목이나 가격을 못 찾았을 때만 AI 에게 묻고, AI 가 준 숫자는 원래 말에 있는 것만 쓴다
+const tooManyParses = createLimiter({ limit: 40, windowMs: 60 * 60_000, key: (req) => `parse:${(req.admin ?? req.seller)?.loginId}` })
+const koreaToday = () => new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10)
+export async function productParse(req, res) {
+  const said = text(req.body?.text, 500)
+  if (said.length < 2) return res.status(400).json({ error: '파실 상품을 말하듯 적어 주세요. 예: 부사 사과 5키로 3만 원, 당도 14' })
+  if (tooManyParses(req)) return res.status(429).json({ error: '너무 많이 눌렀어요. 잠시 뒤에 다시 해 주세요.' })
+  const items = (await pool.query("SELECT item_code, name, category, brix_standards FROM items ORDER BY name")).rows
+  const today = koreaToday()
+  const fields = parseSpoken(said, items, today)
+  let aiCalls = 0
+  const needAi = !fields.item_code || (!fields.price && !fields.options)
+  if (needAi && keyLoaded()) {
+    const list = items.map((i) => `${i.item_code}=${i.name}`).join(', ')
+    const prompt = [
+      '농가가 파는 상품을 말한 문장이다. 아래 형식의 JSON 하나만 출력한다. 문장에 없는 값은 null 로 둔다. 숫자를 지어내지 않는다.',
+      `[품목 목록] ${list}`,
+      `[문장] ${said}`,
+      '[형식] {"item_code": "목록의 코드 또는 null", "name": "상품 이름 (품종 품목 무게)", "price": 숫자 또는 null, "unit": "판매 단위 예: 5kg 1박스", "options": [{"name": "5kg 1박스", "price": 숫자}] 또는 [], "brix": 숫자 또는 null, "stock": 숫자 또는 null}',
+    ].join('\n')
+    try {
+      const result = await complete([{ role: 'system', content: RULES }, { role: 'user', content: prompt }], { maxTokens: 600, timeoutMs: 30_000, lightThinking: true })
+      aiCalls = 1
+      const json = JSON.parse(String(result.text).replace(/^[^{]*/, '').replace(/[^}]*$/, ''))
+      const checked = checkAiFields(json, said, items, today)
+      for (const [k, v] of Object.entries(checked)) if (fields[k] === undefined) fields[k] = v // 규칙으로 찾은 값이 먼저
+    } catch (error) {
+      if (error.code !== 'DAILY_LIMIT') describeAiError(error)
+      // AI 가 안 되면 규칙으로 찾은 만큼만 채운다
+    }
+  }
+  // 숫자 칸 모양 다시 확인 (서버가 저장할 때도 한 번 더 검사한다)
+  for (const k of ['price', 'stock', 'brix', 'count_per_box']) if (fields[k] !== undefined && !/^\d+(\.\d)?$/.test(String(fields[k]))) delete fields[k]
+  const LABELS = { item_code: '품목', variety: '품종', name: '상품 이름', price: '가격', unit: '판매 단위', options: '판매 옵션', brix: '당도', stock: '재고', count_per_box: '박스당 개수', harvest_date: '수확일' }
+  const filled = Object.keys(LABELS).filter((k) => fields[k] !== undefined)
+  const missing = ['item_code', 'name', 'price', 'unit', 'stock'].filter((k) => fields[k] === undefined && !(k === 'price' && fields.options) && !(k === 'stock' && fields.options))
+  console.log(`[content] ${(req.admin ?? req.seller).loginId} 말로 등록 · 채운 칸 ${filled.length} · AI ${aiCalls}회`)
+  res.json({ fields, filled: filled.map((k) => LABELS[k]), missing: missing.map((k) => LABELS[k]), aiCalls })
+}
