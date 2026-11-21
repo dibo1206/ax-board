@@ -21,7 +21,7 @@ import { describeRecommendation, loadActive, readWish, recommend } from './recom
 import { RETURNS, SHIPPING, SHOP } from './policy.js'
 import { isPreorder, shipDateText } from './preorder.js'
 import { RAG_ANSWER_GAP, RAG_ANSWER_MIN, RAG_ASK_MIN, RAG_MATERIAL_MIN, RAG_OVERLAP_MIN, searchChunks } from './rag.js'
-import { coverage, mostSimilar, similarity } from './similar.js'
+import { coverage, mostSimilar, sameText, similarity } from './similar.js'
 import { findBanned } from './banned.js'
 import { publicItem } from './items.js'
 import { ACTIVE_OPTIONS_SQL } from './options.js'
@@ -1113,10 +1113,11 @@ export function quotable(top, message, itemNames = []) {
 }
 
 // 점수가 높고, 다른 주제의 자료와 충분히 벌어졌을 때만 찾은 글을 답으로 낸다. 비슷하면 어느 쪽이 맞는지 모르는 것이다
+// 1등과 사실상 같은 글은 경쟁자가 아니다 (같은 답이 두 군데 있으면 점수가 똑같아도 어느 쪽이든 맞다)
 export function chooseQuote(evidence, message, { itemNames = [], min = RAG_ANSWER_MIN, gap = RAG_ANSWER_GAP } = {}) {
   const top = evidence[0]
   if (!top || top.score < min || !quotable(top, message, itemNames)) return null
-  const rival = evidence[1] // 같은 품목이어도 보관과 레시피는 다른 주제다
+  const rival = evidence.slice(1).find((c) => !sameText(top.text, c.text)) // 같은 품목이어도 보관과 레시피는 다른 주제다
   return rival && top.score - rival.score < gap ? null : top
 }
 

@@ -50,6 +50,27 @@ export function coverage(question, text) {
   return same / A.size
 }
 
+// 두 글이 사실상 같은 내용인지 (자주 묻는 질문과 담당자 Q&A에 같은 답을 넣은 경우 등)
+// 같은 품목이라도 보관법과 레시피처럼 다른 주제는 글자가 많이 달라서 여기 걸리지 않는다
+export const SAME_TEXT_MIN = 0.85
+export const sameText = (a, b) => similarity(a, b) >= SAME_TEXT_MIN
+
+// 점수 높은 순 목록에서 사실상 같은 글은 하나만 남긴다
+// 같은 글이면 회사가 확인한 글(trusted)을 남기고, 점수는 둘 중 높은 쪽을 쓴다 (내용이 같으니 순서가 바뀌지 않게)
+export function dropSameText(list, limit = Infinity) {
+  const kept = []
+  for (const c of list) {
+    const twin = kept.findIndex((k) => sameText(k.text, c.text))
+    if (twin < 0) {
+      if (kept.length >= limit) break
+      kept.push(c)
+    } else if (c.trusted && !kept[twin].trusted) {
+      kept[twin] = { ...c, score: Math.max(c.score, kept[twin].score) }
+    }
+  }
+  return kept
+}
+
 // 후보 중 가장 비슷한 것 (기준 미만이면 null)
 export function mostSimilar(question, candidates, min = 0.6) {
   let best = null
