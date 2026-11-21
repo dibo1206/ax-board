@@ -8,7 +8,7 @@ import { findBanned } from '../server/banned.js'
 import { parseDraft } from '../server/content.js'
 import { validateProduct } from '../server/validate.js'
 import { brixGauge, headline, keyFacts, optionRows, pairBlocks, storageSteps } from '../src/shop/detailFacts.js'
-import { DEMO_CAPTION, fillCopy, isDemoMade, planDemoBlocks, sceneValues, withJosa } from '../server/demoPlan.js'
+import { COMPANY_CAPTION, DEMO_CAPTION, companySections, fillCopy, isDemoMade, planCompanyPairs, planDemoBlocks, sceneValues, withJosa } from '../server/demoPlan.js'
 import { readFileSync, existsSync } from 'node:fs'
 
 let failed = 0
@@ -195,6 +195,17 @@ check('장면 사진 파일: 회사 직영만인 배즙·매실청 말고는 모
 const allCopy = SCENES.items.flatMap((it) => it.shots.filter((s) => s[4]).map((s) => `${s[3]} ${s[4]}`)).join(' ')
 check('장면 설명 글에 금지어(효능 표현)가 없다', findBanned(allCopy).length === 0, findBanned(allCopy).join(', '))
 check('예시 블록 알아보기: 사진이 모두 [예시] 참고 사진이면 이 기능이 채운 것', isDemoMade([{ type: 'image', url: 'a', caption: DEMO_CAPTION }, { type: 'text', body: '글' }]) && !isDemoMade([{ type: 'image', url: 'a', caption: '농가 사진' }]) && !isDemoMade([{ type: 'text', body: '글만' }]) && !isDemoMade([]))
+
+// 회사 직영 상품 (2026-11-21): 회사 홈페이지 설명만 쓰고, 주문·배송·표시 정보는 빼고, 회사 사진 먼저
+const companyDesc = '■ 제품 소개\n사과 소개 글이에요. (회사 소개 글)\n\n■ 주문·배송 (회사 안내)\n평일 오후 2시까지 결제하면 그날 보내요.\n\n※ 가격·재고는 [예시]예요.'
+const secs = companySections(companyDesc)
+check('회사 설명: 주문·배송은 빼고 제품 소개만, (회사 소개 글) 표시와 ※ 줄은 뗀다', secs.length === 1 && secs[0].title === '제품 소개' && secs[0].body === '사과 소개 글이에요.', JSON.stringify(secs))
+const companyScenes = new Map([['apple', { item_code: 'apple', kind: 'fresh', shots: [[0, 0, '가까이'], [0, 0, '사과밭'], [0, 0, '상자'], [0, 0, '손']] }]])
+const cp = planCompanyPairs({ product_code: 'yj_apple_set', item_code: 'apple', name: '명품 사과세트', description: companyDesc }, companyScenes, ['3kg', '5kg'])
+check('회사 상품: POINT 1 은 회사 사진, 설명이 하나면 저장된 구성으로 POINT 2', cp.length === 2 && cp[0].title === 'POINT 1 · 제품 소개' && cp[0].photo === '/product-photos/yj_apple_set-1.webp' && cp[0].caption === COMPANY_CAPTION && cp[1].title === 'POINT 2 · 구성' && cp[1].body === '고를 수 있는 구성은 3kg, 5kg이에요.', JSON.stringify(cp))
+check('회사 상품: 모자란 사진은 장면 사진([예시] 참고 사진), 자라는 곳(2번)은 쓰지 않음', cp[1].photo === '/product-photos/detail/apple-1.webp' && cp[1].caption === DEMO_CAPTION && !cp.some((x) => x.photo?.endsWith('apple-2.webp')))
+check('회사 상품: 글에 주문·배송 약속이 없음', !cp.some((x) => /그날 보내|오후 2시/.test(x.body)))
+check('회사 사진 블록도 이 기능이 채운 것으로 알아본다 (새로 만들기 대상)', isDemoMade([{ type: 'image', url: 'a', caption: COMPANY_CAPTION }, { type: 'image', url: 'b', caption: DEMO_CAPTION }]))
 
 console.log(`\n${count - failed}/${count} 통과`)
 process.exit(failed ? 1 : 0)
