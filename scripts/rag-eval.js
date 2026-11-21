@@ -4,7 +4,7 @@
 // AI를 부르지 않는다
 import 'dotenv/config'
 import { readFile, writeFile } from 'node:fs/promises'
-import { chooseQuote, findEvidence, loadCatalog, pickContext } from '../server/chat.js'
+import { chooseQuote, findEvidence, loadCatalog, pickContext, quoteContext } from '../server/chat.js'
 import { pool } from '../server/db.js'
 import { buildChunks, prepareRag, RAG_ANSWER_GAP, RAG_ANSWER_MIN, RAG_MODEL } from '../server/rag.js'
 import { similarity } from '../server/similar.js'
@@ -29,7 +29,7 @@ for (const q of questions) {
 
 const inTop = (list, r, k) => list.slice(0, k).some((c) => r.expected.includes(c.key))
 function summarize(list, min = RAG_ANSWER_MIN, gap = RAG_ANSWER_GAP) {
-  const quoted = (r) => chooseQuote(r.evidence, r.q.question, { itemNames: r.ctx.items.map((i) => i.name), min, gap })
+  const quoted = (r) => chooseQuote(r.evidence, r.q.question, { ...quoteContext(r.ctx), min, gap })
   const hasAnswer = list.filter((r) => r.q.expect !== 'none')
   const noAnswer = list.filter((r) => r.q.expect === 'none')
   return {
@@ -68,7 +68,7 @@ console.log(`\n${HEAD}\n${groups.map(([name, list]) => row(name, summarize(list)
 const cell = (s) => String(s ?? '').replace(/\|/g, '\\|')
 const detail = results.map((r) => {
   const top = r.evidence[0]
-  const said = chooseQuote(r.evidence, r.q.question, { itemNames: r.ctx.items.map((i) => i.name) })
+  const said = chooseQuote(r.evidence, r.q.question, quoteContext(r.ctx))
   const verdict = r.q.expect === 'none' ? (said ? '틀림' : '바르게 안 답함') : said ? (inTop(r.evidence, r, 1) ? '맞음' : '틀림') : '답 안 함'
   const rival = r.evidence[1]
   return `| ${r.q.split} | ${cell(r.q.question)} | ${cell(r.q.expect)} | ${top ? `${cell(top.key)} (${top.score.toFixed(3)}, 차이 ${rival ? (top.score - rival.score).toFixed(3) : '-'})` : '-'} | ${verdict} |`

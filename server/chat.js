@@ -20,7 +20,7 @@ import { findSensitive, maskPersonal } from './privacy.js'
 import { describeRecommendation, loadActive, readWish, recommend } from './recommend.js'
 import { RETURNS, SHIPPING, SHOP } from './policy.js'
 import { isPreorder, shipDateText } from './preorder.js'
-import { RAG_ANSWER_GAP, RAG_ANSWER_MIN, RAG_ASK_MIN, RAG_MATERIAL_MIN, RAG_OVERLAP_MIN, searchChunks } from './rag.js'
+import { notAnAnswer, RAG_ANSWER_GAP, RAG_ANSWER_MIN, RAG_ASK_MIN, RAG_MATERIAL_MIN, RAG_OVERLAP_MIN, searchChunks } from './rag.js'
 import { coverage, mostSimilar, sameText, similarity } from './similar.js'
 import { findBanned } from './banned.js'
 import { publicItem } from './items.js'
@@ -1052,7 +1052,9 @@ async function answerSimilar(message, catalog, ctx) {
   const base = { handoff: false, action: null, blocked: false }
   // 담당자 답이 가장 믿을 만하다. 같은 품목의 상품 Q&A만 본다
   // 판매자가 쓴 답이 다른 농가 상품 질문에 나가지 않게, 상품 페이지에서는 그 상품의 답만 쓴다
-  const usable = qna.filter((q) => mine.includes(q.item_code) && !hasContact(q.answer) && (!ctx.current || q.product_code === ctx.current.product_code))
+  // 사이트 의견·불만에 단 답("수정하겠습니다", "맞습니다")은 상품 정보가 아니라 쓰지 않는다
+  const usable = qna.filter((q) => mine.includes(q.item_code) && !hasContact(q.answer) && !notAnAnswer(q.question, q.answer)
+    && (!ctx.current || q.product_code === ctx.current.product_code))
   const staff = mine.length ? mostSimilar(message, usable, 0.5) : null
   if (staff) {
     return {
@@ -1114,15 +1116,25 @@ export function quotable(top, message, itemNames = []) {
 
 // 점수가 높고, 다른 주제의 자료와 충분히 벌어졌을 때만 찾은 글을 답으로 낸다. 비슷하면 어느 쪽이 맞는지 모르는 것이다
 // 1등과 사실상 같은 글은 경쟁자가 아니다 (같은 답이 두 군데 있으면 점수가 똑같아도 어느 쪽이든 맞다)
-export function chooseQuote(evidence, message, { itemNames = [], min = RAG_ANSWER_MIN, gap = RAG_ANSWER_GAP } = {}) {
+// 상품 Q&A는 그 상품에 단 답이라("딸기는 금요일에 안 보내요") 그 품목을 묻거나 그 상품 페이지에서 물을 때만 답으로 낸다
+// (AI 자료로는 그대로 쓴다. 자료 글 앞에 상품 이름이 붙어 있다)
+const otherProductQna = (top, itemCodes, productCode) => top.key.startsWith('qna:') && Boolean(top.item_code)
+  && !itemCodes.includes(top.item_code) && top.product_code !== productCode
+
+export function chooseQuote(evidence, message, { itemNames = [], itemCodes = [], productCode = null, min = RAG_ANSWER_MIN, gap = RAG_ANSWER_GAP } = {}) {
   const top = evidence[0]
-  if (!top || top.score < min || !quotable(top, message, itemNames)) return null
+  if (!top || top.score < min || otherProductQna(top, itemCodes, productCode) || !quotable(top, message, itemNames)) return null
   const rival = evidence.slice(1).find((c) => !sameText(top.text, c.text)) // 같은 품목이어도 보관과 레시피는 다른 주제다
   return rival && top.score - rival.score < gap ? null : top
 }
 
+// chooseQuote 에 넘길 지금 대화의 품목·상품
+export const quoteContext = (ctx) => ({
+  itemNames: ctx.items.map((i) => i.name), itemCodes: ctx.items.map((i) => i.item_code), productCode: ctx.current?.product_code ?? null,
+})
+
 function answerFromEvidence(evidence, message, catalog, ctx, fallbackProduct) {
-  const top = chooseQuote(evidence, message, { itemNames: ctx.items.map((i) => i.name) })
+  const top = chooseQuote(evidence, message, quoteContext(ctx))
   if (!top) return null
   const product = catalog.products.find((p) => p.product_code === top.product_code) ?? catalog.products.find((p) => p.item_code === top.item_code)
   const lead = top.key.startsWith('qna:') ? '담당자가 비슷한 질문에 답한 내용이에요.' : top.key.startsWith('faq:') ? '자주 묻는 질문 게시판에 올라온 내용이에요.' : '등록된 자료에서 찾은 내용이에요.'
