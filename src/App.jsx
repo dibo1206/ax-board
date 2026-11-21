@@ -351,7 +351,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   // 옵션을 고르면 가격·100g당 가격·품절 여부가 그 옵션 기준으로 바뀐다 (옵션 이름이 판매 단위)
   const option = product.options?.find((o) => o.id === optionId) ?? null
   const price = option ? option.price : product.price
-  // 배송 여정 카드는 살 수 있을 때만 (품절·품절 옵션이면 안 보임). 카드가 보이면 가격 밑 배송 문구(DeliveryLine)는 감춘다 (같은 날짜를 두 번 보이지 않게)
+  // 배송 여정 카드는 살 수 있을 때만 (품절·품절 옵션이면 안 보임)
   const showJourney = !product.sold_out && option?.stock !== 0
   const unit = option ? option.name : product.unit
 
@@ -377,7 +377,8 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {(option || !product.has_options) && unitPrice(price, unit) && <>{unitPrice(price, unit)} · </>}
         {product.price_updated_at && <>가격 기준 {product.price_updated_at.slice(0, 10)}</>}
       </p>
-      {!showJourney && <DeliveryLine product={product} />}
+      {/* 가격 밑 한 줄 배송 안내는 늘 보인다. 자세한 배송 여정 카드는 구매 칸 아래에 둔다 (2026-11-21: 카드가 위에 있으면 구매 칸이 PC 1,352px·휴대폰 1,852px 아래로 밀려 첫 화면에 구매 버튼이 안 보였다) */}
+      <DeliveryLine product={product} />
       <div className="detail-actions">
         <WishButton code={product.product_code} name={product.name.replace(/\[예시\]\s*/g, '')} variant="detail" />
         <ShareButton name={product.name.replace(/\[예시\]\s*/g, '')} />
@@ -407,7 +408,6 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {/* 농가 이름을 누르면 그 농가 페이지 (농가별로 보기, 2026-11-09) */}
         <dt>판매 농가</dt><dd><a href={`/farm/${encodeURIComponent(seller.seller_code)}`} className="farm-name-link">{seller.name}</a> · {seller.region}</dd>
       </dl>
-      {showJourney && <DeliveryJourney product={product} onFreshGuide={openFreshGuide} />}
       <BuyBox product={product} option={option} onPick={setOptionId} onAsk={openAsk} />
       {/* 상담하기 버튼이 찜·공유·배송 카드·구매 칸·탭을 가리지 않게 (품절 상품 포함, 화면에는 아무것도 그리지 않음) */}
       <ChatButtonGuard />
@@ -417,6 +417,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
           <button type="button" onClick={() => { setShowB2b(true); setTimeout(() => document.getElementById('b2b-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50) }}>기업 구매 문의 <small>대량·납품</small></button>
         )}
       </div>
+      {showJourney && <DeliveryJourney product={product} onFreshGuide={openFreshGuide} />}
       </div>
       </div>
 
