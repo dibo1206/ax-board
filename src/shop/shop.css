@@ -564,7 +564,7 @@
 /* 6. 상세 화면: 위(사진·가격·구매) → 아래(설명·보관·레시피·농가·후기·Q&A) 한 줄기로, 들어올 때 부드럽게 */
 .shop .detail-body { display: grid; gap: 20px; margin-top: 30px; }
 .shop .detail-body > .box, .shop .detail-body > .actions { margin: 0; }
-.shop .detail { animation: detail-in 0.28s ease both; }
+.shop .detail { animation: detail-in 0.28s ease backwards; } /* backwards: 끝난 뒤 transform 을 남기지 않는다 (남으면 휴대폰 아래 고정 구매 줄 position: fixed 가 화면이 아니라 상세 영역에 붙는다, 2026-11-21) */
 @keyframes detail-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .shop .detail { animation: none; } .shop .quick-cart { transition: none; } }
 
