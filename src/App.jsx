@@ -104,9 +104,12 @@ function BlockPhoto({ block, alt }) {
 }
 
 function BlockText({ block }) {
+  // 제목이 "POINT 1 · 제목" 이면 POINT 1 을 작은 글씨로 제목 위에 (쿠팡 상세페이지 모양, 2026-11-21)
+  const point = block.title && /^POINT\s*\d+\s*·\s*\S/.test(block.title)
   return (
     <div className="detail-block-text">
-      {block.title && <h4 className="para-title">{block.title}</h4>}
+      {point && <p className="point-kicker">{block.title.split('·')[0].trim()}</p>}
+      {block.title && <h4 className="para-title">{point ? block.title.slice(block.title.indexOf('·') + 1).trim() : block.title}</h4>}
       {block.body.split(/\n{2,}/).map((para, j) => <p key={j} className="para">{para}</p>)}
     </div>
   )
@@ -127,6 +130,45 @@ function DetailBlocks({ blocks, name }) {
         </div>
       )))}
     </section>
+  )
+}
+
+// 상세정보 펼쳐보기 (2026-11-21): 상세 블록·회사 상세 이미지가 길면 처음에는 FOLD_HEIGHT 만큼만 보여 주고 버튼으로 펼친다 (화면이 끝없이 길어지지 않게)
+// 접어도 내용은 그대로 문서에 있어서 화면 낭독기·검색엔진은 다 읽는다. 조금만 넘는 길이(FOLD_SLACK 안)는 접지 않는다
+const FOLD_HEIGHT = 1100 // PC 지그재그에서 사진·글 두 쌍이 보이는 높이
+const FOLD_SLACK = 300
+function FoldDetail({ children }) {
+  const wrap = useRef(null)
+  const inner = useRef(null)
+  const [tall, setTall] = useState(false)
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    const el = inner.current
+    if (!el) return undefined
+    // 사진은 화면에 보일 때 불러와서 높이가 나중에 바뀐다 → 안쪽 높이를 계속 지켜본다 (탭을 바꿔 다시 보일 때도)
+    const check = () => setTall(el.offsetHeight > FOLD_HEIGHT + FOLD_SLACK)
+    check()
+    if (typeof ResizeObserver === 'undefined') return undefined
+    const watch = new ResizeObserver(check)
+    watch.observe(el)
+    return () => watch.disconnect()
+  }, [])
+  const folded = tall && !open
+  const toggle = () => {
+    setOpen((v) => !v)
+    if (open) wrap.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) // 접을 때는 상세 정보 처음으로 (화면이 한참 아래에 남지 않게)
+  }
+  return (
+    <div ref={wrap} className={`fold-detail${folded ? ' folded' : ''}`}>
+      <div id="fold-detail-body" className="fold-body" style={folded ? { maxHeight: FOLD_HEIGHT } : undefined}>
+        <div ref={inner}>{children}</div>
+      </div>
+      {tall && (
+        <button type="button" className="fold-toggle" aria-expanded={open} aria-controls="fold-detail-body" onClick={toggle}>
+          {open ? '상세정보 접기' : '상세정보 펼쳐보기'}<span className="fold-arrow" aria-hidden="true" />
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -354,16 +396,21 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {/* 상품 설명 탭 순서 (2026-11-14): 한눈에 보기(자동) → 설명 → 판매 농가가 쓴 상세 블록 → 당도·구성 비교(자동) → 회사 상세 이미지 → 즐기는 법 → … */}
         <KeyFactsCard product={product} />
         <Description text={product.description} />
-        <DetailBlocks blocks={product.detail_blocks} name={product.name.replace(/\[예시\]\s*/g, '')} />
+        {/* 상세 블록과 회사 상세 이미지는 길어서 접어 둔다 (상세정보 펼쳐보기). 당도·구성 비교 카드는 접지 않고 늘 보인다 */}
+        {(product.detail_blocks?.length > 0 || product.detail_images?.length > 0) && (
+          <FoldDetail key={product.product_code}>
+            <DetailBlocks blocks={product.detail_blocks} name={product.name.replace(/\[예시\]\s*/g, '')} />
+            {/* 회사 상세페이지 이미지 (세로로 긴 이미지를 위에서 아래로 이어서) */}
+            {product.detail_images?.length > 0 && (
+              <section className="box detail-images">
+                <h3>상세 정보</h3>
+                {product.detail_images.map((src) => <img key={src} src={src} alt="" loading="lazy" />)}
+              </section>
+            )}
+          </FoldDetail>
+        )}
         <BrixCard product={product} />
         <OptionsCard product={product} optionId={optionId} onPick={setOptionId} />
-        {/* 회사 상세페이지 이미지 (세로로 긴 이미지를 위에서 아래로 이어서) */}
-        {product.detail_images?.length > 0 && (
-          <section className="box detail-images">
-            <h3>상세 정보</h3>
-            {product.detail_images.map((src) => <img key={src} src={src} alt="" loading="lazy" />)}
-          </section>
-        )}
         {/* 상품 설명 탭 순서 (2026-11-08 피드백): 즐기는 법 → 보관·섭취 → 농가 이야기 → 고시. 자주 묻는 질문·후기·문의는 각자 탭으로 */}
         <RecipeCards recipes={item.recipes} />
         <DeliveryBox product={product} />

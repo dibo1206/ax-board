@@ -169,12 +169,16 @@ function Admin() {
   }
 
   // 데모용: 이름이 [예시]인 상품 중 상세 블록이 빈 상품에 사진·글 블록을 채운다. 사진을 줄이며 복사해서 1~2분 걸릴 수 있다
-  async function fillDemoBlocks() {
-    if (!window.confirm('이름이 [예시]인 상품 중 상세 블록이 빈 상품에 데모용 사진·글 블록을 채울까요?\n이미 채운 블록은 바꾸지 않아요. 1~2분 걸릴 수 있어요.')) return
+  // refresh: 이 기능이 예전에 채운 예시 블록도 새로 만든다 (새 장면 사진·설명으로 바꿀 때). 농가·관리자가 쓰거나 고친 블록은 그대로
+  async function fillDemoBlocks(refresh = false) {
+    const ask = refresh
+      ? '이 기능으로 채웠던 [예시] 상품 상세 블록을 새로 만들까요?\n농가·관리자가 쓰거나 고친 블록은 바꾸지 않아요. 1~2분 걸릴 수 있어요.'
+      : '이름이 [예시]인 상품 중 상세 블록이 빈 상품에 데모용 사진·글 블록을 채울까요?\n이미 채운 블록은 바꾸지 않아요. 1~2분 걸릴 수 있어요.'
+    if (!window.confirm(ask)) return
     setDemoBusy(true)
     setMessage('예시 상품 상세 블록을 채우는 중이에요…')
     try {
-      const r = await adminApi('/demo-blocks', { method: 'POST', body: {}, timeoutMs: 300_000 })
+      const r = await adminApi('/demo-blocks', { method: 'POST', body: refresh ? { refresh: true } : {}, timeoutMs: 300_000 })
       const extra = [r.skipped && `건너뜀 ${r.skipped}개`, r.failed.length && `실패 ${r.failed.length}개`].filter(Boolean).join(', ')
       await refresh(`예시 상품 ${r.filled}개에 상세 블록을 채웠어요 (사진 ${r.photos}장${extra ? `, ${extra}` : ''}).`)
     } catch (error) {
@@ -348,7 +352,8 @@ function Admin() {
               <input type="search" value={productQuery} onChange={(e) => setProductQuery(e.target.value)} placeholder={farm ? '이 농가 상품 찾기' : '상품·농가 찾기'} aria-label="상품 찾기" />
               <button type="button" className="button" onClick={() => { setEditing('new'); setMessage('') }}>+ 새 상품 등록</button>
               <MoreMenu label="상품 관리 다른 작업">
-                <button type="button" disabled={demoBusy} onClick={fillDemoBlocks}>{demoBusy ? '채우는 중…' : '[예시] 상품 상세 블록 채우기'}</button>
+                <button type="button" disabled={demoBusy} onClick={() => fillDemoBlocks(false)}>{demoBusy ? '채우는 중…' : '[예시] 상품 상세 블록 채우기'}</button>
+                <button type="button" disabled={demoBusy} onClick={() => fillDemoBlocks(true)}>{demoBusy ? '채우는 중…' : '[예시] 상세 블록 새로 만들기 (예시로 채운 것만)'}</button>
               </MoreMenu>
             </div>
           </div>

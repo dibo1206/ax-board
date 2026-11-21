@@ -160,10 +160,11 @@ adminRouter.post('/items/:code/fill', fillItem)
 adminRouter.post('/items/:code/draft', itemDraft)
 
 // [예시] 상품 상세 블록 채우기 (데모용, server/demoBlocks.js): 블록이 빈 [예시] 상품만 채우고 이미 있는 블록은 건드리지 않는다
+// { refresh: true } 이면 이 기능이 채운 예시 블록도 새로 만든다 (농가·관리자가 쓴 블록은 그대로)
 adminRouter.post('/demo-blocks', async (req, res) => {
-  const result = await fillDemoBlocks()
+  const result = await fillDemoBlocks({ refresh: req.body?.refresh === true })
   if (result.busy) return res.status(409).json({ error: '이미 채우는 중이에요. 잠시 뒤에 목록을 새로 고쳐 보세요.' })
-  console.log(`[demo-blocks] 관리자 ${req.admin.loginId} · 채움 ${result.filled} · 건너뜀 ${result.skipped} · 사진 ${result.photos} · 실패 ${result.failed.length}`)
+  console.log(`[demo-blocks] 관리자 ${req.admin.loginId}${req.body?.refresh === true ? ' (새로 만들기)' : ''} · 채움 ${result.filled} · 건너뜀 ${result.skipped} · 사진 ${result.photos} · 실패 ${result.failed.length}`)
   res.json(result)
 })
 // 새 품목 요청 · 검수 (items.js)
