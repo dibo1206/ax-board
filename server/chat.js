@@ -347,7 +347,7 @@ function describeProduct(p, item) {
   if (item.category !== '가공품') lines.push(`- 수확일: ${p.harvest_date ?? '정보 없음'}`)
   if (p.notice?.origin) lines.push(`- 원산지: ${p.notice.origin}`)
   if (p.notice?.expiry) lines.push(`- 소비기한 또는 품질유지기한: ${p.notice.expiry}`)
-  if (p.summary) lines.push(`- 소개: ${p.summary}`)
+  if (p.summary) lines.push(`- 소개(판매자 글): ${p.summary}`)
   lines.push(`- 구매: ${BUY_HOW}`)
   lines.push(`- 기업 구매 문의: ${p.b2b_available ? '받음' : '받지 않음'}`)
   return lines.join('\n')
@@ -395,7 +395,8 @@ async function buildMaterial(catalog, ctx, evidence = []) {
   // 벡터 검색으로 찾은 조각. 이미 넣은 품목의 품목 정보는 겹치니 뺀다
   const shown = new Set(ctx.items.map((i) => i.item_code))
   const found = evidence.filter((c) => c.score >= RAG_MATERIAL_MIN && !(c.key.startsWith('item:') && shown.has(c.item_code)))
-  if (found.length) parts.push(`[검색으로 찾은 자료]\n${found.map((c) => `- ${c.text}`).join('\n')}`)
+  // 농가가 쓴 상품 소개는 (판매자 글)로 표시한다 → 규칙서대로 보관·안전·건강 근거로는 쓰지 않는다
+  if (found.length) parts.push(`[검색으로 찾은 자료]\n${found.map((c) => `- ${c.trusted ? '' : '(판매자 글) '}${c.text}`).join('\n')}`)
   return parts.join('\n\n')
 }
 
@@ -1188,6 +1189,8 @@ function parseReply(text) {
     if (typeof data.answer !== 'string' || !data.answer.trim() || data.answer.length > 800) return null
     return {
       answer: data.answer.trim(),
+      found: data.found !== false,
+      evidence: Array.isArray(data.evidence) ? data.evidence.filter((s) => typeof s === 'string' && s.trim()).slice(0, 5) : [],
       sources: Array.isArray(data.sources) ? data.sources.filter((s) => typeof s === 'string') : [],
       handoff: data.handoff === true,
       action: ['b2b', 'qna'].includes(data.action) ? data.action : null,
@@ -1195,6 +1198,28 @@ function parseReply(text) {
   } catch {
     return null
   }
+}
+
+// ---------- 3-1. 근거 맞춰 보기: AI가 옮겨 적은 근거 문장과 답의 숫자가 정말 자료에 있는지 ----------
+// 규칙서(chat_rules.md)로 "자료에 있는 것만"이라고 시켜도 AI는 가끔 지어낸다. 그래서 말로 믿지 않고 글자로 맞춰 본다
+//  - 답을 찾았다고 하면(found) 근거 문장(evidence)이 1개 이상 있어야 하고, 모두 [자료]에 글자 그대로 있어야 한다
+//  - 답에 나온 숫자는 모두 [자료]나 손님 질문에 있어야 한다 ("보통 3~5일" 같은 지어낸 기간을 막는다)
+const plainText = (text) => String(text ?? '').replace(/[\s.,·!?~'"“”‘’()[\]{}<>:;/-]/g, '').toLowerCase()
+// 앞자리 0은 뗀다: 자료의 날짜 "2026-10-04"와 답의 "10월 4일"이 같은 숫자로 맞게
+const numbersIn = (text) => [...String(text ?? '').matchAll(/\d+(?:[.,]\d+)*/g)].map((m) => m[0].replace(/,/g, '').replace(/^0+(?=\d)/, ''))
+
+export function checkGrounding(reply, material, question = '') {
+  const source = plainText(material)
+  const needsEvidence = reply.found && !reply.handoff && reply.action !== 'b2b'
+  if (needsEvidence && !reply.evidence.length) return '근거 문장(evidence)이 없어요. 답의 근거가 된 [자료] 문장을 글자 그대로 옮겨 주세요. 자료에 답이 없으면 found 를 false 로 해 주세요'
+  for (const quote of reply.evidence) {
+    const q = plainText(quote)
+    if (q.length < 4 || !source.includes(q)) return `근거 문장 "${quote.slice(0, 40)}"이 [자료]에 그대로 없어요. 자료의 문장을 고치지 말고 그대로 옮겨 주세요`
+  }
+  const known = new Set([...numbersIn(material), ...numbersIn(question), ...numbersIn(SHOP.phone)])
+  const unknown = numbersIn(reply.answer).find((n) => !known.has(n))
+  if (unknown) return `숫자 ${unknown}은(는) [자료]에 없어요. 자료에 있는 숫자만 쓰고, 없으면 "아직 정보가 없어요"라고 해 주세요`
+  return null
 }
 
 const toNumber = (s) => Number(s.replace(/,/g, ''))
@@ -1468,10 +1493,15 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
     model = result.model
     const reply = parseReply(result.text)
     if (reply) reply.answer = nameCodes(reply.answer, catalog)
-    problem = reply ? findProblem(reply.answer, catalog, materialPrices) : '형식이 맞지 않아요. 설명 없이 JSON 하나만 출력해 주세요'
+    problem = reply
+      ? findProblem(reply.answer, catalog, materialPrices) ?? checkGrounding(reply, material, message)
+      : '형식이 맞지 않아요. 설명 없이 JSON 하나만 출력해 주세요'
     if (!problem) {
-      const sources = toSourceChips(reply.sources, catalog, ctx)
-      const answer = { ...reply, sources, productCode: sources[0]?.code ?? fallbackProduct }
+      // 자료에서 답을 못 찾았다고 하면 근거 칩은 빼고, 담당자가 답할 수 있게 상품 Q&A로 안내한다
+      const sources = reply.found ? toSourceChips(reply.sources, catalog, ctx) : []
+      const action = reply.action ?? (reply.found || reply.handoff ? null : 'qna')
+      const { found: _found, evidence: _evidence, ...shown } = reply
+      const answer = { ...shown, action, sources, productCode: sources[0]?.code ?? fallbackProduct }
       await writeCache(key, answer, model)
       return { ...answer, model, blocked: false }
     }

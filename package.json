@@ -43,7 +43,8 @@
     "rag-bakeoff": "node scripts/rag-bakeoff.js",
     "test-rag": "node scripts/rag-test.js",
     "test-rag-same": "node scripts/rag-same-text-test.js",
-    "test-rag-qna": "node scripts/rag-qna-test.js"
+    "test-rag-qna": "node scripts/rag-qna-test.js",
+    "test-grounding": "node scripts/chat-grounding-test.js"
   },
   "dependencies": {
     "compression": "^1.8.2",
