@@ -4,7 +4,7 @@
 // AI를 부르지 않는다
 import 'dotenv/config'
 import { readFile, writeFile } from 'node:fs/promises'
-import { chooseQuote, findEvidence, loadCatalog, pickContext } from '../server/chat.js'
+import { chooseQuote, findEvidence, loadCatalog, pickContext, quoteContext } from '../server/chat.js'
 import { pool } from '../server/db.js'
 import { buildChunks, prepareRag, RAG_ANSWER_GAP, RAG_ANSWER_MIN, RAG_MODEL } from '../server/rag.js'
 import { similarity } from '../server/similar.js'
@@ -29,7 +29,7 @@ for (const q of questions) {
 
 const inTop = (list, r, k) => list.slice(0, k).some((c) => r.expected.includes(c.key))
 function summarize(list, min = RAG_ANSWER_MIN, gap = RAG_ANSWER_GAP) {
-  const quoted = (r) => chooseQuote(r.evidence, r.q.question, { itemNames: r.ctx.items.map((i) => i.name), min, gap })
+  const quoted = (r) => chooseQuote(r.evidence, r.q.question, { ...quoteContext(r.ctx), min, gap })
   const hasAnswer = list.filter((r) => r.q.expect !== 'none')
   const noAnswer = list.filter((r) => r.q.expect === 'none')
   return {
@@ -57,13 +57,18 @@ for (const min of [0.5, 0.55, 0.58, 0.6, 0.62, 0.65, 0.68]) {
 
 const row = (name, s) => `| ${name} | ${s.total} | ${s.bigram1} | ${s.bigram3} | ${s.vector1} | ${s.vector3} | ${s.vector5} | ${s.right} | ${s.wrong} | ${s.falseHit}/${s.negatives} |`
 const HEAD = '| 질문 묶음 | 답 있는 질문 | 글자 비교 1위 | 글자 비교 3위 안 | 벡터 1위 | 벡터 3위 안 | 벡터 5위 안 | 글을 답으로 냄: 맞음 | 글을 답으로 냄: 틀림 | 답 없는 질문에 답함 |\n|---|---|---|---|---|---|---|---|---|---|'
-const groups = withTest ? [['tune (기준을 정한 질문)', tune], ['test (기준을 정한 뒤 처음 돌린 질문)', results.filter((r) => r.q.split === 'test')]] : [['tune (기준을 정한 질문)', tune]]
+const groups = withTest ? [
+  ['tune (기준을 정한 질문)', tune],
+  ['test (기준을 정한 뒤 처음 돌린 질문)', results.filter((r) => r.q.split === 'test')],
+  ['test2 (11/22 추가: 새 품목·실제 상담 기록 말투)', results.filter((r) => r.q.split === 'test2')],
+  ['전체', results],
+] : [['tune (기준을 정한 질문)', tune]]
 console.log(`\n${HEAD}\n${groups.map(([name, list]) => row(name, summarize(list))).join('\n')}`)
 
 const cell = (s) => String(s ?? '').replace(/\|/g, '\\|')
 const detail = results.map((r) => {
   const top = r.evidence[0]
-  const said = chooseQuote(r.evidence, r.q.question, { itemNames: r.ctx.items.map((i) => i.name) })
+  const said = chooseQuote(r.evidence, r.q.question, quoteContext(r.ctx))
   const verdict = r.q.expect === 'none' ? (said ? '틀림' : '바르게 안 답함') : said ? (inTop(r.evidence, r, 1) ? '맞음' : '틀림') : '답 안 함'
   const rival = r.evidence[1]
   return `| ${r.q.split} | ${cell(r.q.question)} | ${cell(r.q.expect)} | ${top ? `${cell(top.key)} (${top.score.toFixed(3)}, 차이 ${rival ? (top.score - rival.score).toFixed(3) : '-'})` : '-'} | ${verdict} |`
@@ -75,6 +80,8 @@ if (withTest) {
 - 실행: ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} · 모델 ${RAG_MODEL} · 글을 답으로 내는 기준 점수 ${RAG_ANSWER_MIN}, 점수 차이 ${RAG_ANSWER_GAP} · 자료 조각 ${chunks.length}개 · AI 호출 0회
 - 질문은 Claude가 만들었고 손님 말투를 다 대표하지 않는다. 자료도 예시 데이터라 양이 적다
 - test 질문은 조건을 정하는 동안 이미 몇 번 돌렸다. 처음 보는 질문의 값이 아니다
+- test2 질문(11/22)은 새로 생긴 품목과 실제 상담 기록 말투로 만들었고, 정답을 먼저 적은 뒤 돌렸다
+- 자료가 늘어 예전 질문에도 맞는 답이 새로 생겨서, 그런 조각은 정답에 더했다 (rag_eval.csv 의 note 열에 표시)
 - 글자 비교 열은 품목 필터 없이 같은 조각에서 찾은 값이고, 벡터 열은 실제 챗봇과 같은 필터를 쓴 값이다
 - 다시 돌리기: \`npm run rag-eval -- test\`
 

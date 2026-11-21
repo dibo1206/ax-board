@@ -1,14 +1,14 @@
 split,question,expect,note
 tune,복숭아 바로 안 먹을 건데 어디다 둬요,item:peach:storage,
 tune,사과를 오래 두고 먹으려면,item:apple:storage,
-tune,딱딱한 과일 어떻게 익혀요,item:peach:storage|qna:3,품목 이름 없음
+tune,딱딱한 과일 어떻게 익혀요,item:peach:storage|qna:3|qna:455|item:kiwi:storage,품목 이름 없음 · 11/22 새로 생긴 자료 중 맞는 답을 정답에 추가
 tune,냉장고에 넣으면 안 되는 채소 있어요,item:sweet_potato:storage|qna:83,품목 이름 없음
 tune,초록색으로 변한 감자,item:potato:storage|item:potato:safety|item:potato:state,
-tune,탄산수랑 섞어 마시는 법,item:plum_syrup:recipe|item:pear_juice:recipe|item:plum_syrup:cafe|item:pear_juice:cafe,품목 이름 없음
+tune,탄산수랑 섞어 마시는 법,item:plum_syrup:recipe|item:pear_juice:recipe|item:plum_syrup:cafe|item:pear_juice:cafe|item:fruit_base:recipe|item:citron_tea:recipe|item:grape:recipe,품목 이름 없음 · 11/22 새로 생긴 자료 중 맞는 답을 정답에 추가
 tune,빵에 발라 먹는 거,item:grape_jam:recipe,품목 이름 없음
-tune,부침개 만들 때 쓰는 채소,item:potato:recipe,품목 이름 없음
+tune,부침개 만들 때 쓰는 채소,item:potato:recipe|item:green_onion:recipe|item:napa_cabbage:recipe,품목 이름 없음 · 11/22 새로 생긴 자료 중 맞는 답을 정답에 추가
 tune,고기 양념에 넣는 과일,item:pear:recipe,품목 이름 없음
-tune,에어프라이어에 구워 먹을 수 있는 거,item:sweet_potato:recipe,품목 이름 없음
+tune,에어프라이어에 구워 먹을 수 있는 거,item:sweet_potato:recipe|product:haenam_sweetpotato_mini_3kg:about:1,품목 이름 없음 · 11/22 새로 생긴 자료 중 맞는 답을 정답에 추가
 tune,몇 시까지 전화 받아요,policy:contact,
 tune,회사 사무실이 어디에 있어요,policy:contact,
 tune,돌려보낼 때 택배비는 누가 내요,policy:refund:2,
@@ -45,11 +45,11 @@ test,배를 신문지에 싸야 하나요,item:pear:storage,
 test,사과랑 다른 과일 같이 보관해요?,item:apple:storage,
 test,감자랑 양파 같이 둬요?,item:potato:storage,
 test,고구마 씻어서 보관해도 되나,item:sweet_potato:storage,
-test,물러진 과일로 뭐 만들어요,item:peach:recipe|item:peach:state|item:apple:state|item:pear:state,품목 이름 없음
-test,스무디 재료로 좋은 거,product:peach_4kg:about:0|item:peach:recipe|item:peach:state,품목 이름 없음
+test,물러진 과일로 뭐 만들어요,item:peach:recipe|item:peach:state|item:apple:state|item:pear:state|item:kiwi:state|item:strawberry:state|item:persimmon:state|item:grape:state|item:mandarin:state,품목 이름 없음 · 11/22 새로 생긴 자료 중 맞는 답을 정답에 추가
+test,스무디 재료로 좋은 거,product:peach_4kg:about:0|item:peach:recipe|item:peach:state|item:strawberry:recipe|item:kiwi:recipe|item:apple_juice:recipe|product:sangju_apple_juice_30:about:1|item:fruit_base:recipe,품목 이름 없음 · 11/22 새로 생긴 자료 중 맞는 답을 정답에 추가
 test,채 썰어서 볶아 먹는 채소,item:carrot:recipe,품목 이름 없음
-test,홍차에 타 먹는 거,item:plum_syrup:recipe|item:pear_juice:recipe,품목 이름 없음
-test,요거트에 올려 먹을 만한 것,item:grape_jam:recipe,품목 이름 없음
+test,홍차에 타 먹는 거,item:plum_syrup:recipe|item:pear_juice:recipe|item:apple_juice:recipe|product:sangju_apple_juice_30:about:1|item:pear_juice:cafe,품목 이름 없음 · 11/22 새로 생긴 자료 중 맞는 답을 정답에 추가
+test,요거트에 올려 먹을 만한 것,item:grape_jam:recipe|item:strawberry:recipe|item:kiwi:recipe|item:persimmon:recipe|item:dried_persimmon:recipe|product:nonsan_cafe_4kg:about:1,품목 이름 없음 · 11/22 새로 생긴 자료 중 맞는 답을 정답에 추가
 test,따뜻하게 끓여 먹는 배 요리,item:pear:recipe,
 test,점심시간에도 전화돼요,policy:contact,
 test,토요일에 상담 돼요,policy:contact,
@@ -76,3 +76,55 @@ test,비행기표 예약,none,
 test,고양이 키우는 법,none,
 test,파인애플 자르는 법,none,파는 품목이 아님
 test,노트북 추천해 줘,none,
+test2,딸기 씻어서 넣어 둬도 돼요,item:strawberry:storage,
+test2,귤 상자째 두면 안 돼요,item:mandarin:storage,
+test2,단감 말랑해지는 거 싫은데 어떻게 둬요,item:persimmon:storage,
+test2,무 잎 달린 채로 보관해요,item:radish:storage,
+test2,생표고 씻어서 냉장해도 되나요,item:shiitake:storage,
+test2,깐마늘 오래 두는 법,item:garlic:storage,
+test2,양파랑 감자 같이 둬도 돼요,item:onion:storage|item:potato:storage,
+test2,대파 남은 거 어떻게 보관,item:green_onion:storage,
+test2,곶감은 냉장이에요 냉동이에요,item:dried_persimmon:storage,
+test2,고춧가루 실온에 둬도 되나,item:chili_powder:storage,
+test2,브로콜리 오래 두려면,item:broccoli:storage,
+test2,절임배추 받고 바로 못 담그면,item:salted_cabbage:storage|item:salted_cabbage:opened,
+test2,키위가 너무 딱딱해요,item:kiwi:storage|item:kiwi:safety|qna:455,
+test2,곶감 겉에 하얀 가루 곰팡이예요,item:dried_persimmon:safety,
+test2,포도 껍질에 흰 가루,item:grape:safety,
+test2,브로콜리가 노랗게 변했어요,item:broccoli:safety|item:broccoli:state,
+test2,무 속에 바람 들었는데 먹어도 돼요,item:radish:safety|item:radish:state,
+test2,유자청에 거품이 생겨요,item:citron_tea:safety,
+test2,귤 하나에 곰팡이 폈는데 옆에 것도 버려요,item:mandarin:safety,
+test2,귤 껍질째 청 담그는 법,item:mandarin:recipe,
+test2,곶감으로 만드는 간식,item:dried_persimmon:recipe,
+test2,김장 양념에 들어가는 거,item:chili_powder:recipe|item:salted_cabbage:recipe,품목 이름 없음
+test2,파전 재료,item:green_onion:recipe,품목 이름 없음
+test2,뜨거운 물에 타 먹는 차,item:citron_tea:recipe|item:fruit_base:recipe,품목 이름 없음
+test2,얼려 먹는 과일,item:grape:recipe|item:mandarin:recipe,품목 이름 없음
+test2,된장국에 넣는 버섯,item:shiitake:recipe,품목 이름 없음
+test2,사과즙 젤리 만드는 법,item:apple_juice:recipe,
+test2,소과 크기가 얼마나 돼요,qna:434,
+test2,못난이 귤 맛없는 거 아니에요,qna:435,
+test2,배추 20kg 몇 포기,qna:448,
+test2,김장 날짜 맞춰서 받을 수 있어요,qna:447,
+test2,화고가 뭐예요,qna:453,
+test2,시나노골드 맛이 어때요,qna:458,
+test2,사과즙에 물 탔어요,qna:441,
+test2,원목 표고는 뭐가 달라요,qna:452,
+test2,선물하는건데 가격표 빼고 보내주실수있나요,qna:436,실제 상담 기록 질문
+test2,몇 시까지 결제해야 오늘 보내요,policy:shipping,
+test2,택배사 어디예요,policy:shipping,
+test2,배송 준비 중인데 취소하고 싶어요,policy:refund:3,
+test2,반품 신청 버튼 어디 있어요,policy:refund:5,
+test2,제주 귤 농장,seller:f_fd6284418c,
+test2,김해 단감 농가,seller:f_090e09030a,
+test2,원목에서 키운 버섯 농가,seller:f_c6d1780ef4,
+test2,해외배송 되나요 일본 친구한테 보낼려고,none,실제 상담 기록 질문
+test2,기숙사라 택배 받기 애매한데 편의점 택배 되나요,none,실제 상담 기록 질문
+test2,박스에 보자기 포장도 해주시나요,none,실제 상담 기록 질문
+test2,배즙 파우치 전자레인지 돌려도 돼요,none,실제 상담 기록 질문
+test2,판매 상품 등록하는 법을 알랴줘,none,실제 상담 기록 질문
+test2,적립금 있어요,none,
+test2,포인트로 결제 돼요,none,
+test2,강아지가 포도 먹어도 돼요,none,
+test2,딸기 보관 며칠 가능해요,item:strawberry:storage,실제 상담 기록 질문과 비슷하게
