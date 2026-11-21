@@ -415,7 +415,8 @@ const FACTS = [
   },
   {
     id: 'price',
-    re: /얼마|가격|값|몇\s?(키로|킬로|kg)|(어느|어떤|몇)\s?(용량|크기|사이즈|단위)/,
+    // "얼마나 타요/넣어요"는 가격이 아니라 양을 묻는 말이라 '얼마나'는 빼고 본다 (2026-11-22 실제 AI 시험에서 찾음)
+    re: /얼마(?!나)|가격|값|몇\s?(키로|킬로|kg)|(어느|어떤|몇)\s?(용량|크기|사이즈|단위)/,
     explicit: /가격|값/,
     say: (p) => (p.picked.length === 1
       ? `${p.label} ${p.picked[0].name} 가격은 ${won(p.picked[0].price)}이에요.${p.picked[0].stock > 0 ? '' : ' 다만 지금은 품절이라 살 수 없어요.'}`
@@ -714,17 +715,33 @@ function dangerSign(message, items) {
   const said = DANGER_WORDS.filter((w) => message.includes(w))
   if (!said.length) return null
   for (const item of findItems(message, items)) {
+    // "곶감 겉에 하얀 가루 있는데 곰팡이예요?"처럼 품목 정보에 '부패와 다르다'고 적힌 모습을 말하면 경고하지 않는다
+    // (그 경우는 아래 safety 답이 그 설명을 먼저 보여 준다)
+    if (lookAlike(item, message)) continue
     const sign = (item.danger_signs ?? []).find((s) => said.some((w) => s.includes(w)))
     if (sign) return { item, sign }
   }
   return null
 }
 
+// 품목 정보의 주의 글에 "○○은 곰팡이와 달라요 / 부패와 달라요"처럼 상한 것과 헷갈리는 모습이 적혀 있으면,
+// 손님이 그 모습(○○)을 말했는지 본다. 흔한 낱말 하나(껍질 등)로 잘못 걸리지 않게 낱말 2개 이상이 맞아야 한다
+// 예: "곶감 겉의 하얀 가루는 … 곰팡이와 달라요" + "곶감 겉에 하얀 가루" → 하얀·가루 → 맞음
+function lookAlike(item, message) {
+  const note = item.danger_note ?? ''
+  if (!/달라요/.test(note)) return false
+  const subject = note.split(/(?:은|는)\s/)[0]
+  const words = subject.replace(/\([^)]*\)/g, ' ').split(/\s+/)
+    .map((w) => w.replace(/(의|에|이|가)$/, ''))
+    .filter((w) => w.length >= 2 && w !== item.name)
+  return words.filter((w) => message.includes(w)).length >= 2
+}
+
 // 위에서부터 먼저 맞는 주제 하나로 답한다 ("먹어도 돼요?"가 "보관"보다 먼저)
 const TOPICS = [
   { kind: 'safety', word: '먹어도 괜찮은지', re: new RegExp(`(먹어|드셔|마셔|섭취해)도|드실\\s?수|마실\\s?수|상하면|싹(이|\\s?났)|상했|상한\\s?(것|거)|변했|변색|곰팡|이상한\\s?냄새|냄새가\\s?(나|이상)|(술|발효|시큼한|썩은)\\s?냄새|물렀|물러졌|썩|끈적|미끈|점액|쭈글|초록색으로|${ELAPSED.source}`) },
   { kind: 'compare', word: '차이', re: /차이|비교|뭐가\s?달라|다른\s?점|뭐가\s?나아|어떤\s?게\s?나아/ },
-  { kind: 'recipe', word: '레시피', re: /레시피|만들|만드|요리|활용|먹는\s?(법|방법)|어떻게\s?먹|해\s?먹|비율|음료|에이드/ },
+  { kind: 'recipe', word: '레시피', re: /레시피|만들|만드|요리|활용|먹는\s?(법|방법)|어떻게\s?먹|해\s?먹|비율|음료|에이드|(얼마나|어떻게|몇\s?대\s?몇)\s?(타|섞|희석)|타\s?(먹|마시)|희석/ },
   { kind: 'ripe', word: '익었는지 보는 법', re: /익었는지|익은\s?(건지|지|거)|다\s?익었|잘\s?익었|숙성\s?(됐|되었)/ },
   { kind: 'storage', word: '보관법', re: /딱딱|후숙|덜\s?익|안\s?익|얼려|얼리|많이\s?남|남았는데|남은\s?(거|것)|다\s?못\s?먹|보관|오래\s?두|둬야|두는\s?법|냉장|냉동|상온|실온|어디에?\s?(둬|두|놔)|(같이|함께)\s?(둬|두|놔|넣)|(둬|두어|놔)도|넣어도|개봉|뜯(은|으면|고)|언제까지|며칠|유통\s?기한|얼마나\s?(가|두|오래)/ },
   { kind: 'taste', word: '맛', re: /맛있|맛이\s?(어때|좋|괜찮)|맛은|무슨\s?맛/ },
@@ -743,9 +760,15 @@ function stageOf(item, days) {
 }
 
 // "배숙 만드는 법", "고구마 맛탕 레시피"처럼 요리 이름을 말했는지 (품목 이름이 든 낱말이나 그 다음 낱말)
-const NOT_DISH = /^(레시피|요리|메뉴|만드|만들|활용|어떻게|뭐|무엇|알려|해|먹|법|방법|비율|음료|간단|쉬운)/
+// 누구에게·언제 먹을지("아이 간식", "아침 반찬")는 요리 이름이 아니다
+const NOT_DISH = /^(레시피|요리|메뉴|만드|만들|활용|어떻게|뭐|무엇|알려|해|먹|법|방법|비율|음료|간단|쉬운|아이|아기|애들|어린이|간식|반찬|도시락|아침|점심|저녁|안주|손님|부모님|선물|집에서|오늘|주말)/
+// 조사를 떼서 한 글자만 남으면 떼지 않는다 ("아이" → "아"가 되어 "고구마 아 레시피"라고 답하던 문제)
+const dropJosa = (w) => {
+  const cut = w.replace(/(으로|로|은|는|이|가|을|를|에|도|랑|하고)$/, '')
+  return cut.length >= 2 ? cut : w
+}
 function askedDish(item, message) {
-  const words = message.split(/\s+/).map((w) => w.replace(/[?!.,~]/g, '').replace(/(으로|로|은|는|이|가|을|를|에|도|랑|하고)$/, ''))
+  const words = message.split(/\s+/).map((w) => dropJosa(w.replace(/[?!.,~]/g, '')))
   const at = words.findIndex((w) => w.includes(item.name))
   if (at < 0) return null
   const dish = words[at] !== item.name ? words[at] : words[at + 1]
@@ -758,9 +781,11 @@ const SAY_ITEM = {
   safety: (item, message) => {
     const days = elapsedDays(message)
     return [
+      // 손님이 말한 모습이 '부패와 다르다'고 적힌 모습이면 그 설명부터 (곶감의 하얀 가루 = 시상)
+      lookAlike(item, message) ? sentence(item.danger_note) : '',
       `${josa(item.name, '을', '를')} 드셔도 되는지는 제가 판단할 수 없어요.`,
       item.danger_signs.length ? `상품 정보에서는 ${item.danger_signs.join(' / ')} 같은 상태라면 드시지 말라고 안내해요.` : '',
-      item.danger_note ? sentence(item.danger_note) : '',
+      item.danger_note && !lookAlike(item, message) ? sentence(item.danger_note) : '',
       // 상태 기준 품목: 날짜를 말해도 단계를 정하지 않고, 보관 기간 참고값과 상태별 용도를 알려 준다
       item.stage1_state ? [days != null ? keepPeriod(item) : '', timeline(item)].filter(Boolean).join(' ')
         : stageOf(item, days) || (item.fresh_days_stage1 ? `참고로 ${timeline(item)}` : opened(item)),
@@ -787,9 +812,10 @@ const SAY_ITEM = {
   recipe: (item, message) => {
     if (!item.recipes?.length) return `${item.name} 레시피 정보는 아직 없어요.`
     const dish = askedDish(item, message)
-    const known = !dish || item.recipes.some((r) => r.title.replace(/\s/g, '').includes(dish) || dish.includes(r.title.replace(/\s/g, '')))
+    // "매실청 탄산수에 얼마나 타요"처럼 재료 이름으로 물어도 그 재료가 든 레시피가 있으면 있는 것으로 본다
+    const known = !dish || item.recipes.some((r) => r.title.replace(/\s/g, '').includes(dish) || dish.includes(r.title.replace(/\s/g, '')) || String(r.ingredients ?? '').includes(dish))
     const dishName = dish && (dish.includes(item.name) ? dish : `${item.name} ${dish}`)
-    return `${known ? '' : `${dishName} 레시피는 아직 등록돼 있지 않아요. 대신 `}${josa(item.name, '은', '는')} 이렇게 즐겨 보세요. ${item.recipes.slice(0, 3).map((r, i) => `${i + 1}) ${r.title}: ${r.ingredients} — ${r.method}`).join(' ')}${item.cafe_note && /카페|업소|매장|비율|퍼센트|%/.test(message) ? ` 카페 메뉴 비율은 ${sentence(item.cafe_note)}` : ''}`
+    return `${known ? '' : `${dishName} 레시피는 아직 등록돼 있지 않아요. 대신 `}${josa(item.name, '은', '는')} 이렇게 즐겨 보세요. ${item.recipes.slice(0, 3).map((r, i) => `${i + 1}) ${r.title}: ${r.ingredients} — ${r.method}`).join(' ')}${item.cafe_note && /카페|업소|매장|비율|퍼센트|%|타|섞|희석/.test(message) ? ` 카페 메뉴 비율은 ${sentence(item.cafe_note)}` : ''}`
   },
   allergy: (item) => (item.allergen_note && !item.allergens.length ? `${item.name}: ${sentence(item.allergen_note)}` : item.allergens.length
     ? `${item.name} 상품 정보에 표시된 알레르기 성분은 ${item.allergens.join(', ')}예요.`
