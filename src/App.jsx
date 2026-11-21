@@ -7,7 +7,7 @@ import { Related } from './Recommend.jsx'
 import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
 import { addToCart, get, getPolicy, post, preorderNote, thumbUrl, unitPrice } from './shop/shared.js'
 import { BrixCard, KeyFactsCard, OptionsCard } from './shop/DetailCards.jsx'
-import { DeliveryBox, DeliveryLine, SellerBox } from './shop/DetailExtras.jsx'
+import { DeliveryLine, ExpiryNote, SellerBox } from './shop/DetailExtras.jsx'
 import { DeliveryJourney } from './shop/DeliveryJourney.jsx'
 import { FreshGuide } from './shop/FreshGuide.jsx'
 import { ChatButtonGuard } from './shop/chatGuard.js'
@@ -377,7 +377,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {(option || !product.has_options) && unitPrice(price, unit) && <>{unitPrice(price, unit)} · </>}
         {product.price_updated_at && <>가격 기준 {product.price_updated_at.slice(0, 10)}</>}
       </p>
-      {/* 가격 밑 한 줄 배송 안내는 늘 보인다. 자세한 배송 여정 카드는 구매 칸 아래에 둔다 (2026-11-21: 카드가 위에 있으면 구매 칸이 PC 1,352px·휴대폰 1,852px 아래로 밀려 첫 화면에 구매 버튼이 안 보였다) */}
+      {/* 가격 밑 한 줄 배송 안내는 늘 보인다. 자세한 배송 여정 카드는 상품 설명 탭에 둔다 (2026-11-21: 구매 칸 위에 있으면 구매 칸이 PC 1,352px·휴대폰 1,852px 아래로 밀려 첫 화면에 구매 버튼이 안 보였다) */}
       <DeliveryLine product={product} />
       <div className="detail-actions">
         <WishButton code={product.product_code} name={product.name.replace(/\[예시\]\s*/g, '')} variant="detail" />
@@ -417,7 +417,6 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
           <button type="button" onClick={() => { setShowB2b(true); setTimeout(() => document.getElementById('b2b-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50) }}>기업 구매 문의 <small>대량·납품</small></button>
         )}
       </div>
-      {showJourney && <DeliveryJourney product={product} onFreshGuide={openFreshGuide} />}
       </div>
       </div>
 
@@ -454,7 +453,9 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         <OptionsCard product={product} optionId={optionId} onPick={setOptionId} />
         {/* 상품 설명 탭 순서 (2026-11-08 피드백): 즐기는 법 → 보관·섭취 → 농가 이야기 → 고시. 자주 묻는 질문·후기·문의는 각자 탭으로 */}
         <RecipeCards recipes={item.recipes} />
-        <DeliveryBox product={product} />
+        {/* 배송 여정 카드 (2026-11-21): 예전 [배송·소비기한] 칸 자리. 살 수 있을 때만 보이고, 소비기한 줄은 늘 아래에 */}
+        {showJourney && <DeliveryJourney product={product} onFreshGuide={openFreshGuide} />}
+        <ExpiryNote product={product} />
         {/* 보관·섭취 안내: 내용은 그대로 (보관법 번호 단계·보관 기간·신선도 단계·개봉 후·알레르기·드시지 말 신호·카페 비율·출처), 배치만 FreshGuide 디자인 */}
         <FreshGuide item={item} fresh={fresh} />
 
