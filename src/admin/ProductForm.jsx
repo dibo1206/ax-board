@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { thumbUrl, todayKst, unitPrice } from '../shop/shared.js'
 import { AiDraft } from './AiDraft.jsx'
+import { SpeakFill } from './SpeakFill.jsx'
 import { DetailBlocksEditor } from './DetailBlocks.jsx'
 import { fromDraftBlocks, hasPendingPhotos, storedBlocks, toEditorBlocks } from './detailBlockUtils.js'
 import { adminApi } from './api.js'
@@ -212,6 +213,17 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
     const it = draft.item
     setItemDraft(it && (it.storage_method || it.opened_note || it.danger_signs?.length || it.recipes?.length) ? it : null)
   }
+  // 말로 상품 등록하기: 비어 있는 칸만 채운다 (이미 적은 칸은 그대로). 옵션은 옵션이 없을 때만
+  function applySpoken(f) {
+    setForm((prev) => {
+      const next = { ...prev }
+      for (const key of ['item_code', 'name', 'variety', 'price', 'unit', 'stock', 'brix', 'brix_measured_at', 'harvest_date', 'count_per_box']) {
+        if (f[key] !== undefined && f[key] !== null && !String(prev[key] ?? '').trim()) next[key] = String(f[key])
+      }
+      if (f.options?.length && !prev.options.length) next.options = f.options.map((o) => ({ id: null, name: o.name, price: String(o.price), stock: '', status: 'active' }))
+      return next
+    })
+  }
   const setFaq = (index, key) => (e) => setForm((prev) => ({ ...prev, faq: prev.faq.map((f, i) => (i === index ? { ...f, [key]: e.target.value } : f)) }))
 
   async function save(status) {
@@ -331,6 +343,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
 
   const itemBlock = (
     <>
+      {isNew && <SpeakFill api={api} onFill={applySpoken} />}
       <label>품목*
         <select value={form.item_code} onChange={set('item_code')}>
           <option value="">골라 주세요</option>

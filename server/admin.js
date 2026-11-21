@@ -7,7 +7,7 @@ import sharp from 'sharp'
 import { requireAdmin } from './auth.js'
 import { findBanned } from './banned.js'
 import { blocksSummary, removedBlockImages } from './blocks.js'
-import { fillItem, itemDraft, listTemplates, productDraft } from './content.js'
+import { fillItem, itemDraft, listTemplates, productDraft, productParse } from './content.js'
 import { fillDemoBlocks } from './demoBlocks.js'
 import { createLimiter } from './limit.js'
 import { generateRecipePhoto, imageKeyLoaded, imagesLeftToday, saveRecipePhoto } from './imagegen.js'
@@ -156,6 +156,7 @@ export async function updateProduct(code, product) {
 // AI 상세 내용 초안 · 상세페이지 패턴 · 품목 빈 칸 채우기 (content.js)
 adminRouter.get('/ai/templates', listTemplates)
 adminRouter.post('/ai/product-draft', productDraft)
+adminRouter.post('/ai/product-parse', productParse) // 말로 상품 등록하기 (칸 채우기만)
 adminRouter.post('/items/:code/fill', fillItem)
 adminRouter.post('/items/:code/draft', itemDraft)
 
