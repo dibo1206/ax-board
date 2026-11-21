@@ -17,7 +17,7 @@ export const dayLabel = (date) => `${Number(date.slice(5, 7))}월 ${Number(date.
 
 const settingsOf = (s = {}) => ({
   cutoffHour: Number.isInteger(s.cutoffHour) ? s.cutoffHour : 14,
-  leadDays: Number.isInteger(s.leadDays) ? s.leadDays : 1,
+  leadDays: Number.isInteger(s.leadDays) ? s.leadDays : 0,
   transitDays: Number.isInteger(s.transitDays) ? Math.max(1, s.transitDays) : 1,
   noShipDays: Array.isArray(s.noShipDays) && s.noShipDays.length < 7 ? s.noShipDays : [0, 6],
   holidays: new Set(Array.isArray(s.holidays) ? s.holidays : []),

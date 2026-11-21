@@ -423,7 +423,7 @@ const FAQ_TAGS = {
 
 export function Faq({ policy, onRecommend }) {
   const fill = (text) => text
-    .replace('{출고}', policy?.shipping.leadTime ?? '결제 후 1~3일 안에 출고해요')
+    .replace('{출고}', policy?.shipping.leadTime ?? '평일 오후 2시까지 결제하면 그날 출고해요')
     .replace('{배송비}', policy ? won(policy.shipping.fee) : '정책에 따라')
     .replace('{무료배송}', policy ? won(policy.shipping.freeOver) : '일정 금액')
     .replaceAll('{전화}', policy?.shop.phone ?? '고객센터')

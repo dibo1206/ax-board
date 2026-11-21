@@ -1290,7 +1290,7 @@ function answerSeason(message, catalog) {
 
 // ---------- 출고 날짜·예약 판매 ----------
 // "절임배추 언제 받아요?", "곶감 언제 보내요?", "예약 판매하는 거 있어요?": 상품의 출고 시작일(DB)로 답한다.
-// 품목을 말하지 않은 "언제 와요?"는 아래 배송 규칙(결제 후 1~3일 안내)으로 간다
+// 품목을 말하지 않은 "언제 와요?"는 아래 배송 규칙(평일 오후 2시까지 결제하면 그날 출고 안내)으로 간다
 const ASKS_WHEN = /예약|언제\s?(와|오|도착|받|출고|발송|보내|나와|배송)|받을\s?수\s?있|출고\s?(일|날|언제|시작)|발송\s?(일|날|언제)|며칠.{0,4}(걸|와|만에)|도착\s?(일|날|언제)/
 const ASKS_PREORDER_LIST = /예약\s?(판매|상품|구매|주문)?.{0,6}(있|뭐|어떤|무슨|되|돼|가능)/
 function answerShipDate(message, catalog, ctx) {
@@ -1326,7 +1326,7 @@ function answerShipDate(message, catalog, ctx) {
   const sentences = [
     ...pre.slice(0, 3).map((p) => `${eunNeun(label(p))} 예약 상품이라 ${shipDateText(p.ship_from)}부터 주문 순서대로 보내요.`),
     pre.length > 3 ? `예약 상품이 ${pre.length - 3}개 더 있어요.` : '',
-    now.length ? `${pre.length ? '나머지 ' : ''}${now.length === 1 ? eunNeun(label(now[0])) : `${catalog.items.find((i) => i.item_code === now[0].item_code)?.name ?? ''} 상품 ${now.length}개는${pre.length ? '' : ' 모두'}`} 결제 후 1~3일 안에 출고해요 (주말·공휴일 제외).` : '',
+    now.length ? `${pre.length ? '나머지 ' : ''}${now.length === 1 ? eunNeun(label(now[0])) : `${catalog.items.find((i) => i.item_code === now[0].item_code)?.name ?? ''} 상품 ${now.length}개는${pre.length ? '' : ' 모두'}`} ${SHIPPING.leadTime}.` : '',
     pre.length ? '같은 농가의 다른 상품을 함께 사면 예약 상품 날짜에 함께 보내요.' : '',
     '도착 날짜는 택배사 사정에 따라 달라서 약속드리기 어려워요.',
   ].filter(Boolean)
@@ -1373,7 +1373,7 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
 
   // 가린 자리표(전화번호 가림 등)는 손님이 쓴 말이 아니라서 규칙이 읽지 않게 한다
   const said = message.replace(/\((주민등록번호|이메일|전화번호|주문번호) 가림\)/g, ' ')
-  // 상품의 출고 날짜를 묻는 말은 배송 규칙보다 먼저 (예약 상품은 결제 후 1~3일이 아니라서)
+  // 상품의 출고 날짜를 묻는 말은 배송 규칙보다 먼저 (예약 상품은 기본 출고 기준이 아니라서)
   const shipDate = answerShipDate(said, catalog, ctx)
   if (shipDate && !ROUTES.some((r) => r.handoff && r.re.test(said))) return shipDate
   const route = ROUTES.find((r) => r.re.test(said))
