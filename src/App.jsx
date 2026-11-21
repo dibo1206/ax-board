@@ -8,8 +8,11 @@ import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
 import { addToCart, get, getPolicy, post, preorderNote, thumbUrl, unitPrice } from './shop/shared.js'
 import { BrixCard, KeyFactsCard, OptionsCard } from './shop/DetailCards.jsx'
 import { DeliveryBox, DeliveryLine, SellerBox } from './shop/DetailExtras.jsx'
+import { DeliveryJourney } from './shop/DeliveryJourney.jsx'
+import { FreshGuide } from './shop/FreshGuide.jsx'
+import { ChatButtonGuard } from './shop/chatGuard.js'
 import { WishButton } from './shop/Saved.jsx'
-import { pairBlocks, storageSteps } from './shop/detailFacts.js'
+import { pairBlocks } from './shop/detailFacts.js'
 import { FarmPage, FarmsPage } from './shop/Farms.jsx'
 import { Guide } from './shop/Guide.jsx'
 import { NotFound } from './shop/NotFound.jsx'
@@ -305,6 +308,11 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   const [reviewCount, setReviewCount] = useState(null)
   const [qnaShown, setQnaShown] = useState(5)
   const [askOpen, setAskOpen] = useState(focus === 'qna')
+  // 배송 여정 카드의 [신선도 확인법 보기] → 상품 설명 탭의 보관·섭취 안내로
+  const openFreshGuide = () => {
+    setTab('info')
+    setTimeout(() => document.getElementById('fresh-guide')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30)
+  }
   const openAsk = () => {
     setTab('qna')
     setAskOpen(true)
@@ -343,6 +351,8 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   // 옵션을 고르면 가격·100g당 가격·품절 여부가 그 옵션 기준으로 바뀐다 (옵션 이름이 판매 단위)
   const option = product.options?.find((o) => o.id === optionId) ?? null
   const price = option ? option.price : product.price
+  // 배송 여정 카드는 살 수 있을 때만 (품절·품절 옵션이면 안 보임)
+  const showJourney = !product.sold_out && option?.stock !== 0
   const unit = option ? option.name : product.unit
 
   const questions = mergeQuestions(product.questions, myQuestions)
@@ -367,6 +377,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {(option || !product.has_options) && unitPrice(price, unit) && <>{unitPrice(price, unit)} · </>}
         {product.price_updated_at && <>가격 기준 {product.price_updated_at.slice(0, 10)}</>}
       </p>
+      {/* 가격 밑 한 줄 배송 안내는 늘 보인다. 자세한 배송 여정 카드는 구매 칸 아래에 둔다 (2026-11-21: 카드가 위에 있으면 구매 칸이 PC 1,352px·휴대폰 1,852px 아래로 밀려 첫 화면에 구매 버튼이 안 보였다) */}
       <DeliveryLine product={product} />
       <div className="detail-actions">
         <WishButton code={product.product_code} name={product.name.replace(/\[예시\]\s*/g, '')} variant="detail" />
@@ -398,12 +409,15 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         <dt>판매 농가</dt><dd><a href={`/farm/${encodeURIComponent(seller.seller_code)}`} className="farm-name-link">{seller.name}</a> · {seller.region}</dd>
       </dl>
       <BuyBox product={product} option={option} onPick={setOptionId} onAsk={openAsk} />
+      {/* 상담하기 버튼이 찜·공유·배송 카드·구매 칸·탭을 가리지 않게 (품절 상품 포함, 화면에는 아무것도 그리지 않음) */}
+      <ChatButtonGuard />
       <div className="buy-aside">
         <button type="button" onClick={openAsk}>상품 문의하기</button>
         {product.b2b_available && (
           <button type="button" onClick={() => { setShowB2b(true); setTimeout(() => document.getElementById('b2b-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50) }}>기업 구매 문의 <small>대량·납품</small></button>
         )}
       </div>
+      {showJourney && <DeliveryJourney product={product} onFreshGuide={openFreshGuide} />}
       </div>
       </div>
 
@@ -441,33 +455,8 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {/* 상품 설명 탭 순서 (2026-11-08 피드백): 즐기는 법 → 보관·섭취 → 농가 이야기 → 고시. 자주 묻는 질문·후기·문의는 각자 탭으로 */}
         <RecipeCards recipes={item.recipes} />
         <DeliveryBox product={product} />
-        <section className="box">
-          <h3>보관·섭취 안내</h3>
-          {item.pending && <p className="muted">새로 들어온 품목이라 담당자가 보관·섭취 정보를 확인하고 있어요. 궁금한 점은 아래 상품 Q&A로 물어봐 주세요.</p>}
-          {/* 보관법은 "A. B. C" 처럼 쓰여 있어서 번호 단계로 나눠 보여 준다 (한 문장이면 그대로) */}
-          {item.storage_method && (storageSteps(item.storage_method)
-            ? <ol className="storage-steps">{storageSteps(item.storage_method).map((step) => <li key={step}>{step}</li>)}</ol>
-            : <p>{item.storage_method}</p>)}
-          {item.keep_period && <p>보관 기간 참고: {item.keep_period}</p>}
-          {/* 신선도는 날짜가 아니라 지금 상태로 판단한다 (팀 식품 기준표). 옛 데이터(며칠)도 그대로 보여 준다 */}
-          {fresh && item.stage1_state && (
-            <ul className="fresh-stages">
-              <li><strong>신선</strong> {item.stage1_state} → {item.stage1_uses.join(', ')}</li>
-              <li><strong>품질 저하</strong> {item.stage2_state} → {item.stage2_uses.join(', ')}</li>
-              <li><strong>섭취 부적합</strong> 아래 신호가 보이면 → 조리하지 말고 폐기</li>
-            </ul>
-          )}
-          {fresh && !item.stage1_state && item.fresh_days_stage1 && (
-            <p>받은 날부터 {item.fresh_days_stage1}일까지: {item.stage1_uses.join(', ')} → {item.fresh_days_stage2}일까지: {item.stage2_uses.join(', ')} → 그 뒤: {item.stage3_uses.join(', ')}</p>
-          )}
-          {item.opened_note && <p>{item.opened_note}</p>}
-          {item.allergens.length > 0 && <p className="warn">알레르기: {item.allergens.join(', ')}</p>}
-          {item.allergen_note && <p className="muted">{item.allergen_note}</p>}
-          {item.danger_signs.length > 0 && <p className="muted">이런 상태면 드시지 마세요: {item.danger_signs.join(' / ')}</p>}
-          {item.danger_note && <p className="muted">{item.danger_note}</p>}
-          {item.cafe_note && <p className="muted">카페·업소 메뉴 비율: {item.cafe_note}</p>}
-          {item.reviewed_by && item.source && <p className="note">출처: {item.source}</p>}
-        </section>
+        {/* 보관·섭취 안내: 내용은 그대로 (보관법 번호 단계·보관 기간·신선도 단계·개봉 후·알레르기·드시지 말 신호·카페 비율·출처), 배치만 FreshGuide 디자인 */}
+        <FreshGuide item={item} fresh={fresh} />
 
         <section className="box">
           <h3>판매 농가 이야기</h3>
