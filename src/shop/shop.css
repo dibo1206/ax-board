@@ -1650,3 +1650,8 @@ body:has(.shop) { background: #fafaf8; }
 
 /* 농가 모아보기: 좌우 여백이 너무 많아서(본문 폭 820px) 폭을 넓힌다. 상품 목록(1440px)보다는 조금 좁게 */
 .shop .page:has(.farms) { max-width: 1240px; }
+
+/* 농가 모아보기: 제목 "농가 모아보기"의 위(홈 › 농가 줄과의 간격)·아래(안내 글과의 간격) 여백을 16px 로 똑같이 맞춘다 */
+.shop .page:has(.farms) { padding-top: 40px; }
+.shop .farms .pcrumbs { margin-bottom: 16px; }
+.shop .farms .farms-lead { margin-top: 16px; }
