@@ -1647,3 +1647,6 @@ body:has(.shop) { background: #fafaf8; }
   .shop .picks .card .thumb { width: 100%; max-width: 260px; height: auto; aspect-ratio: 1; object-fit: cover; margin-inline: auto; }
   .shop .picks .card .reasons { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
 }
+
+/* 농가 모아보기: 좌우 여백이 너무 많아서(본문 폭 820px) 폭을 넓힌다. 상품 목록(1440px)보다는 조금 좁게 */
+.shop .page:has(.farms) { max-width: 1240px; }
