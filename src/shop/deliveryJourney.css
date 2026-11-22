@@ -25,8 +25,8 @@
 .shop .dlv-eyebrow { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-size: 13px; color: var(--muted); letter-spacing: 0.2px; }
 .shop .dlv .dlv-arrive { margin: 0; font-family: var(--display); font-size: 24px; line-height: 32px; font-weight: 700; letter-spacing: -0.4px; color: var(--dlv-ink); }
 .shop .dlv-arrive-tag { padding: 1px 8px; border-radius: 4px; background: var(--dlv-green-wash); font-size: 12px; line-height: 18px; font-weight: 600; color: var(--dlv-green); letter-spacing: 0; }
-.shop .dlv-sub { margin: 4px 0 0; font-size: 14px; color: var(--muted); }
-.shop .dlv-sub strong { color: var(--dlv-ink); font-weight: 600; }
+.shop .dlv-sub { margin: 10px 0 0; font-size: 14px; color: var(--muted); }
+.shop .dlv-sub strong { color: var(--dlv-ink); font-weight: 700; }
 .shop .dlv-clock { flex: none; display: grid; justify-items: end; gap: 0; margin: 2px 0 0; padding: 6px 10px; border-left: 2px solid var(--dlv-gold); background: #fbf6e6; text-align: right; }
 .shop .dlv-clock small { font-size: 12px; line-height: 18px; color: var(--muted); }
 .shop .dlv-clock strong { font-size: 14px; line-height: 20px; }
@@ -50,7 +50,7 @@
 .shop .dlv-when-nudge:hover { border-color: var(--line); }
 .shop .more-right .dlv-when-nudge.next { animation: dlv-hint 1.6s ease-in-out 0.6s 2; }
 @keyframes dlv-hint { 0%, 100% { transform: translateY(-50%); } 50% { transform: translate(3px, -50%); } }
-.shop .dlv-when button { flex: none; display: inline-flex; align-items: baseline; gap: 4px; min-height: 34px; padding: 0 11px; border: 1px solid var(--border); border-radius: 17px; background: #fff; color: var(--dlv-ink); font: inherit; font-size: 13px; cursor: pointer; transition: border-color 0.15s, background-color 0.15s, color 0.15s; }
+.shop .dlv-when button { flex: none; display: inline-flex; align-items: center; justify-content: center; line-height: 1; gap: 4px; min-height: 34px; padding: 0 11px; border: 1px solid var(--border); border-radius: 17px; background: #fff; color: var(--dlv-ink); font: inherit; font-size: 13px; cursor: pointer; transition: border-color 0.15s, background-color 0.15s, color 0.15s; }
 .shop .dlv-when button span { font-size: 11px; color: var(--muted); }
 .shop .dlv-when button.rest { background: var(--dlv-hatch), #fff; color: var(--muted); }
 .shop .dlv-when button:hover { border-color: var(--line); }
@@ -60,11 +60,11 @@
 /* 3) 하루 한 칸 띠 */
 .shop .dlv-strip { --cells: 7; position: relative; padding-top: 9px; }
 .shop .dlv-days, .shop .dlv-lanes { display: grid; grid-template-columns: repeat(var(--cells), minmax(0, 1fr)); }
-.shop .dlv-day { position: relative; display: grid; justify-items: center; align-content: start; gap: 0; min-height: 58px; padding: 6px 0 4px; border-right: 1px solid #fff; background: var(--dlv-soft); transition: background-color 0.15s; }
+.shop .dlv-day { position: relative; display: grid; justify-items: center; align-content: center; gap: 0; min-height: 72px; padding: 8px 0; border-right: 1px solid #fff; background: var(--dlv-soft); transition: background-color 0.15s; }
 .shop .dlv-day:first-child { border-radius: 6px 0 0 0; }
 .shop .dlv-day:last-child { border-radius: 0 6px 0 0; border-right: 0; }
-.shop .dlv-day small { font-size: 11px; line-height: 14px; color: var(--muted); }
-.shop .dlv-day b { font-size: 16px; line-height: 22px; font-weight: 600; }
+.shop .dlv-day small { font-size: 13px; line-height: 17px; color: var(--muted); }
+.shop .dlv-day b { font-size: 20px; line-height: 26px; font-weight: 600; }
 .shop .dlv-day em { max-width: 100%; overflow: hidden; padding: 0 2px; font-style: normal; font-size: 10px; line-height: 13px; color: #8a5a1c; white-space: nowrap; text-overflow: ellipsis; }
 .shop .dlv-day.rest { background: var(--dlv-hatch), var(--dlv-soft); }
 .shop .dlv-day.rest b { color: #8b8b84; font-weight: 500; }
@@ -76,23 +76,22 @@
 .shop .dlv-day.gap b { font-size: 14px; letter-spacing: 1px; }
 .shop .dlv-day:not(.gap):hover { background-color: #e8e6dd; }
 
-.shop .dlv-lanes { grid-template-rows: 14px 22px 22px; row-gap: 4px; padding: 8px 0 10px; border: 1px solid var(--dlv-soft); border-top: 0; border-radius: 0 0 6px 6px; }
+.shop .dlv-lanes { grid-template-rows: 20px 22px 22px; row-gap: 4px; padding: 8px 0 10px; border: 1px solid var(--dlv-soft); border-top: 0; border-radius: 0 0 6px 6px; }
 .shop .dlv-bar { position: relative; display: flex; align-items: center; min-width: 0; margin: 0 3px; overflow: hidden; font-size: 11px; font-weight: 600; white-space: nowrap; transform-origin: left center; animation: dlv-grow 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; transition: box-shadow 0.15s, filter 0.15s; }
 .shop .dlv-bar span { padding: 0 7px; overflow: hidden; text-overflow: ellipsis; }
 .shop .dlv-bar.prep { grid-row: 1; align-self: center; height: 0; border-top: 2px dotted #9a9a90; margin-inline: 8px; }
 .shop .dlv-bar.prep span { display: none; }
-.shop .dlv-bar.ship { grid-row: 2; border-radius: 11px; background: var(--dlv-ink); color: #fff; animation-delay: 0.08s; }
-.shop .dlv-bar.arrive { grid-row: 3; border-radius: 11px; background: var(--dlv-green); color: #fff; animation-delay: 0.16s; }
+.shop .dlv-bar.ship { grid-row: 2; border-radius: 6px; justify-content: center; background: var(--dlv-ink); color: #fff; animation-delay: 0.08s; }
+.shop .dlv-bar.arrive { grid-row: 3; border-radius: 6px; justify-content: center; background: var(--dlv-green); color: #fff; animation-delay: 0.16s; }
 .shop .dlv-dot { grid-row: 1; justify-self: center; align-self: center; width: 10px; height: 10px; border-radius: 50%; }
-.shop .dlv-dot.order { border: 1.5px solid #9a9a90; background: #fff; }
-.shop .dlv-dot.receive { background: var(--dlv-gold); box-shadow: 0 0 0 3px #fbf1d0; }
+.shop .dlv-pill { display: flex; align-items: center; justify-content: center; align-self: center; min-width: 0; height: 20px; margin: 0 3px; padding: 0 6px; overflow: hidden; border-radius: 6px; background: var(--dlv-gold); color: #000; font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; text-overflow: ellipsis; }
 @keyframes dlv-grow { from { transform: scaleX(0.15); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* 4) 네 단계: 띠 아래 글로 (마우스를 올리면 해당 막대가 도드라진다) */
 .shop .dlv-stages { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin: 14px 0 0; padding: 0; list-style: none; }
 .shop .dlv-stages li { display: grid; align-content: start; gap: 1px; padding: 2px 10px 2px 0; border-left: 0; transition: opacity 0.15s; }
 .shop .dlv-stages li + li { padding-left: 10px; border-left: 1px solid var(--border); }
-.shop .dlv-step { display: inline-grid; place-items: center; width: 18px; height: 18px; margin-bottom: 2px; border-radius: 50%; background: var(--dlv-soft); font-size: 11px; font-weight: 600; }
+.shop .dlv-step { display: inline-grid; place-items: center; width: 18px; height: 18px; line-height: 1; margin-bottom: 2px; border-radius: 50%; background: var(--dlv-soft); font-size: 11px; font-weight: 600; }
 .shop .dlv-stages li[data-k='receive'] .dlv-step { background: var(--dlv-gold); color: #3a2f0c; }
 .shop .dlv-stages li[data-k='ship'] .dlv-step { background: var(--dlv-ink); color: #fff; }
 .shop .dlv-stages li[data-k='arrive'] .dlv-step { background: var(--dlv-green); color: #fff; }
@@ -103,7 +102,7 @@
 @media (hover: hover) {
   .shop .dlv:has(.dlv-stages li[data-k='ship']:hover) .dlv-bar.ship,
   .shop .dlv:has(.dlv-stages li[data-k='arrive']:hover) .dlv-bar.arrive { box-shadow: 0 0 0 3px rgb(47 111 58 / 0.18); filter: brightness(1.08); }
-  .shop .dlv:has(.dlv-stages li[data-k='receive']:hover) .dlv-dot.receive { box-shadow: 0 0 0 5px #f6e6b0; }
+  .shop .dlv:has(.dlv-stages li[data-k='receive']:hover) .dlv-pill { box-shadow: 0 0 0 4px #f6e6b0; }
   .shop .dlv:has(.dlv-stages li[data-k='prep']:hover) .dlv-bar.prep { border-top-color: var(--dlv-ink); }
   .shop .dlv-stages:has(li:hover) li:not(:hover) { opacity: 0.55; }
 }
@@ -124,7 +123,9 @@
   .shop .dlv .dlv-arrive { font-size: 21px; line-height: 28px; }
   .shop .dlv-clock { justify-items: start; text-align: left; width: 100%; box-sizing: border-box; grid-template-columns: auto 1fr; align-items: baseline; column-gap: 8px; }
   .shop .dlv-day { min-height: 52px; }
-  .shop .dlv-day b { font-size: 14px; }
+  .shop .dlv-day small { font-size: 11px; line-height: 14px; }
+  .shop .dlv-day b { font-size: 16px; line-height: 22px; }
+  .shop .dlv-pill { margin: 0 1px; padding: 0 3px; font-size: 10px; }
   .shop .dlv-day em { font-size: 9px; }
   .shop .dlv-bar { margin: 0 1px; font-size: 10px; }
   .shop .dlv-bar span { padding: 0 4px; }

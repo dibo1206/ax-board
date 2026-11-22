@@ -162,9 +162,9 @@ export function DeliveryJourney({ product, onFreshGuide }) {
           ))}
         </div>
         <div className="dlv-lanes">
-          <span className="dlv-dot order" style={{ gridColumn: 1, gridRow: 1 }} title={`결제 ${dayLabel(from)}`} />
+          {/* 주문 접수일은 결제일과 다를 수 있다 (주말·오후 2시 이후 결제 → 다음 출고일). 알약은 실제 주문 접수일 칸에 */}
+          {iOrder >= 0 && <span className="dlv-pill" style={{ gridColumn: iOrder + 1, gridRow: 1 }} title={`주문 접수 ${dayLabel(plan.orderDay)}`}>주문 접수</span>}
           {iShip - iOrder > 1 && <Bar k="prep" from={iOrder + 1} to={iShip - 1} label="준비·검수" cells={cells.length} />}
-          {iOrder >= 0 && <span className="dlv-dot receive" style={{ gridColumn: iOrder + 1, gridRow: 1 }} title={`주문 접수 ${dayLabel(plan.orderDay)}`} />}
           <Bar k="ship" from={iShip} to={iShip} label="출고" cells={cells.length} />
           <Bar k="arrive" from={iArrive} to={iArrive} label="도착" cells={cells.length} />
         </div>
