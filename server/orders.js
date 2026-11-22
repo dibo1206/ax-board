@@ -232,7 +232,7 @@ export async function loadOrder(orderNo, client = pool) {
   return { ...openOrder(rows[0]), items: items.rows, shipments: shipments.rows, refunds: refunds.rows, returns: returns.rows.map(openReturn) }
 }
 
-// 출고 안내: 예약 상품이 있는 농가는 그 날짜를, 나머지는 기본 안내(결제 후 1~3일). 주문 메일·주문 화면에서 쓴다
+// 출고 안내: 예약 상품이 있는 농가는 그 날짜를, 나머지는 기본 안내(SHIPPING.leadTime). 주문 메일·주문 화면에서 쓴다
 export function shippingNote(shipments = []) {
   const live = shipments.filter((s) => s.status !== 'cancelled')
   const later = live.filter((s) => isPreorder(s.ship_from))

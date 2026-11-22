@@ -35,12 +35,16 @@
     "test-xss": "node scripts/xss-test.js",
     "test-abuse": "node scripts/abuse-test.js",
     "test-extras": "node scripts/extras-test.js",
+    "test-speak": "node scripts/speak-test.js",
     "eval-chat": "node scripts/eval-chat.js",
     "count-ai": "node scripts/count-ai.js",
     "chat-eval": "node scripts/chat-eval.js",
     "rag-eval": "node scripts/rag-eval.js",
     "rag-bakeoff": "node scripts/rag-bakeoff.js",
-    "test-rag": "node scripts/rag-test.js"
+    "test-rag": "node scripts/rag-test.js",
+    "test-rag-same": "node scripts/rag-same-text-test.js",
+    "test-rag-qna": "node scripts/rag-qna-test.js",
+    "test-grounding": "node scripts/chat-grounding-test.js"
   },
   "dependencies": {
     "compression": "^1.8.2",

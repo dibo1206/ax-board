@@ -7,9 +7,12 @@ import { Related } from './Recommend.jsx'
 import { RatingBadge, ReviewList } from './shop/Reviews.jsx'
 import { addToCart, get, getPolicy, post, preorderNote, thumbUrl, unitPrice } from './shop/shared.js'
 import { BrixCard, KeyFactsCard, OptionsCard } from './shop/DetailCards.jsx'
-import { DeliveryBox, DeliveryLine, SellerBox } from './shop/DetailExtras.jsx'
+import { DeliveryLine, ExpiryNote, SellerBox } from './shop/DetailExtras.jsx'
+import { DeliveryJourney } from './shop/DeliveryJourney.jsx'
+import { FreshGuide } from './shop/FreshGuide.jsx'
+import { ChatButtonGuard } from './shop/chatGuard.js'
 import { WishButton } from './shop/Saved.jsx'
-import { pairBlocks, storageSteps } from './shop/detailFacts.js'
+import { pairBlocks } from './shop/detailFacts.js'
 import { FarmPage, FarmsPage } from './shop/Farms.jsx'
 import { Guide } from './shop/Guide.jsx'
 import { NotFound } from './shop/NotFound.jsx'
@@ -109,9 +112,12 @@ function BlockPhoto({ block, alt }) {
 }
 
 function BlockText({ block }) {
+  // 제목이 "POINT 1 · 제목" 이면 POINT 1 을 작은 글씨로 제목 위에 (쿠팡 상세페이지 모양, 2026-11-21)
+  const point = block.title && /^POINT\s*\d+\s*·\s*\S/.test(block.title)
   return (
     <div className="detail-block-text">
-      {block.title && <h4 className="para-title">{block.title}</h4>}
+      {point && <p className="point-kicker">{block.title.split('·')[0].trim()}</p>}
+      {block.title && <h4 className="para-title">{point ? block.title.slice(block.title.indexOf('·') + 1).trim() : block.title}</h4>}
       {block.body.split(/\n{2,}/).map((para, j) => <p key={j} className="para">{para}</p>)}
     </div>
   )
@@ -132,6 +138,45 @@ function DetailBlocks({ blocks, name }) {
         </div>
       )))}
     </section>
+  )
+}
+
+// 상세정보 펼쳐보기 (2026-11-21): 상세 블록·회사 상세 이미지가 길면 처음에는 FOLD_HEIGHT 만큼만 보여 주고 버튼으로 펼친다 (화면이 끝없이 길어지지 않게)
+// 접어도 내용은 그대로 문서에 있어서 화면 낭독기·검색엔진은 다 읽는다. 조금만 넘는 길이(FOLD_SLACK 안)는 접지 않는다
+const FOLD_HEIGHT = 1100 // PC 지그재그에서 사진·글 두 쌍이 보이는 높이
+const FOLD_SLACK = 300
+function FoldDetail({ children }) {
+  const wrap = useRef(null)
+  const inner = useRef(null)
+  const [tall, setTall] = useState(false)
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    const el = inner.current
+    if (!el) return undefined
+    // 사진은 화면에 보일 때 불러와서 높이가 나중에 바뀐다 → 안쪽 높이를 계속 지켜본다 (탭을 바꿔 다시 보일 때도)
+    const check = () => setTall(el.offsetHeight > FOLD_HEIGHT + FOLD_SLACK)
+    check()
+    if (typeof ResizeObserver === 'undefined') return undefined
+    const watch = new ResizeObserver(check)
+    watch.observe(el)
+    return () => watch.disconnect()
+  }, [])
+  const folded = tall && !open
+  const toggle = () => {
+    setOpen((v) => !v)
+    if (open) wrap.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) // 접을 때는 상세 정보 처음으로 (화면이 한참 아래에 남지 않게)
+  }
+  return (
+    <div ref={wrap} className={`fold-detail${folded ? ' folded' : ''}`}>
+      <div id="fold-detail-body" className="fold-body" style={folded ? { maxHeight: FOLD_HEIGHT } : undefined}>
+        <div ref={inner}>{children}</div>
+      </div>
+      {tall && (
+        <button type="button" className="fold-toggle" aria-expanded={open} aria-controls="fold-detail-body" onClick={toggle}>
+          {open ? '상세정보 접기' : '상세정보 펼쳐보기'}<span className="fold-arrow" aria-hidden="true" />
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -263,6 +308,11 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   const [reviewCount, setReviewCount] = useState(null)
   const [qnaShown, setQnaShown] = useState(5)
   const [askOpen, setAskOpen] = useState(focus === 'qna')
+  // 배송 여정 카드의 [신선도 확인법 보기] → 상품 설명 탭의 보관·섭취 안내로
+  const openFreshGuide = () => {
+    setTab('info')
+    setTimeout(() => document.getElementById('fresh-guide')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30)
+  }
   const openAsk = () => {
     setTab('qna')
     setAskOpen(true)
@@ -301,6 +351,8 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   // 옵션을 고르면 가격·100g당 가격·품절 여부가 그 옵션 기준으로 바뀐다 (옵션 이름이 판매 단위)
   const option = product.options?.find((o) => o.id === optionId) ?? null
   const price = option ? option.price : product.price
+  // 배송 여정 카드는 살 수 있을 때만 (품절·품절 옵션이면 안 보임)
+  const showJourney = !product.sold_out && option?.stock !== 0
   const unit = option ? option.name : product.unit
 
   const questions = mergeQuestions(product.questions, myQuestions)
@@ -325,6 +377,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {(option || !product.has_options) && unitPrice(price, unit) && <>{unitPrice(price, unit)} · </>}
         {product.price_updated_at && <>가격 기준 {product.price_updated_at.slice(0, 10)}</>}
       </p>
+      {/* 가격 밑 한 줄 배송 안내는 늘 보인다. 자세한 배송 여정 카드는 상품 설명 탭에 둔다 (2026-11-21: 구매 칸 위에 있으면 구매 칸이 PC 1,352px·휴대폰 1,852px 아래로 밀려 첫 화면에 구매 버튼이 안 보였다) */}
       <DeliveryLine product={product} />
       <div className="detail-actions">
         <WishButton code={product.product_code} name={product.name.replace(/\[예시\]\s*/g, '')} variant="detail" />
@@ -356,6 +409,8 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         <dt>판매 농가</dt><dd><a href={`/farm/${encodeURIComponent(seller.seller_code)}`} className="farm-name-link">{seller.name}</a> · {seller.region}</dd>
       </dl>
       <BuyBox product={product} option={option} onPick={setOptionId} onAsk={openAsk} />
+      {/* 상담하기 버튼이 찜·공유·배송 카드·구매 칸·탭을 가리지 않게 (품절 상품 포함, 화면에는 아무것도 그리지 않음) */}
+      <ChatButtonGuard />
       <div className="buy-aside">
         <button type="button" onClick={openAsk}>상품 문의하기</button>
         {product.b2b_available && (
@@ -381,46 +436,28 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
         {/* 상품 설명 탭 순서 (2026-11-14): 한눈에 보기(자동) → 설명 → 판매 농가가 쓴 상세 블록 → 당도·구성 비교(자동) → 회사 상세 이미지 → 즐기는 법 → … */}
         <KeyFactsCard product={product} />
         <Description text={product.description} />
-        <DetailBlocks blocks={product.detail_blocks} name={product.name.replace(/\[예시\]\s*/g, '')} />
+        {/* 상세 블록과 회사 상세 이미지는 길어서 접어 둔다 (상세정보 펼쳐보기). 당도·구성 비교 카드는 접지 않고 늘 보인다 */}
+        {(product.detail_blocks?.length > 0 || product.detail_images?.length > 0) && (
+          <FoldDetail key={product.product_code}>
+            <DetailBlocks blocks={product.detail_blocks} name={product.name.replace(/\[예시\]\s*/g, '')} />
+            {/* 회사 상세페이지 이미지 (세로로 긴 이미지를 위에서 아래로 이어서) */}
+            {product.detail_images?.length > 0 && (
+              <section className="box detail-images">
+                <h3>상세 정보</h3>
+                {product.detail_images.map((src) => <img key={src} src={src} alt="" loading="lazy" />)}
+              </section>
+            )}
+          </FoldDetail>
+        )}
         <BrixCard product={product} />
         <OptionsCard product={product} optionId={optionId} onPick={setOptionId} />
-        {/* 회사 상세페이지 이미지 (세로로 긴 이미지를 위에서 아래로 이어서) */}
-        {product.detail_images?.length > 0 && (
-          <section className="box detail-images">
-            <h3>상세 정보</h3>
-            {product.detail_images.map((src) => <img key={src} src={src} alt="" loading="lazy" />)}
-          </section>
-        )}
         {/* 상품 설명 탭 순서 (2026-11-08 피드백): 즐기는 법 → 보관·섭취 → 농가 이야기 → 고시. 자주 묻는 질문·후기·문의는 각자 탭으로 */}
         <RecipeCards recipes={item.recipes} />
-        <DeliveryBox product={product} />
-        <section className="box">
-          <h3>보관·섭취 안내</h3>
-          {item.pending && <p className="muted">새로 들어온 품목이라 담당자가 보관·섭취 정보를 확인하고 있어요. 궁금한 점은 아래 상품 Q&A로 물어봐 주세요.</p>}
-          {/* 보관법은 "A. B. C" 처럼 쓰여 있어서 번호 단계로 나눠 보여 준다 (한 문장이면 그대로) */}
-          {item.storage_method && (storageSteps(item.storage_method)
-            ? <ol className="storage-steps">{storageSteps(item.storage_method).map((step) => <li key={step}>{step}</li>)}</ol>
-            : <p>{item.storage_method}</p>)}
-          {item.keep_period && <p>보관 기간 참고: {item.keep_period}</p>}
-          {/* 신선도는 날짜가 아니라 지금 상태로 판단한다 (팀 식품 기준표). 옛 데이터(며칠)도 그대로 보여 준다 */}
-          {fresh && item.stage1_state && (
-            <ul className="fresh-stages">
-              <li><strong>신선</strong> {item.stage1_state} → {item.stage1_uses.join(', ')}</li>
-              <li><strong>품질 저하</strong> {item.stage2_state} → {item.stage2_uses.join(', ')}</li>
-              <li><strong>섭취 부적합</strong> 아래 신호가 보이면 → 조리하지 말고 폐기</li>
-            </ul>
-          )}
-          {fresh && !item.stage1_state && item.fresh_days_stage1 && (
-            <p>받은 날부터 {item.fresh_days_stage1}일까지: {item.stage1_uses.join(', ')} → {item.fresh_days_stage2}일까지: {item.stage2_uses.join(', ')} → 그 뒤: {item.stage3_uses.join(', ')}</p>
-          )}
-          {item.opened_note && <p>{item.opened_note}</p>}
-          {item.allergens.length > 0 && <p className="warn">알레르기: {item.allergens.join(', ')}</p>}
-          {item.allergen_note && <p className="muted">{item.allergen_note}</p>}
-          {item.danger_signs.length > 0 && <p className="muted">이런 상태면 드시지 마세요: {item.danger_signs.join(' / ')}</p>}
-          {item.danger_note && <p className="muted">{item.danger_note}</p>}
-          {item.cafe_note && <p className="muted">카페·업소 메뉴 비율: {item.cafe_note}</p>}
-          {item.reviewed_by && item.source && <p className="note">출처: {item.source}</p>}
-        </section>
+        {/* 배송 여정 카드 (2026-11-21): 예전 [배송·소비기한] 칸 자리. 살 수 있을 때만 보이고, 소비기한 줄은 늘 아래에 */}
+        {showJourney && <DeliveryJourney product={product} onFreshGuide={openFreshGuide} />}
+        <ExpiryNote product={product} />
+        {/* 보관·섭취 안내: 내용은 그대로 (보관법 번호 단계·보관 기간·신선도 단계·개봉 후·알레르기·드시지 말 신호·카페 비율·출처), 배치만 FreshGuide 디자인 */}
+        <FreshGuide item={item} fresh={fresh} />
 
         <section className="box">
           <h3>판매 농가 이야기</h3>

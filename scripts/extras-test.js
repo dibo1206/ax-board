@@ -40,7 +40,11 @@ const pre = deliveryPlan(S, { now: kst('2026-11-20 10:00'), shipFrom: '2026-12-0
 check('예약 상품: 출고 시작일(토) 뒤 첫 출고일(월)에 출고', pre.preorder && pre.shipDate === '2026-12-07' && pre.arriveDate === '2026-12-08', `${pre.shipDate} ${pre.arriveDate}`)
 const past = deliveryPlan(S, { now: kst('2026-11-20 10:00'), shipFrom: '2026-11-01' })
 check('출고 시작일이 지났으면 예약 아님', !past.preorder && past.shipDate === '2026-11-23')
-check('설정이 비어도 기본값으로 계산', same(deliveryPlan({}, { now: kst('2026-11-20 10:00') }).shipDate, '2026-11-23'))
+check('설정이 비어도 기본값(14시 마감·당일 출고)으로 계산', same(deliveryPlan({}, { now: kst('2026-11-20 10:00') }).shipDate, '2026-11-20'))
+const def = deliveryPlan(DEFAULT_SHIPPING, { now: kst('2026-11-23 13:59') })
+check('기본 설정: 월 13:59 주문 → 월 출고·화 도착 (회사 안내 "오후 2시까지 결제하면 그날")', def.shipDate === '2026-11-23' && def.arriveDate === '2026-11-24', `${def.shipDate} ${def.arriveDate}`)
+const late = deliveryPlan(DEFAULT_SHIPPING, { now: kst('2026-11-23 14:00') })
+check('기본 설정: 월 14:00 주문 → 화 출고', late.shipDate === '2026-11-24', late.shipDate)
 
 // ---------- 2) 소비기한 글 ----------
 for (const [text, want] of [

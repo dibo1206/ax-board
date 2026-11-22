@@ -216,6 +216,30 @@ a.card { text-decoration: none; height: 100%; box-sizing: border-box; }
 
 /* AI 초안 · 자주 묻는 질문 · 단위 가격 */
 .ai-draft { display: flex; flex-direction: column; gap: 8px; border-style: solid; border-color: var(--accent); }
+/* 말로 상품 등록하기 (2026-11-21): 새 상품 등록 맨 위, 큰 글씨 · 큰 버튼 (어르신 농가) */
+.speak-fill { display: flex; flex-direction: column; gap: 10px; border-style: solid; border-color: var(--accent); background: #F3F8EE; }
+.speak-fill strong { font-size: 1.15em; }
+.speak-fill textarea { width: 100%; box-sizing: border-box; font-size: 1.1em; line-height: 1.5; padding: 10px 12px; }
+.speak-fill .actions .button { font-size: 1.05em; padding: 10px 18px; }
+.speak-fill .mic.on { background: #C0392B; border-color: #C0392B; color: #fff; }
+.speak-fill .speak-result p { margin: 2px 0; }
+.speak-fill .speak-lead { margin: 0; font-size: 1.05em; }
+.speak-guide { margin: 0; padding-left: 1.4em; display: grid; gap: 6px; font-size: 1.05em; }
+.speak-guide li { line-height: 1.45; }
+.speak-guide .q { font-weight: 700; }
+.speak-guide .ex { color: #4a5a4e; }
+.speak-guide .mark { margin-left: 8px; font-size: 0.9em; font-weight: 700; }
+.speak-guide li.ok .mark { color: #2f7a47; }
+.speak-guide li.miss .mark { color: #b0601a; }
+.speak-fill .speak-example { margin: 0; color: #4a5a4e; }
+.speak-fill .mic-big { align-self: flex-start; font-size: 1.25em; padding: 14px 26px; border-radius: 999px; }
+.speak-fill .mic-big.on { background: #C0392B; border-color: #C0392B; color: #fff; }
+.speak-fill .listening { display: flex; align-items: center; gap: 10px; font-size: 1.15em; font-weight: 700; color: #C0392B; }
+.speak-fill .listening .dot { width: 16px; height: 16px; border-radius: 50%; background: #E0392B; animation: speak-pulse 1s ease-in-out infinite; }
+@keyframes speak-pulse { 0%, 100% { transform: scale(0.8); opacity: 0.6; } 50% { transform: scale(1.25); opacity: 1; } }
+.speak-fill .heard { margin: 0; padding: 10px 12px; background: #fff; border: 1px solid #d6e3cf; border-radius: 8px; font-size: 1.1em; }
+.speak-fill .heard .pending { color: #8a968d; }
+.speak-fill .speak-text { display: flex; flex-direction: column; gap: 4px; font-size: 0.95em; color: #4a5a4e; }
 .faq-edit .row { align-items: end; }
 /* 상세 블록 편집 (관리자·판매자 상품 화면, src/admin/DetailBlocks.jsx) */
 .detail-blocks-edit .block-list { display: flex; flex-direction: column; gap: 10px; margin: 8px 0; padding: 0; list-style: none; }

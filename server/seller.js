@@ -8,7 +8,7 @@ import { hashPassword, issueStaffSession, passwordMatches, requireSeller, reserv
 import { bannedMessage, findBanned } from './banned.js'
 import { sameBlocks } from './blocks.js'
 import { clearCache } from './cache.js'
-import { fillItem, listTemplates, productDraft } from './content.js'
+import { fillItem, listTemplates, productDraft, productParse } from './content.js'
 import { pool } from './db.js'
 import { maskName } from './inquiry.js'
 import { requestItem } from './items.js'
@@ -26,6 +26,7 @@ const text = (v) => (typeof v === 'string' ? v.trim() : '')
 // AI 상세 내용 초안 (농가는 자기 농가로 고정) · 상세페이지 패턴 · 품목 빈 칸 채우기
 sellerRouter.get('/ai/templates', listTemplates)
 sellerRouter.post('/ai/product-draft', productDraft)
+sellerRouter.post('/ai/product-parse', productParse) // 말로 상품 등록하기 (칸 채우기만)
 sellerRouter.post('/items/:code/fill', fillItem)
 sellerRouter.post('/items/request', requestItem) // 목록에 없는 품목 요청 → 관리자 검수 (items.js)
 const mine = (req) => req.seller.sellerCode

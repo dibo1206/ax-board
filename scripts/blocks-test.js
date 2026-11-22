@@ -2,12 +2,14 @@
 //   npm run test-blocks
 // 1) 블록 검사(server/blocks.js) 2) 상품 저장 검사(server/validate.js)와 금지어 3) AI 초안 정리(server/content.js parseDraft)
 // 4) 자동 상세 카드에 들어갈 값 고르기(src/shop/detailFacts.js) 5) 쿠팡식 지그재그 묶기·[예시] 상품 데모 블록 설계(server/demoPlan.js)
+// 6) 품목 장면 사진·POINT 설명으로 만드는 데모 블록 (data/demo_detail_photos.json, 2026-11-21)
 import { blocksSummary, blocksText, readBlocks, removedBlockImages, sameBlocks } from '../server/blocks.js'
 import { findBanned } from '../server/banned.js'
 import { parseDraft } from '../server/content.js'
 import { validateProduct } from '../server/validate.js'
 import { brixGauge, headline, keyFacts, optionRows, pairBlocks, storageSteps } from '../src/shop/detailFacts.js'
-import { DEMO_CAPTION, planDemoBlocks } from '../server/demoPlan.js'
+import { COMPANY_CAPTION, DEMO_CAPTION, companySections, fillCopy, isDemoMade, planCompanyPairs, planDemoBlocks, sceneValues, withJosa } from '../server/demoPlan.js'
+import { readFileSync, existsSync } from 'node:fs'
 
 let failed = 0
 let count = 0
@@ -169,6 +171,41 @@ const built = plan.pairs.flatMap((x, i) => [{ type: 'image', url: photo(`b000000
 const builtCheck = readBlocks(built, CODE)
 check('예시 블록이 블록 검사·금지어를 통과', builtCheck.blocks?.length === 6 && findBanned(blocksText(built)).length === 0, JSON.stringify(builtCheck.errors))
 check('예시 블록은 지그재그 3줄 (가운데 줄만 사진이 오른쪽)', (() => { const r = pairBlocks(builtCheck.blocks); return r.length === 3 && !r[0].flip && r[1].flip && !r[2].flip })())
+
+// ---------- 6. 품목 장면 사진 + POINT 설명 ----------
+const SCENES = JSON.parse(readFileSync(new URL('../data/demo_detail_photos.json', import.meta.url), 'utf8'))
+const sceneOf = (code) => SCENES.items.find((it) => it.item_code === code)
+check('조사: 받침 있으면 이에요, 없으면 예요 (괄호 뒤라도 마지막 한글로)', withJosa('국내산 (경북 안동)', '이에요') === '국내산 (경북 안동)이에요' && withJosa('국내산 (충청남도 논산시)', '이에요') === '국내산 (충청남도 논산시)예요')
+check('조사: ㄹ 받침 뒤는 으로가 아니라 로', withJosa('서울', '으로') === '서울로' && withJosa('귤밭', '으로') === '귤밭으로' && withJosa('상자', '으로') === '상자로')
+check('빈칸 채우기: 값이 없는 문장만 뺀다', fillCopy('{품종} 품종이에요. 당도는 {당도}예요. 맛있어요.', { 품종: '설향', 당도: null }) === '설향 품종이에요. 맛있어요.')
+const kings = { name: '[예시] 킹스베리 2kg', variety: '킹스베리', brix: '9.8', brix_measured_at: '2026-11-04', harvest_date: '2026-11-03', unit: '1kg 2상자', notice: { origin: '국내산 (충청남도 논산시)', composition: '딸기 1kg 2상자 (옵션에서 고름)' } }
+const farm = { name: '[예시] 논산 새벽딸기', region: '충청남도 논산시 광석면' }
+const v = sceneValues(kings, { status: 'active', category: '과일', show_brix: true }, farm)
+check('상품 값: 당도·측정일·수확일·농가([예시] 뗌)·구성(옵션 안내 뗌)', v.당도 === '9.8Brix' && v.당도측정일 === '11월 4일' && v.수확일 === '11월 3일' && v.농가 === '논산 새벽딸기' && v.구성 === '딸기 1kg 2상자', JSON.stringify(v))
+check('검수 전 품목은 당도를 쓰지 않는다 (상품 화면과 같은 규칙)', sceneValues(kings, { status: 'pending', category: '과일' }, farm).당도 === null)
+check("'표시와 달랐어요'로 내린 상품은 당도를 쓰지 않는다", sceneValues({ ...kings, info_disputed: true }, { status: 'active', category: '과일' }, farm).당도 === null)
+check('가공품은 수확일을 쓰지 않는다', sceneValues(kings, { status: 'active', category: '가공품' }, farm).수확일 === null)
+const scenePlan = planDemoBlocks(kings, { status: 'active', category: '과일', show_brix: true }, farm, sceneOf('strawberry'))
+check('장면이 있으면 POINT 4쌍 (사진은 품목 장면 사진)', scenePlan.pairs.length === 4 && scenePlan.pairs.every((p, i) => p.title.startsWith(`POINT ${i + 1} · `) && p.photo === `/product-photos/detail/strawberry-${i + 1}.webp`), JSON.stringify(scenePlan.pairs.map((p) => p.title)))
+check('설명에 상품 값이 들어간다 (품종·당도·농가)', scenePlan.pairs[0].body.includes('킹스베리 품종') && scenePlan.pairs[0].body.includes('9.8Brix') && scenePlan.pairs[1].body.includes('논산 새벽딸기에서'), scenePlan.pairs[0].body)
+check('채우지 못한 빈칸이 글에 남지 않는다', scenePlan.pairs.every((p) => !/[{}]/.test(p.body)))
+check('장면이 없는 품목은 예전 방식 (대표 사진·레시피)', planDemoBlocks({ ...kings, image_url: '/product-photos/x.webp', summary: '소개' }, { status: 'active', category: '과일' }, farm, null).pairs[0]?.photo === '/product-photos/x.webp')
+const missing = SCENES.items.flatMap((it) => it.shots.map((_, i) => `public/product-photos/detail/${it.item_code}-${i + 1}.webp`)).filter((f) => !existsSync(new URL(`../${f}`, import.meta.url)))
+check('장면 사진 파일: 회사 직영만인 배즙·매실청 말고는 모두 있다', missing.every((f) => /\/(pear_juice|plum_syrup)-/.test(f)), missing.join(', '))
+const allCopy = SCENES.items.flatMap((it) => it.shots.filter((s) => s[4]).map((s) => `${s[3]} ${s[4]}`)).join(' ')
+check('장면 설명 글에 금지어(효능 표현)가 없다', findBanned(allCopy).length === 0, findBanned(allCopy).join(', '))
+check('예시 블록 알아보기: 사진이 모두 [예시] 참고 사진이면 이 기능이 채운 것', isDemoMade([{ type: 'image', url: 'a', caption: DEMO_CAPTION }, { type: 'text', body: '글' }]) && !isDemoMade([{ type: 'image', url: 'a', caption: '농가 사진' }]) && !isDemoMade([{ type: 'text', body: '글만' }]) && !isDemoMade([]))
+
+// 회사 직영 상품 (2026-11-21): 회사 홈페이지 설명만 쓰고, 주문·배송·표시 정보는 빼고, 회사 사진 먼저
+const companyDesc = '■ 제품 소개\n사과 소개 글이에요. (회사 소개 글)\n\n■ 주문·배송 (회사 안내)\n평일 오후 2시까지 결제하면 그날 보내요.\n\n※ 가격·재고는 [예시]예요.'
+const secs = companySections(companyDesc)
+check('회사 설명: 주문·배송은 빼고 제품 소개만, (회사 소개 글) 표시와 ※ 줄은 뗀다', secs.length === 1 && secs[0].title === '제품 소개' && secs[0].body === '사과 소개 글이에요.', JSON.stringify(secs))
+const companyScenes = new Map([['apple', { item_code: 'apple', kind: 'fresh', shots: [[0, 0, '가까이'], [0, 0, '사과밭'], [0, 0, '상자'], [0, 0, '손']] }]])
+const cp = planCompanyPairs({ product_code: 'yj_apple_set', item_code: 'apple', name: '명품 사과세트', description: companyDesc }, companyScenes, ['3kg', '5kg'])
+check('회사 상품: POINT 1 은 회사 사진, 설명이 하나면 저장된 구성으로 POINT 2', cp.length === 2 && cp[0].title === 'POINT 1 · 제품 소개' && cp[0].photo === '/product-photos/yj_apple_set-1.webp' && cp[0].caption === COMPANY_CAPTION && cp[1].title === 'POINT 2 · 구성' && cp[1].body === '고를 수 있는 구성은 3kg, 5kg이에요.', JSON.stringify(cp))
+check('회사 상품: 모자란 사진은 장면 사진([예시] 참고 사진), 자라는 곳(2번)은 쓰지 않음', cp[1].photo === '/product-photos/detail/apple-1.webp' && cp[1].caption === DEMO_CAPTION && !cp.some((x) => x.photo?.endsWith('apple-2.webp')))
+check('회사 상품: 글에 주문·배송 약속이 없음', !cp.some((x) => /그날 보내|오후 2시/.test(x.body)))
+check('회사 사진 블록도 이 기능이 채운 것으로 알아본다 (새로 만들기 대상)', isDemoMade([{ type: 'image', url: 'a', caption: COMPANY_CAPTION }, { type: 'image', url: 'b', caption: DEMO_CAPTION }]))
 
 console.log(`\n${count - failed}/${count} 통과`)
 process.exit(failed ? 1 : 0)

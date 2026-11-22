@@ -7,7 +7,7 @@ import sharp from 'sharp'
 import { requireAdmin } from './auth.js'
 import { findBanned } from './banned.js'
 import { blocksSummary, removedBlockImages } from './blocks.js'
-import { fillItem, itemDraft, listTemplates, productDraft } from './content.js'
+import { fillItem, itemDraft, listTemplates, productDraft, productParse } from './content.js'
 import { fillDemoBlocks } from './demoBlocks.js'
 import { createLimiter } from './limit.js'
 import { generateRecipePhoto, imageKeyLoaded, imagesLeftToday, saveRecipePhoto } from './imagegen.js'
@@ -156,14 +156,16 @@ export async function updateProduct(code, product) {
 // AI 상세 내용 초안 · 상세페이지 패턴 · 품목 빈 칸 채우기 (content.js)
 adminRouter.get('/ai/templates', listTemplates)
 adminRouter.post('/ai/product-draft', productDraft)
+adminRouter.post('/ai/product-parse', productParse) // 말로 상품 등록하기 (칸 채우기만)
 adminRouter.post('/items/:code/fill', fillItem)
 adminRouter.post('/items/:code/draft', itemDraft)
 
 // [예시] 상품 상세 블록 채우기 (데모용, server/demoBlocks.js): 블록이 빈 [예시] 상품만 채우고 이미 있는 블록은 건드리지 않는다
+// { refresh: true } 이면 이 기능이 채운 예시 블록도 새로 만든다 (농가·관리자가 쓴 블록은 그대로)
 adminRouter.post('/demo-blocks', async (req, res) => {
-  const result = await fillDemoBlocks()
+  const result = await fillDemoBlocks({ refresh: req.body?.refresh === true })
   if (result.busy) return res.status(409).json({ error: '이미 채우는 중이에요. 잠시 뒤에 목록을 새로 고쳐 보세요.' })
-  console.log(`[demo-blocks] 관리자 ${req.admin.loginId} · 채움 ${result.filled} · 건너뜀 ${result.skipped} · 사진 ${result.photos} · 실패 ${result.failed.length}`)
+  console.log(`[demo-blocks] 관리자 ${req.admin.loginId}${req.body?.refresh === true ? ' (새로 만들기)' : ''} · 채움 ${result.filled} · 건너뜀 ${result.skipped} · 사진 ${result.photos} · 실패 ${result.failed.length}`)
   res.json(result)
 })
 // 새 품목 요청 · 검수 (items.js)

@@ -157,7 +157,7 @@ export function OrderDetail({ order, phone = '', onConfirm = null, onReturn = nu
             </ul>
           </dd></>
         ) : order.tracking_no && <><dt>송장</dt><dd>{order.courier} {order.tracking_no} {order.tracking_url && <a href={order.tracking_url} target="_blank" rel="noreferrer">배송 조회</a>}</dd></>}
-        {/* 출고 안내: 예약 상품이 있으면 농가별 출고 시작일, 아니면 결제 후 1~3일 (서버가 만든 문장) */}
+        {/* 출고 안내: 예약 상품이 있으면 농가별 출고 시작일, 아니면 기본 출고 안내 (서버가 만든 문장) */}
         {order.shipping_note && ['paid', 'preparing'].includes(order.status) && <><dt>출고</dt><dd className="pre-line">{order.shipping_note}</dd></>}
         {order.cancel_reason && <><dt>취소</dt><dd>{when(order.cancelled_at)} · {order.cancel_reason}</dd></>}
         {(order.refunds?.length > 0 || order.refund_pending) && (

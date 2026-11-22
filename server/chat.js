@@ -20,8 +20,8 @@ import { findSensitive, maskPersonal } from './privacy.js'
 import { describeRecommendation, loadActive, readWish, recommend } from './recommend.js'
 import { RETURNS, SHIPPING, SHOP } from './policy.js'
 import { isPreorder, shipDateText } from './preorder.js'
-import { RAG_ANSWER_GAP, RAG_ANSWER_MIN, RAG_ASK_MIN, RAG_MATERIAL_MIN, RAG_OVERLAP_MIN, searchChunks } from './rag.js'
-import { coverage, mostSimilar, similarity } from './similar.js'
+import { notAnAnswer, RAG_ANSWER_GAP, RAG_ANSWER_MIN, RAG_ASK_MIN, RAG_MATERIAL_MIN, RAG_OVERLAP_MIN, searchChunks } from './rag.js'
+import { coverage, mostSimilar, sameText, similarity } from './similar.js'
 import { findBanned } from './banned.js'
 import { publicItem } from './items.js'
 import { ACTIVE_OPTIONS_SQL } from './options.js'
@@ -347,7 +347,7 @@ function describeProduct(p, item) {
   if (item.category !== '가공품') lines.push(`- 수확일: ${p.harvest_date ?? '정보 없음'}`)
   if (p.notice?.origin) lines.push(`- 원산지: ${p.notice.origin}`)
   if (p.notice?.expiry) lines.push(`- 소비기한 또는 품질유지기한: ${p.notice.expiry}`)
-  if (p.summary) lines.push(`- 소개: ${p.summary}`)
+  if (p.summary) lines.push(`- 소개(판매자 글): ${p.summary}`)
   lines.push(`- 구매: ${BUY_HOW}`)
   lines.push(`- 기업 구매 문의: ${p.b2b_available ? '받음' : '받지 않음'}`)
   return lines.join('\n')
@@ -395,7 +395,8 @@ async function buildMaterial(catalog, ctx, evidence = []) {
   // 벡터 검색으로 찾은 조각. 이미 넣은 품목의 품목 정보는 겹치니 뺀다
   const shown = new Set(ctx.items.map((i) => i.item_code))
   const found = evidence.filter((c) => c.score >= RAG_MATERIAL_MIN && !(c.key.startsWith('item:') && shown.has(c.item_code)))
-  if (found.length) parts.push(`[검색으로 찾은 자료]\n${found.map((c) => `- ${c.text}`).join('\n')}`)
+  // 농가가 쓴 상품 소개는 (판매자 글)로 표시한다 → 규칙서대로 보관·안전·건강 근거로는 쓰지 않는다
+  if (found.length) parts.push(`[검색으로 찾은 자료]\n${found.map((c) => `- ${c.trusted ? '' : '(판매자 글) '}${c.text}`).join('\n')}`)
   return parts.join('\n\n')
 }
 
@@ -414,7 +415,8 @@ const FACTS = [
   },
   {
     id: 'price',
-    re: /얼마|가격|값|몇\s?(키로|킬로|kg)|(어느|어떤|몇)\s?(용량|크기|사이즈|단위)/,
+    // "얼마나 타요/넣어요"는 가격이 아니라 양을 묻는 말이라 '얼마나'는 빼고 본다 (2026-11-22 실제 AI 시험에서 찾음)
+    re: /얼마(?!나)|가격|값|몇\s?(키로|킬로|kg)|(어느|어떤|몇)\s?(용량|크기|사이즈|단위)/,
     explicit: /가격|값/,
     say: (p) => (p.picked.length === 1
       ? `${p.label} ${p.picked[0].name} 가격은 ${won(p.picked[0].price)}이에요.${p.picked[0].stock > 0 ? '' : ' 다만 지금은 품절이라 살 수 없어요.'}`
@@ -713,17 +715,33 @@ function dangerSign(message, items) {
   const said = DANGER_WORDS.filter((w) => message.includes(w))
   if (!said.length) return null
   for (const item of findItems(message, items)) {
+    // "곶감 겉에 하얀 가루 있는데 곰팡이예요?"처럼 품목 정보에 '부패와 다르다'고 적힌 모습을 말하면 경고하지 않는다
+    // (그 경우는 아래 safety 답이 그 설명을 먼저 보여 준다)
+    if (lookAlike(item, message)) continue
     const sign = (item.danger_signs ?? []).find((s) => said.some((w) => s.includes(w)))
     if (sign) return { item, sign }
   }
   return null
 }
 
+// 품목 정보의 주의 글에 "○○은 곰팡이와 달라요 / 부패와 달라요"처럼 상한 것과 헷갈리는 모습이 적혀 있으면,
+// 손님이 그 모습(○○)을 말했는지 본다. 흔한 낱말 하나(껍질 등)로 잘못 걸리지 않게 낱말 2개 이상이 맞아야 한다
+// 예: "곶감 겉의 하얀 가루는 … 곰팡이와 달라요" + "곶감 겉에 하얀 가루" → 하얀·가루 → 맞음
+function lookAlike(item, message) {
+  const note = item.danger_note ?? ''
+  if (!/달라요/.test(note)) return false
+  const subject = note.split(/(?:은|는)\s/)[0]
+  const words = subject.replace(/\([^)]*\)/g, ' ').split(/\s+/)
+    .map((w) => w.replace(/(의|에|이|가)$/, ''))
+    .filter((w) => w.length >= 2 && w !== item.name)
+  return words.filter((w) => message.includes(w)).length >= 2
+}
+
 // 위에서부터 먼저 맞는 주제 하나로 답한다 ("먹어도 돼요?"가 "보관"보다 먼저)
 const TOPICS = [
   { kind: 'safety', word: '먹어도 괜찮은지', re: new RegExp(`(먹어|드셔|마셔|섭취해)도|드실\\s?수|마실\\s?수|상하면|싹(이|\\s?났)|상했|상한\\s?(것|거)|변했|변색|곰팡|이상한\\s?냄새|냄새가\\s?(나|이상)|(술|발효|시큼한|썩은)\\s?냄새|물렀|물러졌|썩|끈적|미끈|점액|쭈글|초록색으로|${ELAPSED.source}`) },
   { kind: 'compare', word: '차이', re: /차이|비교|뭐가\s?달라|다른\s?점|뭐가\s?나아|어떤\s?게\s?나아/ },
-  { kind: 'recipe', word: '레시피', re: /레시피|만들|만드|요리|활용|먹는\s?(법|방법)|어떻게\s?먹|해\s?먹|비율|음료|에이드/ },
+  { kind: 'recipe', word: '레시피', re: /레시피|만들|만드|요리|활용|먹는\s?(법|방법)|어떻게\s?먹|해\s?먹|비율|음료|에이드|(얼마나|어떻게|몇\s?대\s?몇)\s?(타|섞|희석)|타\s?(먹|마시)|희석/ },
   { kind: 'ripe', word: '익었는지 보는 법', re: /익었는지|익은\s?(건지|지|거)|다\s?익었|잘\s?익었|숙성\s?(됐|되었)/ },
   { kind: 'storage', word: '보관법', re: /딱딱|후숙|덜\s?익|안\s?익|얼려|얼리|많이\s?남|남았는데|남은\s?(거|것)|다\s?못\s?먹|보관|오래\s?두|둬야|두는\s?법|냉장|냉동|상온|실온|어디에?\s?(둬|두|놔)|(같이|함께)\s?(둬|두|놔|넣)|(둬|두어|놔)도|넣어도|개봉|뜯(은|으면|고)|언제까지|며칠|유통\s?기한|얼마나\s?(가|두|오래)/ },
   { kind: 'taste', word: '맛', re: /맛있|맛이\s?(어때|좋|괜찮)|맛은|무슨\s?맛/ },
@@ -742,9 +760,15 @@ function stageOf(item, days) {
 }
 
 // "배숙 만드는 법", "고구마 맛탕 레시피"처럼 요리 이름을 말했는지 (품목 이름이 든 낱말이나 그 다음 낱말)
-const NOT_DISH = /^(레시피|요리|메뉴|만드|만들|활용|어떻게|뭐|무엇|알려|해|먹|법|방법|비율|음료|간단|쉬운)/
+// 누구에게·언제 먹을지("아이 간식", "아침 반찬")는 요리 이름이 아니다
+const NOT_DISH = /^(레시피|요리|메뉴|만드|만들|활용|어떻게|뭐|무엇|알려|해|먹|법|방법|비율|음료|간단|쉬운|아이|아기|애들|어린이|간식|반찬|도시락|아침|점심|저녁|안주|손님|부모님|선물|집에서|오늘|주말)/
+// 조사를 떼서 한 글자만 남으면 떼지 않는다 ("아이" → "아"가 되어 "고구마 아 레시피"라고 답하던 문제)
+const dropJosa = (w) => {
+  const cut = w.replace(/(으로|로|은|는|이|가|을|를|에|도|랑|하고)$/, '')
+  return cut.length >= 2 ? cut : w
+}
 function askedDish(item, message) {
-  const words = message.split(/\s+/).map((w) => w.replace(/[?!.,~]/g, '').replace(/(으로|로|은|는|이|가|을|를|에|도|랑|하고)$/, ''))
+  const words = message.split(/\s+/).map((w) => dropJosa(w.replace(/[?!.,~]/g, '')))
   const at = words.findIndex((w) => w.includes(item.name))
   if (at < 0) return null
   const dish = words[at] !== item.name ? words[at] : words[at + 1]
@@ -757,9 +781,11 @@ const SAY_ITEM = {
   safety: (item, message) => {
     const days = elapsedDays(message)
     return [
+      // 손님이 말한 모습이 '부패와 다르다'고 적힌 모습이면 그 설명부터 (곶감의 하얀 가루 = 시상)
+      lookAlike(item, message) ? sentence(item.danger_note) : '',
       `${josa(item.name, '을', '를')} 드셔도 되는지는 제가 판단할 수 없어요.`,
       item.danger_signs.length ? `상품 정보에서는 ${item.danger_signs.join(' / ')} 같은 상태라면 드시지 말라고 안내해요.` : '',
-      item.danger_note ? sentence(item.danger_note) : '',
+      item.danger_note && !lookAlike(item, message) ? sentence(item.danger_note) : '',
       // 상태 기준 품목: 날짜를 말해도 단계를 정하지 않고, 보관 기간 참고값과 상태별 용도를 알려 준다
       item.stage1_state ? [days != null ? keepPeriod(item) : '', timeline(item)].filter(Boolean).join(' ')
         : stageOf(item, days) || (item.fresh_days_stage1 ? `참고로 ${timeline(item)}` : opened(item)),
@@ -786,9 +812,10 @@ const SAY_ITEM = {
   recipe: (item, message) => {
     if (!item.recipes?.length) return `${item.name} 레시피 정보는 아직 없어요.`
     const dish = askedDish(item, message)
-    const known = !dish || item.recipes.some((r) => r.title.replace(/\s/g, '').includes(dish) || dish.includes(r.title.replace(/\s/g, '')))
+    // "매실청 탄산수에 얼마나 타요"처럼 재료 이름으로 물어도 그 재료가 든 레시피가 있으면 있는 것으로 본다
+    const known = !dish || item.recipes.some((r) => r.title.replace(/\s/g, '').includes(dish) || dish.includes(r.title.replace(/\s/g, '')) || String(r.ingredients ?? '').includes(dish))
     const dishName = dish && (dish.includes(item.name) ? dish : `${item.name} ${dish}`)
-    return `${known ? '' : `${dishName} 레시피는 아직 등록돼 있지 않아요. 대신 `}${josa(item.name, '은', '는')} 이렇게 즐겨 보세요. ${item.recipes.slice(0, 3).map((r, i) => `${i + 1}) ${r.title}: ${r.ingredients} — ${r.method}`).join(' ')}${item.cafe_note && /카페|업소|매장|비율|퍼센트|%/.test(message) ? ` 카페 메뉴 비율은 ${sentence(item.cafe_note)}` : ''}`
+    return `${known ? '' : `${dishName} 레시피는 아직 등록돼 있지 않아요. 대신 `}${josa(item.name, '은', '는')} 이렇게 즐겨 보세요. ${item.recipes.slice(0, 3).map((r, i) => `${i + 1}) ${r.title}: ${r.ingredients} — ${r.method}`).join(' ')}${item.cafe_note && /카페|업소|매장|비율|퍼센트|%|타|섞|희석/.test(message) ? ` 카페 메뉴 비율은 ${sentence(item.cafe_note)}` : ''}`
   },
   allergy: (item) => (item.allergen_note && !item.allergens.length ? `${item.name}: ${sentence(item.allergen_note)}` : item.allergens.length
     ? `${item.name} 상품 정보에 표시된 알레르기 성분은 ${item.allergens.join(', ')}예요.`
@@ -1052,7 +1079,9 @@ async function answerSimilar(message, catalog, ctx) {
   const base = { handoff: false, action: null, blocked: false }
   // 담당자 답이 가장 믿을 만하다. 같은 품목의 상품 Q&A만 본다
   // 판매자가 쓴 답이 다른 농가 상품 질문에 나가지 않게, 상품 페이지에서는 그 상품의 답만 쓴다
-  const usable = qna.filter((q) => mine.includes(q.item_code) && !hasContact(q.answer) && (!ctx.current || q.product_code === ctx.current.product_code))
+  // 사이트 의견·불만에 단 답("수정하겠습니다", "맞습니다")은 상품 정보가 아니라 쓰지 않는다
+  const usable = qna.filter((q) => mine.includes(q.item_code) && !hasContact(q.answer) && !notAnAnswer(q.question, q.answer)
+    && (!ctx.current || q.product_code === ctx.current.product_code))
   const staff = mine.length ? mostSimilar(message, usable, 0.5) : null
   if (staff) {
     return {
@@ -1113,15 +1142,26 @@ export function quotable(top, message, itemNames = []) {
 }
 
 // 점수가 높고, 다른 주제의 자료와 충분히 벌어졌을 때만 찾은 글을 답으로 낸다. 비슷하면 어느 쪽이 맞는지 모르는 것이다
-export function chooseQuote(evidence, message, { itemNames = [], min = RAG_ANSWER_MIN, gap = RAG_ANSWER_GAP } = {}) {
+// 1등과 사실상 같은 글은 경쟁자가 아니다 (같은 답이 두 군데 있으면 점수가 똑같아도 어느 쪽이든 맞다)
+// 상품 Q&A는 그 상품에 단 답이라("딸기는 금요일에 안 보내요") 그 품목을 묻거나 그 상품 페이지에서 물을 때만 답으로 낸다
+// (AI 자료로는 그대로 쓴다. 자료 글 앞에 상품 이름이 붙어 있다)
+const otherProductQna = (top, itemCodes, productCode) => top.key.startsWith('qna:') && Boolean(top.item_code)
+  && !itemCodes.includes(top.item_code) && top.product_code !== productCode
+
+export function chooseQuote(evidence, message, { itemNames = [], itemCodes = [], productCode = null, min = RAG_ANSWER_MIN, gap = RAG_ANSWER_GAP } = {}) {
   const top = evidence[0]
-  if (!top || top.score < min || !quotable(top, message, itemNames)) return null
-  const rival = evidence[1] // 같은 품목이어도 보관과 레시피는 다른 주제다
+  if (!top || top.score < min || otherProductQna(top, itemCodes, productCode) || !quotable(top, message, itemNames)) return null
+  const rival = evidence.slice(1).find((c) => !sameText(top.text, c.text)) // 같은 품목이어도 보관과 레시피는 다른 주제다
   return rival && top.score - rival.score < gap ? null : top
 }
 
+// chooseQuote 에 넘길 지금 대화의 품목·상품
+export const quoteContext = (ctx) => ({
+  itemNames: ctx.items.map((i) => i.name), itemCodes: ctx.items.map((i) => i.item_code), productCode: ctx.current?.product_code ?? null,
+})
+
 function answerFromEvidence(evidence, message, catalog, ctx, fallbackProduct) {
-  const top = chooseQuote(evidence, message, { itemNames: ctx.items.map((i) => i.name) })
+  const top = chooseQuote(evidence, message, quoteContext(ctx))
   if (!top) return null
   const product = catalog.products.find((p) => p.product_code === top.product_code) ?? catalog.products.find((p) => p.item_code === top.item_code)
   const lead = top.key.startsWith('qna:') ? '담당자가 비슷한 질문에 답한 내용이에요.' : top.key.startsWith('faq:') ? '자주 묻는 질문 게시판에 올라온 내용이에요.' : '등록된 자료에서 찾은 내용이에요.'
@@ -1175,6 +1215,8 @@ function parseReply(text) {
     if (typeof data.answer !== 'string' || !data.answer.trim() || data.answer.length > 800) return null
     return {
       answer: data.answer.trim(),
+      found: data.found !== false,
+      evidence: Array.isArray(data.evidence) ? data.evidence.filter((s) => typeof s === 'string' && s.trim()).slice(0, 5) : [],
       sources: Array.isArray(data.sources) ? data.sources.filter((s) => typeof s === 'string') : [],
       handoff: data.handoff === true,
       action: ['b2b', 'qna'].includes(data.action) ? data.action : null,
@@ -1182,6 +1224,28 @@ function parseReply(text) {
   } catch {
     return null
   }
+}
+
+// ---------- 3-1. 근거 맞춰 보기: AI가 옮겨 적은 근거 문장과 답의 숫자가 정말 자료에 있는지 ----------
+// 규칙서(chat_rules.md)로 "자료에 있는 것만"이라고 시켜도 AI는 가끔 지어낸다. 그래서 말로 믿지 않고 글자로 맞춰 본다
+//  - 답을 찾았다고 하면(found) 근거 문장(evidence)이 1개 이상 있어야 하고, 모두 [자료]에 글자 그대로 있어야 한다
+//  - 답에 나온 숫자는 모두 [자료]나 손님 질문에 있어야 한다 ("보통 3~5일" 같은 지어낸 기간을 막는다)
+const plainText = (text) => String(text ?? '').replace(/[\s.,·!?~'"“”‘’()[\]{}<>:;/-]/g, '').toLowerCase()
+// 앞자리 0은 뗀다: 자료의 날짜 "2026-10-04"와 답의 "10월 4일"이 같은 숫자로 맞게
+const numbersIn = (text) => [...String(text ?? '').matchAll(/\d+(?:[.,]\d+)*/g)].map((m) => m[0].replace(/,/g, '').replace(/^0+(?=\d)/, ''))
+
+export function checkGrounding(reply, material, question = '') {
+  const source = plainText(material)
+  const needsEvidence = reply.found && !reply.handoff && reply.action !== 'b2b'
+  if (needsEvidence && !reply.evidence.length) return '근거 문장(evidence)이 없어요. 답의 근거가 된 [자료] 문장을 글자 그대로 옮겨 주세요. 자료에 답이 없으면 found 를 false 로 해 주세요'
+  for (const quote of reply.evidence) {
+    const q = plainText(quote)
+    if (q.length < 4 || !source.includes(q)) return `근거 문장 "${quote.slice(0, 40)}"이 [자료]에 그대로 없어요. 자료의 문장을 고치지 말고 그대로 옮겨 주세요`
+  }
+  const known = new Set([...numbersIn(material), ...numbersIn(question), ...numbersIn(SHOP.phone)])
+  const unknown = numbersIn(reply.answer).find((n) => !known.has(n))
+  if (unknown) return `숫자 ${unknown}은(는) [자료]에 없어요. 자료에 있는 숫자만 쓰고, 없으면 "아직 정보가 없어요"라고 해 주세요`
+  return null
 }
 
 const toNumber = (s) => Number(s.replace(/,/g, ''))
@@ -1290,7 +1354,7 @@ function answerSeason(message, catalog) {
 
 // ---------- 출고 날짜·예약 판매 ----------
 // "절임배추 언제 받아요?", "곶감 언제 보내요?", "예약 판매하는 거 있어요?": 상품의 출고 시작일(DB)로 답한다.
-// 품목을 말하지 않은 "언제 와요?"는 아래 배송 규칙(결제 후 1~3일 안내)으로 간다
+// 품목을 말하지 않은 "언제 와요?"는 아래 배송 규칙(평일 오후 2시까지 결제하면 그날 출고 안내)으로 간다
 const ASKS_WHEN = /예약|언제\s?(와|오|도착|받|출고|발송|보내|나와|배송)|받을\s?수\s?있|출고\s?(일|날|언제|시작)|발송\s?(일|날|언제)|며칠.{0,4}(걸|와|만에)|도착\s?(일|날|언제)/
 const ASKS_PREORDER_LIST = /예약\s?(판매|상품|구매|주문)?.{0,6}(있|뭐|어떤|무슨|되|돼|가능)/
 function answerShipDate(message, catalog, ctx) {
@@ -1326,7 +1390,7 @@ function answerShipDate(message, catalog, ctx) {
   const sentences = [
     ...pre.slice(0, 3).map((p) => `${eunNeun(label(p))} 예약 상품이라 ${shipDateText(p.ship_from)}부터 주문 순서대로 보내요.`),
     pre.length > 3 ? `예약 상품이 ${pre.length - 3}개 더 있어요.` : '',
-    now.length ? `${pre.length ? '나머지 ' : ''}${now.length === 1 ? eunNeun(label(now[0])) : `${catalog.items.find((i) => i.item_code === now[0].item_code)?.name ?? ''} 상품 ${now.length}개는${pre.length ? '' : ' 모두'}`} 결제 후 1~3일 안에 출고해요 (주말·공휴일 제외).` : '',
+    now.length ? `${pre.length ? '나머지 ' : ''}${now.length === 1 ? eunNeun(label(now[0])) : `${catalog.items.find((i) => i.item_code === now[0].item_code)?.name ?? ''} 상품 ${now.length}개는${pre.length ? '' : ' 모두'}`} ${SHIPPING.leadTime}.` : '',
     pre.length ? '같은 농가의 다른 상품을 함께 사면 예약 상품 날짜에 함께 보내요.' : '',
     '도착 날짜는 택배사 사정에 따라 달라서 약속드리기 어려워요.',
   ].filter(Boolean)
@@ -1373,7 +1437,7 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
 
   // 가린 자리표(전화번호 가림 등)는 손님이 쓴 말이 아니라서 규칙이 읽지 않게 한다
   const said = message.replace(/\((주민등록번호|이메일|전화번호|주문번호) 가림\)/g, ' ')
-  // 상품의 출고 날짜를 묻는 말은 배송 규칙보다 먼저 (예약 상품은 결제 후 1~3일이 아니라서)
+  // 상품의 출고 날짜를 묻는 말은 배송 규칙보다 먼저 (예약 상품은 기본 출고 기준이 아니라서)
   const shipDate = answerShipDate(said, catalog, ctx)
   if (shipDate && !ROUTES.some((r) => r.handoff && r.re.test(said))) return shipDate
   const route = ROUTES.find((r) => r.re.test(said))
@@ -1455,10 +1519,15 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
     model = result.model
     const reply = parseReply(result.text)
     if (reply) reply.answer = nameCodes(reply.answer, catalog)
-    problem = reply ? findProblem(reply.answer, catalog, materialPrices) : '형식이 맞지 않아요. 설명 없이 JSON 하나만 출력해 주세요'
+    problem = reply
+      ? findProblem(reply.answer, catalog, materialPrices) ?? checkGrounding(reply, material, message)
+      : '형식이 맞지 않아요. 설명 없이 JSON 하나만 출력해 주세요'
     if (!problem) {
-      const sources = toSourceChips(reply.sources, catalog, ctx)
-      const answer = { ...reply, sources, productCode: sources[0]?.code ?? fallbackProduct }
+      // 자료에서 답을 못 찾았다고 하면 근거 칩은 빼고, 담당자가 답할 수 있게 상품 Q&A로 안내한다
+      const sources = reply.found ? toSourceChips(reply.sources, catalog, ctx) : []
+      const action = reply.action ?? (reply.found || reply.handoff ? null : 'qna')
+      const { found: _found, evidence: _evidence, ...shown } = reply
+      const answer = { ...shown, action, sources, productCode: sources[0]?.code ?? fallbackProduct }
       await writeCache(key, answer, model)
       return { ...answer, model, blocked: false }
     }

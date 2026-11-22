@@ -114,8 +114,6 @@ function QuickCart({ p, onOpen }) {
       {done
         ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
         : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2.5l2.2 10.5h10.1L20 7H6.3" /><circle cx="9" cy="19" r="1.3" /><circle cx="17" cy="19" r="1.3" /></svg>}
-      {/* 마우스를 올리지 않아도 보이게 글씨를 붙인다 (2026-11-21 피드백: 아이콘만 있고 올려야 나타나서 직관적이지 않음) */}
-      <span className="quick-cart-label" aria-hidden="true">{pickOption ? '옵션 선택' : done ? '담았어요' : '장바구니 담기'}</span>
     </button>
   )
 }
@@ -425,7 +423,7 @@ const FAQ_TAGS = {
 
 export function Faq({ policy, onRecommend }) {
   const fill = (text) => text
-    .replace('{출고}', policy?.shipping.leadTime ?? '결제 후 1~3일 안에 출고해요')
+    .replace('{출고}', policy?.shipping.leadTime ?? '평일 오후 2시까지 결제하면 그날 출고해요')
     .replace('{배송비}', policy ? won(policy.shipping.fee) : '정책에 따라')
     .replace('{무료배송}', policy ? won(policy.shipping.freeOver) : '일정 금액')
     .replaceAll('{전화}', policy?.shop.phone ?? '고객센터')

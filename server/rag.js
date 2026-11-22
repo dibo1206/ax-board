@@ -8,6 +8,8 @@ import { blocksText } from './blocks.js'
 import { embed, keyLoaded } from './ai.js'
 import { cached, clearCache } from './cache.js'
 import { pool } from './db.js'
+import { COMPANY_CAPTION, DEMO_CAPTION } from './demoPlan.js'
+import { dropSameText } from './similar.js'
 import { POLICIES, SHIPPING, SHOP } from './policy.js'
 
 export const RAG_MODEL = process.env.RAG_MODEL || 'baai/bge-m3'
@@ -22,6 +24,15 @@ export const RAG_ASK_MIN = Number(process.env.RAG_ASK_MIN) || 0.5 // 품목을 �
 export const RAG_MATERIAL_MIN = Number(process.env.RAG_MATERIAL_MIN) || 0.45 // 이 위면 AI 자료에 넣는다
 
 const clean = (text) => String(text ?? '').replace(/\[예시( 문구[^\]]*)?\]\s*/g, '').replace(/\s+/g, ' ').trim()
+
+// 상품 Q&A 게시판에 올라온 사이트 의견·불만에 단 답은 상품 정보가 아니다 ("수정하겠습니다", "죄송합니다", "맞습니다")
+// 이런 답이 비슷한 상품 질문에 그대로 나가지 않게 검색 자료와 비슷한 질문 다시 쓰기에서 뺀다 (게시판에서는 그대로 보인다)
+const SITE_TALK = /검색창|챗봇|마이페이지|회원\s?가입|비공개|띄어쓰기|홈페이지|사이트/
+const FIX_PROMISE = /(수정|추가|개선|반영|고치|만들)\S*\s?(하겠|할게|겠습니다)|죄송|불편을 드려/
+export function notAnAnswer(question, answer) {
+  const a = clean(answer)
+  return a.length < 8 || FIX_PROMISE.test(a) || SITE_TALK.test(String(question ?? ''))
+}
 const join = (list) => (Array.isArray(list) ? list.filter(Boolean).join(', ') : '')
 
 // 긴 글은 문장 경계에서 나눈다
@@ -61,7 +72,9 @@ function itemChunks(item) {
 function productChunks(p) {
   const base = { item_code: p.item_code, product_code: p.product_code, trusted: false } // 판매자가 쓴 글이라 AI 자료로만 쓴다
   // 상세 블록의 글·사진 설명도 같은 상품 소개로 넣는다 (사진 속 글자는 못 읽으니 화면 글만)
-  const about = [clean(p.summary), clean(p.description), clean(blocksText(p.detail_blocks))].filter(Boolean).join(' ')
+  // 예시·회사 사진 아래 글("참고 사진 — 실제 상품과 다를 수 있어요")은 거의 모든 상품에 같은 문구라 검색에 잡음만 되어 뺀다
+  const blocks = blocksText(p.detail_blocks).replaceAll(DEMO_CAPTION, ' ').replaceAll(COMPANY_CAPTION, ' ')
+  const about = [clean(p.summary), clean(p.description), clean(blocks)].filter(Boolean).join(' ')
   return [
     ...splitText(about).map((text, i) => ({ ...base, key: `product:${p.product_code}:about:${i}`, text: `${clean(p.name)}: ${text}` })),
     ...(p.faq ?? []).map((f, i) => ({ ...base, key: `product:${p.product_code}:faq:${i}`, text: `${clean(p.name)} 자주 묻는 질문: ${clean(f.q)} 답: ${clean(f.a)}` })),
@@ -89,7 +102,7 @@ export async function buildChunks(db = pool) {
   const [items, products, questions, sellers, faqs] = await Promise.all([
     db.query("SELECT * FROM items WHERE status <> 'pending'"),
     db.query("SELECT product_code, item_code, name, summary, description, faq, detail_blocks FROM products WHERE status = 'active'"),
-    db.query(`SELECT q.id, q.product_code, q.question, q.answer, p.item_code FROM questions q JOIN products p ON p.product_code = q.product_code
+    db.query(`SELECT q.id, q.product_code, q.question, q.answer, p.item_code, p.name FROM questions q JOIN products p ON p.product_code = q.product_code
               WHERE q.answer IS NOT NULL AND q.answer <> '' AND NOT q.hidden AND NOT q.is_private AND p.status = 'active'`),
     db.query(`SELECT seller_code, name, region, story FROM sellers WHERE status = 'active'
               AND seller_code IN (SELECT seller_code FROM products WHERE status = 'active')`),
@@ -98,7 +111,9 @@ export async function buildChunks(db = pool) {
   return [
     ...items.rows.flatMap(itemChunks),
     ...products.rows.flatMap(productChunks),
-    ...questions.rows.map((q) => ({ key: `qna:${q.id}`, item_code: q.item_code, product_code: q.product_code, trusted: true, text: `질문: ${clean(q.question)} 답: ${clean(q.answer)}` })),
+    // 상품 이름을 앞에 붙인다: "딸기는 금요일에 안 보내요" 같은 답이 어느 상품 이야기인지 AI도 알 수 있게
+    ...questions.rows.filter((q) => !notAnAnswer(q.question, q.answer))
+      .map((q) => ({ key: `qna:${q.id}`, item_code: q.item_code, product_code: q.product_code, trusted: true, text: `${clean(q.name)} 상품 문의 — 질문: ${clean(q.question)} 답: ${clean(q.answer)}` })),
     ...sellers.rows.map((s) => ({ key: `seller:${s.seller_code}`, item_code: null, product_code: null, trusted: false, text: `농가 ${clean(s.name)} (${clean(s.region)}): ${clean(s.story)}` })),
     ...faqs.rows.flatMap((f) => splitText(clean(f.body)).map((text, i) => ({ key: `faq:${f.id}:${i}`, item_code: null, product_code: null, trusted: true, text: `자주 묻는 질문: ${clean(f.title)} 답: ${text}` }))),
     ...policyChunks(),
@@ -213,10 +228,12 @@ export async function searchChunks(query, { allow = () => true, limit = 5 } = {}
     const index = await loadIndex()
     if (!index.length) return []
     const vector = await cached(`rag:query:${query}`, 3_600_000, async () => normalize((await embed(RAG_MODEL, [query], 4000))[0]))
-    return index.filter(allow)
+    // 같은 글이 두 번 들어 있으면(자주 묻는 질문 + 담당자 Q&A 등) 하나만 남긴다
+    //  → 같은 글끼리 1·2등을 다퉈 답을 못 내거나, AI 자료에 같은 글이 두 번 들어가 토큰을 낭비하지 않게
+    const ranked = index.filter(allow)
       .map((c) => ({ key: c.key, text: c.text, item_code: c.item_code, product_code: c.product_code, trusted: c.trusted, score: dot(vector, c.embedding) }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit)
+      .sort((a, b) => b.score - a.score || Number(b.trusted) - Number(a.trusted))
+    return dropSameText(ranked, limit)
   } catch (error) {
     console.warn(`[rag] 검색 실패: ${error.message}`)
     return []
