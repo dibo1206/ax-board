@@ -123,7 +123,9 @@
   .shop .dlv .dlv-arrive { font-size: 21px; line-height: 28px; }
   .shop .dlv-clock { justify-items: start; text-align: left; width: 100%; box-sizing: border-box; grid-template-columns: auto 1fr; align-items: baseline; column-gap: 8px; }
   .shop .dlv-day { min-height: 52px; }
-  .shop .dlv-day b { font-size: 14px; }
+  .shop .dlv-day small { font-size: 11px; line-height: 14px; }
+  .shop .dlv-day b { font-size: 16px; line-height: 22px; }
+  .shop .dlv-pill { margin: 0 1px; padding: 0 3px; font-size: 10px; }
   .shop .dlv-day em { font-size: 9px; }
   .shop .dlv-bar { margin: 0 1px; font-size: 10px; }
   .shop .dlv-bar span { padding: 0 4px; }
