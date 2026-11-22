@@ -20,6 +20,7 @@ import { RecipeCards } from './shop/RecipeCards.jsx'
 import { CategoryRows, Faq, Hero, ProductSection, QuizDialog, SeasonCalendar, Story } from './shop/home/Home.jsx'
 import { ShopLayout } from './shop/ShopLayout.jsx'
 import { netFetch } from './net.js'
+import { setProductPreview } from './shop/previewSlot.js'
 
 // 첫 화면(상품 목록)에 필요 없는 페이지는 그 주소에 들어갈 때 따로 받는다 → 손님이 처음 받는 파일이 작아진다
 const page = (load, name) => lazy(() => load().then((m) => ({ default: m[name] })))
@@ -297,8 +298,10 @@ function mergeQuestions(list, mine) {
   return [...mine.filter((q) => !shown.has(q.id)), ...list.map((q) => byId.get(q.id) ?? q)]
 }
 
-function ProductDetail({ code, focus, onBack, onOpen }) {
-  const [product, setProduct] = useState(null)
+// preview: 판매자·관리자 등록 화면의 [손님 화면으로 미리보기] (2026-11-22). 서버에서 읽지 않고 받은 상품으로 그린다.
+// 아직 저장 전이라 후기·문의·추천 상품·기업 문의는 그리지 않고, 담기·구매 버튼은 눌러도 아무 일이 없다 (CSS .product-preview)
+function ProductDetail({ code, focus, onBack, onOpen, preview = null }) {
+  const [product, setProduct] = useState(preview)
   const [error, setError] = useState('')
   const [showB2b, setShowB2b] = useState(focus === 'b2b')
   const [sentMessage, setSentMessage] = useState('')
@@ -321,17 +324,18 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   const [myQuestions, setMyQuestions] = useState([]) // 내가 남긴 문의 (비밀글 내용 포함, 로그인했을 때만)
 
   useEffect(() => {
+    if (preview) return // 미리보기는 받은 상품을 처음부터 쓴다 (열 때마다 새로 그린다)
     // 없는(내려간) 상품이면 한 줄 오류 대신 안내 화면 (NotFound)
     api(`/products/${code}`).then(setProduct).catch((e) => setError(e.status === 404 ? 'not-found' : e.message))
     get(`/products/${code}/my-questions`).then(setMyQuestions).catch(() => {})
-  }, [code])
+  }, [code, preview])
 
   useEffect(() => {
     if (product && focus === 'qna') tabsRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [product, focus])
 
   useEffect(() => {
-    if (!product) return undefined
+    if (!product || preview) return undefined
     const before = document.title
     document.title = `${product.name.replace(/\[예시\]\s*/g, '')} · ${product.seller_name}`
     const meta = document.querySelector('meta[name="description"]')
@@ -341,7 +345,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
       document.title = before
       if (meta) meta.content = beforeDescription ?? ''
     }
-  }, [product])
+  }, [product, preview])
 
   if (error === 'not-found') return <NotFound kind="product" onOpen={onOpen} />
   if (error) return <p className="error">{error}</p>
@@ -364,7 +368,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
   ]
   return (
     <article className="detail">
-      <button type="button" className="link" onClick={onBack}>← 목록</button>
+      {!preview && <button type="button" className="link" onClick={onBack}>← 목록</button>}
       {/* 사진은 왼쪽, 이름·가격·정보·구매 칸은 오른쪽에 한 덩어리로 (사진 옆이 비지 않게) */}
       <div className="detail-top">
       <Gallery product={product} />
@@ -410,7 +414,7 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
       </dl>
       <BuyBox product={product} option={option} onPick={setOptionId} onAsk={openAsk} />
       {/* 상담하기 버튼이 찜·공유·배송 카드·구매 칸·탭을 가리지 않게 (품절 상품 포함, 화면에는 아무것도 그리지 않음) */}
-      <ChatButtonGuard />
+      {!preview && <ChatButtonGuard />}
       <div className="buy-aside">
         <button type="button" onClick={openAsk}>상품 문의하기</button>
         {product.b2b_available && (
@@ -482,10 +486,12 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
 
         {/* 후기·문의는 5개씩 보여 주고 [더 보기]로 늘린다. 후기 패널은 숨겨 둬도 그려 둬야 탭의 후기 수가 맞는다 */}
         <section role="tabpanel" id="panel-reviews" aria-labelledby="tab-reviews" hidden={tab !== 'reviews'} className="box detail-panel">
-          <ReviewList code={product.product_code} embedded onCount={setReviewCount} />
+          {preview
+            ? <p className="muted">판매를 시작하면 구매한 손님의 후기가 여기에 보여요.</p>
+            : <ReviewList code={product.product_code} embedded onCount={setReviewCount} />}
         </section>
         <section role="tabpanel" id="panel-qna" aria-labelledby="tab-qna" hidden={tab !== 'qna'} className="box detail-panel">
-            {askOpen ? (
+            {preview ? <p className="muted">판매를 시작하면 손님이 여기에 상품 문의를 남기고, 판매자 화면에서 답할 수 있어요.</p> : askOpen ? (
               <QuestionForm
                 productCode={product.product_code}
                 onSent={(q) => {
@@ -525,10 +531,23 @@ function ProductDetail({ code, focus, onBack, onOpen }) {
             : <p className="muted">아직 등록된 자주 묻는 질문이 없어요. 궁금한 점은 [상품 문의] 탭에 남겨 주세요.</p>}
         </section>
       </div>
-      <Related code={product.product_code} onOpen={onOpen} />
+      {!preview && <Related code={product.product_code} onOpen={onOpen} />}
     </article>
   )
 }
+
+// 판매자·관리자 등록 화면에서 쓰는 손님 화면 미리보기 (src/admin/ProductForm.jsx 가 shop/previewSlot.js 로 빌려 쓴다)
+// 쇼핑몰과 같은 모양이 나오게 .shop 안에 그린다. 담기·구매·찜·공유·문의 버튼은 눌러도 아무 일이 없다
+function ProductPreview({ product }) {
+  return (
+    <div className="shop product-preview">
+      <div className="wrap page">
+        <ProductDetail code={product.product_code} preview={product} onBack={() => {}} onOpen={() => {}} />
+      </div>
+    </div>
+  )
+}
+setProductPreview(ProductPreview)
 
 function App() {
   if (window.location.pathname.startsWith('/seller')) {
