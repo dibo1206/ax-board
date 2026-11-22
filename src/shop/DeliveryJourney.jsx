@@ -162,9 +162,8 @@ export function DeliveryJourney({ product, onFreshGuide }) {
           ))}
         </div>
         <div className="dlv-lanes">
-          <span className="dlv-dot order" style={{ gridColumn: 1, gridRow: 1 }} title={`결제 ${dayLabel(from)}`} />
+          <span className="dlv-pill" style={{ gridColumn: 1, gridRow: 1 }} title={`주문 접수 · 결제 ${dayLabel(from)}`}>주문 접수</span>
           {iShip - iOrder > 1 && <Bar k="prep" from={iOrder + 1} to={iShip - 1} label="준비·검수" cells={cells.length} />}
-          {iOrder >= 0 && <span className="dlv-dot receive" style={{ gridColumn: iOrder + 1, gridRow: 1 }} title={`주문 접수 ${dayLabel(plan.orderDay)}`} />}
           <Bar k="ship" from={iShip} to={iShip} label="출고" cells={cells.length} />
           <Bar k="arrive" from={iArrive} to={iArrive} label="도착" cells={cells.length} />
         </div>
