@@ -15,7 +15,7 @@ import { adminRouter, UPLOAD_DIR } from './admin.js'
 import { bannedRouter, loadBanned } from './banned.js'
 import { cached, clearCache } from './cache.js'
 import { scheduleRagSync, startRag } from './rag.js'
-import { currentStaff, firstTwoFactor, login, logout, requireAdmin } from './auth.js'
+import { currentStaff, firstTwoFactor, login, logout, requireAdmin, requireSeller } from './auth.js'
 import { listMails } from './mailer.js'
 import { adminChatRouter, chatRouter } from './chat.js'
 import { initDb, isTransientDbError, pool } from './db.js'
@@ -26,7 +26,7 @@ import { checkDataKey } from './crypto.js'
 import { orderingOpen, paymentMode } from './payments.js'
 import { encryptExisting, openQuestion, openSeller } from './pii.js'
 import { startRetention } from './retention.js'
-import { buildNotice } from './notice.js'
+import { buildNotice, readNotice } from './notice.js'
 import { ACTIVE_OPTIONS_SQL } from './options.js'
 import { adminOrderRouter, KOREA_TODAY, memberOrderRouter, publicOrderRouter, sellerOrderRouter, startOrderSweeper } from './orders.js'
 import { SHIPPING } from './policy.js'
@@ -184,7 +184,8 @@ app.use(['/api/account', '/api/admin', '/api/seller', '/api/orders'], (req, res,
 
 // 무언가 바뀌면(관리자·판매자 수정, 주문, 후기·문의 남기기) 기억해 둔 상품 목록·상세를 지운다. AI 상담은 상품을 바꾸지 않아서 뺀다
 app.use((req, res, next) => {
-  if (req.method !== 'GET' && req.method !== 'HEAD' && !req.path.startsWith('/api/chat')) {
+  // 손님 화면 미리보기(products-preview)는 아무것도 저장하지 않아서 뺀다 (누를 때마다 캐시·상담 자료를 다시 만들지 않게)
+  if (req.method !== 'GET' && req.method !== 'HEAD' && !req.path.startsWith('/api/chat') && !req.path.endsWith('/products-preview')) {
     res.on('finish', () => {
       if (res.statusCode >= 400) return
       clearCache()
@@ -434,6 +435,71 @@ async function loadProductDetail(code) {
   }
 }
 
+// ---------- 등록·수정 화면의 [손님 화면으로 미리보기] (2026-11-22) ----------
+// 저장하지 않고, 지금 적은 값으로 상품 상세(/api/products/:code)와 같은 모양을 만든다.
+// 당도 등급·상품정보 고시 표·수확 며칠째·예약 여부는 손님 화면과 같은 함수로 계산하고, DB에는 아무것도 쓰지 않는다.
+// 아직 올리지 않은 사진(대표·상세·당도계·상세 블록)은 화면이 브라우저 안에서 붙인다 (서버로 보내지 않는다)
+const previewText = (v, max) => (v == null ? '' : String(v).trim().slice(0, max))
+const previewNumber = (v) => {
+  const n = Number(String(v ?? '').replace(/,/g, ''))
+  return String(v ?? '').trim() !== '' && Number.isFinite(n) && n >= 0 ? n : null
+}
+async function buildPreview(body, sellerCode, db = pool) {
+  const [itemRow, sellerRow] = await Promise.all([
+    db.query('SELECT * FROM items WHERE item_code = $1', [previewText(body.item_code, 60)]),
+    db.query('SELECT seller_code, name, region, intro, story, photos, is_company, owner_name, business_no FROM sellers WHERE seller_code = $1', [previewText(sellerCode, 60)]),
+  ])
+  const item = itemRow.rows[0]
+  const seller = sellerRow.rows[0]
+  if (!item) return { error: '품목을 먼저 골라 주세요. 품목을 골라야 손님 화면을 만들 수 있어요.' }
+  if (!seller) return { error: '판매 농가를 먼저 골라 주세요.' }
+  // 옵션 상품은 판매 중 옵션의 최저가·재고 합이 상품 가격·재고다 (저장할 때와 같은 규칙)
+  const options = (Array.isArray(body.options) ? body.options : [])
+    .filter((o) => o && o.status !== 'stopped' && previewText(o.name, 40))
+    .slice(0, 20)
+    .map((o, i) => ({ id: o.id ?? -(i + 1), name: previewText(o.name, 40), price: previewNumber(o.price) ?? 0, stock: previewNumber(o.stock) ?? 0 }))
+  const price = options.length ? Math.min(...options.map((o) => o.price)) : previewNumber(body.price) ?? 0
+  const stock = options.length ? options.reduce((sum, o) => sum + o.stock, 0) : previewNumber(body.stock) ?? 0
+  const brix = previewNumber(body.brix)
+  const variety = previewText(body.variety, 30) || null
+  // 당도 등급은 손님 화면과 같은 조건: 당도를 보여 주는 품목 + 당도 + 당도계 사진 (새로 고른 사진도 셈). 미리보기라 후기 이의는 없다
+  const std = item.show_brix && brix && body.has_brix_photo === true
+    ? (item.brix_standards ?? []).find((b) => (b.varieties ?? []).includes(variety ?? '공통')) ?? null
+    : null
+  const [high, top] = std ? [Number(std.high), Number(std.top)] : [null, null]
+  const row = {
+    product_code: previewText(body.product_code, 60) || 'preview', seller_code: seller.seller_code, item_code: item.item_code,
+    name: previewText(body.name, 100) || '(상품 이름을 적어 주세요)', price, unit: previewText(body.unit, 40), stock,
+    weight_g: previewNumber(body.weight_g) || null, count_per_box: previewNumber(body.count_per_box) || null,
+    brix: brix ? String(brix) : null, brix_measured_at: previewText(body.brix_measured_at, 10) || null,
+    harvest_date: previewText(body.harvest_date, 10) || null, ship_from: previewText(body.ship_from, 10) || null,
+    summary: previewText(body.summary, 300) || null, description: previewText(body.description, 5000) || null,
+    b2b_available: body.b2b_available === true, tags: [],
+    faq: (Array.isArray(body.faq) ? body.faq : []).filter((f) => previewText(f?.q, 200) && previewText(f?.a, 1000)).slice(0, 6)
+      .map((f) => ({ q: previewText(f.q, 200), a: previewText(f.a, 1000) })),
+    notice: readNotice(body.notice), variety, image_url: null, images: [], detail_images: [], brix_photo_url: null,
+    price_updated_at: new Date().toISOString(), status: 'preview',
+    sold_out: stock === 0, options, has_options: options.length > 0,
+    item_name: item.name, category: item.category, show_brix: item.show_brix,
+    seller_name: seller.name, seller_region: seller.region, is_company: seller.is_company,
+    rating: null, review_count: 0, sold_30d: 0, info_disputed: false, info_answers: 0, info_matched: 0,
+    brix_high: high, brix_top: top, brix_standard_source: item.brix_standard_source,
+    brix_rank: top == null ? null : brix >= top ? 3 : brix >= high ? 2 : 1,
+  }
+  const product = publicProduct(row)
+  const shownItem = publicItem(item)
+  return {
+    ...product, detail_blocks: [], questions: [],
+    notice_table: buildNotice(product, shownItem, seller), item: shownItem, seller: publicSeller(seller), seller_info: sellerInfo(seller),
+  }
+}
+
+async function sendPreview(res, body, sellerCode) {
+  const result = await buildPreview(body ?? {}, sellerCode)
+  if (result.error) return res.status(400).json({ error: result.error })
+  res.json(result)
+}
+
 app.get('/api/tags', async (req, res) => {
   res.json(await cached('tags', 5 * 60_000, async () => (await pool.query('SELECT * FROM tags ORDER BY tag_group, tag_code')).rows))
 })
@@ -465,6 +531,9 @@ app.use('/api/admin/settings', adminSettingsRouter)
 app.use('/api/admin/staff', adminStaffRouter)
 app.use('/api/seller-signup', sellerSignupRouter)
 app.get('/api/admin/notifications', requireAdmin, async (req, res) => res.json(await listMails()))
+// 손님 화면 미리보기: 관리자는 고른 농가로, 판매자는 자기 농가로만 만든다
+app.post('/api/admin/products-preview', requireAdmin, (req, res) => sendPreview(res, req.body, req.body?.seller_code))
+app.post('/api/seller/products-preview', requireSeller, (req, res) => sendPreview(res, req.body, req.seller.sellerCode))
 app.use('/api/admin', adminRouter)
 app.use('/api/seller/orders', sellerOrderRouter)
 app.use('/api/seller/returns', sellerReturnRouter)

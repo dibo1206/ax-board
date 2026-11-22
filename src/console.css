@@ -372,3 +372,21 @@ input.invalid { border-color: #b3261e; }
 
 /* 사진 고르기 버튼 안의 파일 칸: 폼 공통 input 규칙(display:block)이 hidden 속성을 덮어 기본 "파일 선택" 칸이 보이던 것 (2026-11-18) */
 .form .farm-photo-add input[type="file"], .farm-photo-add input[type="file"] { display: none; }
+
+/* 손님 화면 미리보기 (상품 등록·수정 화면, 2026-11-22): 화면 전체를 덮고, 안에는 쇼핑몰 상품 상세를 실제 크기 그대로 그린다
+   (.console 밖 body 에 붙여서 쇼핑몰 CSS 만 적용된다). 담기·구매·찜·공유·문의 버튼은 눌러도 아무 일이 없다 */
+.preview-layer { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; background: #fafaf8; }
+.preview-layer-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 20px; background: #1f3d2b; color: #fff; }
+.preview-layer-bar strong { font-size: 19px; }
+.preview-layer-bar span { flex: 1; min-width: 220px; font-size: 15px; line-height: 1.5; opacity: 0.92; }
+.preview-layer-close { min-height: 44px; padding: 0 18px; border: 0; border-radius: 10px; background: #fff; color: #1f3d2b; font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
+.preview-layer-body { flex: 1; overflow-y: auto; }
+.preview-layer-note { max-width: 960px; margin: 40px auto; padding: 0 20px; font-size: 17px; }
+.product-preview .buy, .product-preview .buy-sticky, .product-preview .buy-aside, .product-preview .detail-actions,
+.product-preview .farm-name-link, .product-preview .farm-more-link { pointer-events: none; }
+.preview-review-call { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 12px 0 0; font-size: 16px; }
+.preview-open { font-size: 16px; }
+@media (max-width: 640px) {
+  .preview-layer-bar { padding: 10px 14px; }
+  .preview-layer-bar span { font-size: 14px; }
+}

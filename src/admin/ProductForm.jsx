@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { thumbUrl, todayKst, unitPrice } from '../shop/shared.js'
 import { AiDraft } from './AiDraft.jsx'
 import { SpeakFill } from './SpeakFill.jsx'
@@ -6,6 +7,10 @@ import { DetailBlocksEditor } from './DetailBlocks.jsx'
 import { fromDraftBlocks, hasPendingPhotos, storedBlocks, toEditorBlocks } from './detailBlockUtils.js'
 import { adminApi } from './api.js'
 import { Help } from './ui.jsx'
+import { getProductPreview } from '../shop/previewSlot.js'
+
+// 손님 화면 미리보기에 쓰는 쇼핑몰 상품 상세 화면 (2026-11-22). App.jsx 가 켜질 때 넣어 두고, 이 파일은 그 뒤에 받는다 (shop/previewSlot.js)
+const ProductPreview = getProductPreview()
 
 const EMPTY = {
   product_code: '', seller_code: '', item_code: '', name: '', price: '', unit: '', stock: '',
@@ -225,6 +230,86 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
     })
   }
   const setFaq = (index, key) => (e) => setForm((prev) => ({ ...prev, faq: prev.faq.map((f, i) => (i === index ? { ...f, [key]: e.target.value } : f)) }))
+
+  // ---------- 손님 화면으로 미리보기 (2026-11-22) ----------
+  // 저장하지 않고 지금 적은 내용으로 쇼핑몰 상품 상세 화면을 실제 크기 그대로 보여 준다.
+  // 당도 등급·고시 표처럼 서버가 정하는 값은 서버(products-preview)가 같은 방식으로 계산하고,
+  // 아직 올리지 않은 사진은 서버로 보내지 않고 브라우저 안에서만 붙인다 (닫으면 지운다)
+  const [preview, setPreview] = useState(null) // { loading } | { error } | { product }
+  const previewUrls = useRef([])
+  const dropPreviewUrls = () => {
+    previewUrls.current.forEach((url) => URL.revokeObjectURL(url))
+    previewUrls.current = []
+  }
+  function closePreview() {
+    dropPreviewUrls()
+    setPreview(null)
+  }
+  async function openPreview() {
+    dropPreviewUrls()
+    setPreview({ loading: true })
+    try {
+      const data = await api('/products-preview', {
+        method: 'POST',
+        body: { ...form, detail_blocks: undefined, product_code: savedCode.current ?? '', has_brix_photo: Boolean(brixPhoto || brixPhotoUrl) },
+      })
+      const local = (file) => {
+        const url = URL.createObjectURL(file)
+        previewUrls.current.push(url)
+        return url
+      }
+      setPreview({
+        product: {
+          ...data,
+          image_url: image ? local(image) : photos.main,
+          images: [...photos.list, ...gallery.map(local)],
+          brix_photo_url: brixPhoto ? local(brixPhoto) : brixPhotoUrl,
+          // 상세 블록: 올린 사진은 주소로, 아직 안 올린 사진은 편집 칸이 만들어 둔 미리보기로. 빈 사진 자리·빈 글은 뺀다
+          detail_blocks: form.detail_blocks
+            .map((b) => (b.type === 'image'
+              ? { type: 'image', url: b.url || b.preview, alt: b.alt, caption: b.caption }
+              : { type: 'text', title: b.title, body: b.body }))
+            .filter((b) => (b.type === 'image' ? b.url : b.title.trim() || b.body.trim())),
+        },
+      })
+    } catch (e) {
+      setPreview({ error: e.message })
+    }
+  }
+  // 미리보기를 열어 둔 동안: Esc 로 닫고, 뒤 화면은 스크롤되지 않게
+  useEffect(() => {
+    if (!preview) return undefined
+    const onKey = (e) => { if (e.key === 'Escape') closePreview() }
+    const before = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = before
+    }
+  }, [preview])
+  useEffect(() => dropPreviewUrls, [])
+  // 관리자 화면 CSS(.console) 밖에 그려야 쇼핑몰과 똑같이 보인다 → body 에 바로 붙인다
+  const previewLayer = preview && createPortal(
+    <div className="preview-layer" role="dialog" aria-modal="true" aria-label="손님 화면 미리보기">
+      <div className="preview-layer-bar">
+        <strong>손님 화면 미리보기</strong>
+        <span>아직 저장 전이에요. 저장하고 판매가 시작되면 손님에게 이렇게 보여요. 버튼은 눌러도 아무 일이 없어요.</span>
+        <button type="button" className="preview-layer-close" onClick={closePreview}>닫고 계속 고치기</button>
+      </div>
+      <div className="preview-layer-body">
+        {preview.loading && <p className="preview-layer-note">손님 화면을 만드는 중…</p>}
+        {preview.error && <p className="preview-layer-note error">{preview.error}</p>}
+        {preview.product && (ProductPreview
+          ? <ProductPreview product={preview.product} />
+          : <p className="preview-layer-note error">미리보기 화면을 불러오지 못했어요. 새로 고침한 뒤 다시 눌러 주세요.</p>)}
+      </div>
+    </div>,
+    document.body,
+  )
+  const previewButton = (
+    <button type="button" className="button ghost preview-open" onClick={openPreview} disabled={saving}>손님 화면으로 미리보기</button>
+  )
 
   async function save(status) {
     setSaving(true)
@@ -546,10 +631,12 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
           {errorList}
           <div className="actions">
             <button type="button" className="button ghost" onClick={onCancel} disabled={saving}>취소</button>
+            {previewButton}
             <button type="button" className="button ghost" onClick={() => save('draft')} disabled={saving}>임시 저장</button>
             <button type="button" className="button" onClick={() => save('active')} disabled={saving}>{saving ? '저장 중…' : product?.status === 'pending' ? '승인하고 판매' : '저장하고 판매'}</button>
           </div>
         </div>
+        {previewLayer}
       </div>
     )
   }
@@ -582,11 +669,14 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
             <li>사진: 대표 {image || photos.main ? '있음' : <b className="red">없음</b>} · 상세 {gallery.length + photos.list.length}장 {fix(3)}</li>
             <li>소개: {form.summary ? '있음' : '없음'} · 상세 블록 {form.detail_blocks.length}개 · 태그 {form.tags.length}개 {fix(4)}</li>
           </ul>
+          <p className="preview-review-call">판매를 요청하기 전에 손님에게 어떻게 보일지 확인해 보세요. {previewButton}</p>
         </div>
       )}
       {errorList}
       <div className="actions step-actions">
         {step > 0 && <button type="button" className="button ghost" onClick={() => goStep(step - 1)} disabled={saving}>← 이전</button>}
+        {/* 품목을 고른 뒤에는 어느 단계에서든 손님 화면을 볼 수 있다 (마지막 단계는 위 확인 칸에 크게) */}
+        {!last && item && previewButton}
         <button type="button" className="button ghost" onClick={() => save('draft')} disabled={saving}>임시 저장</button>
         {last ? (
           <button type="button" className="button" onClick={() => save(product?.status === 'active' ? 'active' : 'pending')} disabled={saving}>
@@ -597,6 +687,7 @@ export function ProductForm({ product, options, onCancel, onSaved, api = adminAp
         )}
         <button type="button" className="link" onClick={onCancel} disabled={saving}>취소</button>
       </div>
+      {previewLayer}
     </div>
   )
 }
