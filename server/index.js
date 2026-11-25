@@ -21,6 +21,7 @@ import { adminChatRouter, chatRouter } from './chat.js'
 import { initDb, isTransientDbError, pool } from './db.js'
 import { adminInquiryRouter, maskName, publicInquiryRouter } from './inquiry.js'
 import { publicItem } from './items.js'
+import { withRecipeSteps } from './recipeSteps.js'
 import { GRADE_LABEL } from './brix.js'
 import { checkDataKey } from './crypto.js'
 import { orderingOpen, paymentMode } from './payments.js'
@@ -425,7 +426,7 @@ async function loadProductDetail(code) {
     ...product,
     detail_blocks: rows[0].detail_blocks ?? [], // 블록형 상세페이지 (server/blocks.js)
     notice_table: buildNotice(product, publicItem(item.rows[0]), seller.rows[0]), // 상품정보 제공 고시 표
-    item: publicItem(item.rows[0]), // 검수 전 품목은 보관·안전 정보를 빼고 보낸다
+    item: withRecipeSteps(publicItem(item.rows[0])), // 검수 전 품목은 보관·안전 정보를 빼고 보낸다. 레시피에는 카드 뒷면용 단계를 붙인다
     seller: publicSeller(seller.rows[0]),
     seller_info: sellerInfo(seller.rows[0]),
     // 비밀글은 글쓴이 첫 글자와 답변 여부만 (이 상세는 모두에게 같은 캐시). 내용은 쓴 회원만 /my-questions 로 받는다
@@ -487,7 +488,7 @@ async function buildPreview(body, sellerCode, db = pool) {
     brix_rank: top == null ? null : brix >= top ? 3 : brix >= high ? 2 : 1,
   }
   const product = publicProduct(row)
-  const shownItem = publicItem(item)
+  const shownItem = withRecipeSteps(publicItem(item))
   return {
     ...product, detail_blocks: [], questions: [],
     notice_table: buildNotice(product, shownItem, seller), item: shownItem, seller: publicSeller(seller), seller_info: sellerInfo(seller),

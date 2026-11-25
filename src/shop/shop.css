@@ -332,17 +332,54 @@
 .shop .form input, .shop .form select, .shop .form textarea { border-radius: 0; background: #fff; }
 .shop .badge { border-radius: 0; }
 
-/* 상세의 '이렇게 즐겨 보세요' 레시피 카드: 아이보리 바탕, 그림이 큰 카드(모서리 둥글게) 아래 번호 제목과 한 줄 설명.
+/* 상세의 '이렇게 즐겨 보세요' 레시피 카드: 아이보리 바탕, 사진이 큰 카드. 누르면 뒤집혀 뒷면에 단계별 레시피.
    PC 3열, 모바일은 옆으로 넘기기 (src/shop/RecipeCards.jsx) */
 .shop .recipe-section { background: #f8f3e7; border-color: #e9e1cc; }
-.shop .recipe-cards { list-style: none; margin: 14px 0 4px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
-.shop .recipe-card { margin: 0; display: flex; flex-direction: column; gap: 4px; }
-.shop .recipe-card img { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 16px; background: #efe7d4; margin-bottom: 10px; }
+.shop .recipe-sub { margin: 4px 0 0; font-size: 14px; color: #7a7564; }
+.shop .recipe-cards { list-style: none; margin: 16px 0 4px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; align-items: start; }
+.shop .recipe-card { margin: 0; perspective: 1600px; }
+.shop .recipe-flip { position: relative; transform-style: preserve-3d; transition: transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1), height 0.5s ease; }
+.shop .recipe-card.is-flipped .recipe-flip { transform: rotateY(180deg); }
+.shop .recipe-face { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.shop .recipe-back { position: absolute; top: 0; left: 0; right: 0; min-height: 100%; box-sizing: border-box; transform: rotateY(180deg); display: flex; flex-direction: column; background: #fffdf7; border: 1px solid #e4d9bd; border-radius: 16px; box-shadow: 0 10px 30px rgb(80 60 20 / 0.12); overflow: hidden; }
+
+/* 앞면 */
+.shop .recipe-open { all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; width: 100%; cursor: pointer; }
+.shop .recipe-open:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 16px; }
+.shop .recipe-photo { position: relative; display: block; margin-bottom: 10px; border-radius: 16px; overflow: hidden; background: #efe7d4; }
+.shop .recipe-photo img { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; transition: transform 0.5s ease; }
+.shop .recipe-open:hover .recipe-photo img { transform: scale(1.04); }
+.shop .recipe-hint { position: absolute; right: 12px; bottom: 12px; padding: 7px 14px 7px 12px; border-radius: 999px; background: rgb(255 255 255 / 0.92); color: var(--accent); font-size: 13px; font-weight: 700; line-height: 18px; box-shadow: 0 2px 8px rgb(0 0 0 / 0.12); }
+.shop .recipe-hint::before { content: '\21BB  '; }
 .shop .recipe-card strong { font-family: var(--display); font-size: 17px; font-weight: 700; line-height: 24px; color: var(--text); }
-.shop .recipe-card p { margin: 0; font-size: 14px; line-height: 21px; color: #66685f; }
+.shop .recipe-line { margin: 0; font-size: 14px; line-height: 21px; color: #66685f; }
+
+/* 뒷면 */
+.shop .recipe-back-head { padding: 20px 22px 14px; background: var(--accent); color: #fff; }
+.shop .recipe-no { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; opacity: 0.75; }
+.shop .recipe-back h4 { margin: 4px 0 0; font-family: var(--display); font-size: 21px; font-weight: 700; line-height: 28px; color: #fff; }
+.shop .recipe-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; }
+.shop .recipe-meta span { padding: 3px 10px; border-radius: 999px; background: rgb(255 255 255 / 0.18); font-size: 12px; line-height: 18px; }
+.shop .recipe-back-body { flex: 1; padding: 16px 22px 8px; }
+.shop .recipe-label { margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; color: var(--accent); }
+.shop .recipe-ing { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 18px; padding: 0; }
+.shop .recipe-ing li { padding: 4px 10px; border: 1px solid #e4d9bd; border-radius: 999px; background: #fbf6ea; font-size: 13px; line-height: 19px; color: var(--text); }
+.shop .recipe-steps { list-style: none; counter-reset: step; margin: 0 0 14px; padding: 0; display: grid; gap: 10px; }
+.shop .recipe-steps li { counter-increment: step; position: relative; padding-left: 34px; font-size: 14px; line-height: 22px; color: var(--text); word-break: keep-all; }
+.shop .recipe-steps li::before { content: counter(step); position: absolute; left: 0; top: -1px; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; line-height: 24px; text-align: center; }
+.shop .recipe-tip { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: #fdf1cf; font-size: 13px; line-height: 20px; color: #5b4a17; word-break: keep-all; }
+.shop .recipe-tip b { margin-right: 6px; color: #b07d00; }
+.shop .recipe-back-btn { margin: 0; padding: 14px; border: 0; border-top: 1px solid #eee5cf; background: #fffdf7; color: var(--accent); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.shop .recipe-back-btn:hover { background: #f6efdc; }
+.shop .recipe-back-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+@media (prefers-reduced-motion: reduce) {
+  .shop .recipe-flip, .shop .recipe-photo img { transition: none; }
+}
 @media (max-width: 640px) {
   .shop .recipe-cards { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; padding-bottom: 8px; }
-  .shop .recipe-card { flex: 0 0 72%; scroll-snap-align: start; }
+  .shop .recipe-card { flex: 0 0 78%; scroll-snap-align: start; }
+  .shop .recipe-back-head { padding: 16px 18px 12px; }
+  .shop .recipe-back-body { padding: 14px 18px 6px; }
 }
 @media (max-width: 480px) {
   .shop .logo img { width: 160px; height: 28px; }
@@ -1651,14 +1688,3 @@ body:has(.shop) { background: #fafaf8; }
 .shop .page:has(.farms) { padding-top: 40px; }
 .shop .farms .pcrumbs { margin-bottom: 16px; }
 .shop .farms .farms-lead { margin-top: 16px; }
-
-/* 레시피 카드를 누르면 열리는 레시피 창 (src/shop/RecipeCards.jsx) */
-.shop .recipe-card-btn { all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; width: 100%; cursor: pointer; }
-.shop .recipe-card-btn:focus-visible { outline: 3px solid #2d6a4f; outline-offset: 4px; }
-.shop .recipe-layer { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; box-sizing: border-box; background: rgb(0 0 0 / 0.45); }
-.shop .recipe-dialog { position: relative; width: min(560px, 100%); max-height: 90vh; overflow-y: auto; box-sizing: border-box; padding: 24px; background: #fff; }
-.shop .recipe-dialog img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 12px; margin-bottom: 14px; background: #efe7d4; }
-.shop .recipe-dialog h4 { font-family: var(--display); font-size: 22px; font-weight: 600; line-height: 30px; margin: 0 0 12px; padding-right: 40px; }
-.shop .recipe-dialog p { margin: 0 0 12px; font-size: 16px; line-height: 26px; color: var(--text); }
-.shop .recipe-dialog b { display: inline-block; min-width: 4em; color: #2d6a4f; }
-.shop .recipe-close { position: absolute; top: 8px; right: 8px; width: 44px; height: 44px; border: 0; background: none; font-size: 28px; line-height: 1; cursor: pointer; color: var(--text); }
