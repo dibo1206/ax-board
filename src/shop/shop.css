@@ -346,10 +346,10 @@
 /* 앞면 */
 .shop .recipe-open { all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; width: 100%; cursor: pointer; }
 .shop .recipe-open:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 16px; }
-.shop .recipe-photo { position: relative; display: block; margin-bottom: 10px; border-radius: 16px; overflow: hidden; background: #efe7d4; }
-.shop .recipe-photo img { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; transition: transform 0.5s ease; }
-.shop .recipe-open:hover .recipe-photo img { transform: scale(1.04); }
-.shop .recipe-hint { position: absolute; right: 12px; bottom: 12px; padding: 7px 14px 7px 12px; border-radius: 999px; background: rgb(255 255 255 / 0.92); color: var(--accent); font-size: 13px; font-weight: 700; line-height: 18px; box-shadow: 0 2px 8px rgb(0 0 0 / 0.12); }
+.shop .recipe-pic { position: relative; display: block; margin-bottom: 10px; border-radius: 16px; overflow: hidden; background: #efe7d4; }
+.shop .recipe-pic img { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; transition: transform 0.5s ease; }
+.shop .recipe-open:hover .recipe-pic img { transform: scale(1.04); }
+.shop .recipe-hint { position: absolute; right: 12px; bottom: 12px; padding: 7px 14px 7px 12px; border-radius: 999px; background: rgb(255 255 255 / 0.92); color: var(--accent); font-size: 13px; font-weight: 700; line-height: 18px; white-space: nowrap; box-shadow: 0 2px 8px rgb(0 0 0 / 0.12); }
 .shop .recipe-hint::before { content: '\21BB  '; }
 .shop .recipe-card strong { font-family: var(--display); font-size: 17px; font-weight: 700; line-height: 24px; color: var(--text); }
 .shop .recipe-line { margin: 0; font-size: 14px; line-height: 21px; color: #66685f; }
@@ -373,7 +373,7 @@
 .shop .recipe-back-btn:hover { background: #f6efdc; }
 .shop .recipe-back-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
 @media (prefers-reduced-motion: reduce) {
-  .shop .recipe-flip, .shop .recipe-photo img { transition: none; }
+  .shop .recipe-flip, .shop .recipe-pic img { transition: none; }
 }
 @media (max-width: 640px) {
   .shop .recipe-cards { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; padding-bottom: 8px; }
