@@ -1651,3 +1651,14 @@ body:has(.shop) { background: #fafaf8; }
 .shop .page:has(.farms) { padding-top: 40px; }
 .shop .farms .pcrumbs { margin-bottom: 16px; }
 .shop .farms .farms-lead { margin-top: 16px; }
+
+/* 레시피 카드를 누르면 열리는 레시피 창 (src/shop/RecipeCards.jsx) */
+.shop .recipe-card-btn { all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; width: 100%; cursor: pointer; }
+.shop .recipe-card-btn:focus-visible { outline: 3px solid #2d6a4f; outline-offset: 4px; }
+.shop .recipe-layer { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; box-sizing: border-box; background: rgb(0 0 0 / 0.45); }
+.shop .recipe-dialog { position: relative; width: min(560px, 100%); max-height: 90vh; overflow-y: auto; box-sizing: border-box; padding: 24px; background: #fff; }
+.shop .recipe-dialog img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 12px; margin-bottom: 14px; background: #efe7d4; }
+.shop .recipe-dialog h4 { font-family: var(--display); font-size: 22px; font-weight: 600; line-height: 30px; margin: 0 0 12px; padding-right: 40px; }
+.shop .recipe-dialog p { margin: 0 0 12px; font-size: 16px; line-height: 26px; color: var(--text); }
+.shop .recipe-dialog b { display: inline-block; min-width: 4em; color: #2d6a4f; }
+.shop .recipe-close { position: absolute; top: 8px; right: 8px; width: 44px; height: 44px; border: 0; background: none; font-size: 28px; line-height: 1; cursor: pointer; color: var(--text); }
