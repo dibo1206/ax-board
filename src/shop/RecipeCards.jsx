@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 // 상품 상세의 '이렇게 즐겨 보세요': 레시피마다 그림이 큰 카드 (PC 3열, 모바일은 옆으로 넘기기)
+// 카드를 누르면 레시피 창이 열려 재료와 만드는 법을 보여 준다
 // 그림: 레시피에 image(예: /recipe-photos/kiwi-yogurt.webp)가 있으면 그 사진, 없으면 요리 종류에 맞는 기본 그림
 // 기본 그림은 public/recipe-art 의 직접 그린 SVG라 사용권 걱정이 없다. 사진을 못 불러오면 접시 그림으로 바꾼다
 const ART = '/recipe-art'
@@ -21,26 +22,50 @@ const KINDS = [
 
 const recipeArt = (title = '') => `${ART}/${KINDS.find(([pattern]) => pattern.test(title))?.[1] ?? 'plate'}.svg`
 
-function RecipeCard({ recipe, number }) {
+function RecipeCard({ recipe, number, onOpen }) {
   const [src, setSrc] = useState(recipe.image || recipeArt(recipe.title))
   return (
     <li className="recipe-card">
-      {/* 제목이 바로 아래에 있어 그림은 꾸밈으로 둔다 (화면 낭독기가 같은 말을 두 번 읽지 않게) */}
-      <img src={src} alt="" loading="lazy" decoding="async" onError={() => src !== FALLBACK && setSrc(FALLBACK)} />
-      <strong>{number}. {recipe.title}</strong>
-      <p>{recipe.method}</p>
+      <button type="button" className="recipe-card-btn" aria-haspopup="dialog" onClick={() => onOpen({ recipe, number })}>
+        {/* 제목이 바로 아래에 있어 그림은 꾸밈으로 둔다 (화면 낭독기가 같은 말을 두 번 읽지 않게) */}
+        <img src={src} alt="" loading="lazy" decoding="async" onError={() => src !== FALLBACK && setSrc(FALLBACK)} />
+        <strong>{number}. {recipe.title}</strong>
+        <p>{recipe.method}</p>
+      </button>
     </li>
   )
 }
 
+function RecipeDialog({ recipe, number, onClose }) {
+  const [src, setSrc] = useState(recipe.image || recipeArt(recipe.title))
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return (
+    <div className="recipe-layer" onClick={onClose}>
+      <div className="recipe-dialog" role="dialog" aria-modal="true" aria-labelledby="recipe-dialog-title" onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="recipe-close" onClick={onClose} aria-label="레시피 닫기">×</button>
+        <img src={src} alt="" onError={() => src !== FALLBACK && setSrc(FALLBACK)} />
+        <h4 id="recipe-dialog-title">{number}. {recipe.title}</h4>
+        {recipe.ingredients && <p><b>재료</b> {recipe.ingredients}</p>}
+        <p><b>만드는 법</b> {recipe.method}</p>
+      </div>
+    </div>
+  )
+}
+
 export function RecipeCards({ recipes }) {
+  const [open, setOpen] = useState(null)
   if (!recipes?.length) return null
   return (
     <section className="box recipe-section">
       <h3>이렇게 즐겨 보세요</h3>
       <ol className="recipe-cards">
-        {recipes.map((r, index) => <RecipeCard key={`${r.title}|${r.image ?? ''}`} recipe={r} number={index + 1} />)}
+        {recipes.map((r, index) => <RecipeCard key={`${r.title}|${r.image ?? ''}`} recipe={r} number={index + 1} onOpen={setOpen} />)}
       </ol>
+      {open && <RecipeDialog recipe={open.recipe} number={open.number} onClose={() => setOpen(null)} />}
     </section>
   )
 }
