@@ -71,7 +71,7 @@ function RecipeCard({ recipe, number }) {
             onClick={open}
             aria-label={`${number}. ${recipe.title} 레시피 보기`}
           >
-            <span className="recipe-photo">
+            <span className="recipe-pic">
               {/* 제목이 바로 아래에 있어 그림은 꾸밈으로 둔다 */}
               <img src={src} alt="" loading="lazy" decoding="async" onError={() => src !== FALLBACK && setSrc(FALLBACK)} />
               <span className="recipe-hint">레시피 보기</span>
