@@ -99,7 +99,8 @@ function infoSentence(p, ask, message) {
   }
   const value = known(p.notice?.[ask.field])
   if (!value) return `${name}의 ${ask.word} 정보는 아직 없어요. 받으신 제품 라벨을 확인하시거나 상품 페이지 아래 Q&A에 물어봐 주세요.`
-  if (ask.id === 'expiry') return `${name}의 소비기한은 ${value.replace(/[.\s]+$/, '')}${/요$/.test(value) ? '.' : '이에요.'}`
+  // 생과일은 날짜 대신 "받은 뒤 상태를 보며 되도록 빨리 드세요" 같은 안내가 적혀 있다. 그 문장 그대로
+  if (ask.id === 'expiry') return /(세요|어요|아요|요)\)?\.?$/.test(value.replace(/\s*\([^)]*\)\s*$/, '')) ? `${name}은(는) 정해진 소비기한 대신 이렇게 안내하고 있어요: ${value.replace(/[.\s]+$/, '')}.` : `${name}의 소비기한은 ${value.replace(/[.\s]+$/, '')}이에요.`
   // 긴 목록 뒤에 조사를 붙이면 어색해서("…황색제4호이에요") '이름 칸: 값' 꼴로 적는다
   if (ask.id === 'nutrition') return `${name} 영양 성분: ${value.replace(/[.\s]+$/, '')}.`
   const asked = LITERAL.filter((w) => message.includes(w))
@@ -133,7 +134,7 @@ export const productAbout = (p) => [p.summary, p.description, blocksText(p.detai
 // 질문 낱말에서 끝(조사·어미)을 떼고 앞 두 글자를 본다. "묻어서" 같은 동사는 거의 안 맞고, "흙·송이·씨앗" 같은 이름말이 맞는다
 const ENDING = /(이에요|예요|에요|인가요|나요|어요|아요|해요|돼요|되요|되나요|할까요|일까요|인지|는지|은지|이요|요|은|는|이|가|을|를|도|만|에|에서|으로|로|랑|하고|이랑|까지|부터|이나|나|거|건|게|임|음|야|니|냐)$/
 const ONE_SYLLABLE = new Set(['흙', '씨', '향', '털', '즙', '심'])
-const STOP = new Set(['상품', '정도', '얼마', '어떻', '언제', '지금', '혹시', '그냥', '진짜', '이거', '그거', '저거', '무슨', '어떤', '뭐가', '있어', '없어', '되나',
+const STOP = new Set(['이렇', '그렇', '저렇', '어떻', '이러', '그러', '비싸', '싸요', '상품', '정도', '얼마', '어떻', '언제', '지금', '혹시', '그냥', '진짜', '이거', '그거', '저거', '무슨', '어떤', '뭐가', '있어', '없어', '되나',
   '먹어', '먹으', '먹을', '먹는', '하나', '사람', '우리', '제가', '저는', '혼자', '많이', '조금', '너무', '원래', '보통', '처음', '요즘', '오늘', '내일', '하루',
   '받으', '받을', '받아', '주문', '보내', '어디', '여기', '거기', '이게', '저게', '그게', '이건', '알려', '궁금', '해주', '주세', '주실', '할수', '수있', '있나',
   '있는', '같은', '같아', '맞아', '맞나', '아니', '그럼', '근데', '그리', '그런', '이런', '저런', '되는', '하는', '해서', '했는', '좋아', '좋은', '좋을', '괜찮'])
@@ -164,7 +165,13 @@ function focusProducts(catalog, ctx, message) {
   const plain = spell(message).replace(/\s+/g, '')
   // "매운거" → (매운맛) 처럼 앞 두 글자만 맞아도 그 상품으로 본다 (세 글자 이상 이름말만)
   const byName = ofItem.filter((p) => nameWords(p).some((w) => !COMMON.has(w) && (plain.includes(w) || (w.length >= 3 && plain.includes(w.slice(0, 2))))))
-  const list = byName.length ? byName : ofItem
+  let list = byName.length ? byName : ofItem
+  // "배즙 50포"처럼 양을 말했으면 그 양이 이름·옵션에 있는 상품만. 그런 상품이 없으면 콕 집지 못한 것이다
+  const amount = plain.match(/(\d+(?:\.\d+)?)(kg|g|포|병|개입|l)(?![a-z])/i)
+  if (amount) {
+    const has = (t) => new RegExp(`(?<![\\d.])${amount[1].replace('.', '\\.')}\\s*${amount[2]}`, 'i').test(t)
+    list = list.filter((p) => has(p.name) || (p.options ?? []).some((o) => has(String(o.name))))
+  }
   return list.length <= 2 ? list : []
 }
 
@@ -218,12 +225,18 @@ export function answerCompareProducts(message, catalog, ctx) {
 
 // ---------- 4. 값만 말한 질문 ----------
 const KOREAN_MAN = { 일: 1, 이: 2, 삼: 3, 사: 4, 오: 5, 육: 6, 칠: 7, 팔: 8, 구: 9, 십: 10 }
+// "15000원", "1만5천원", "만오천 원", "3만원" → 원. 읽을 수 없는 꼴이면 null (값을 잘못 읽어 엉뚱한 목록을 내지 않게)
 function budgetOf(message) {
-  const m = message.match(/(\d+(?:\.\d+)?|[일이삼사오육칠팔구십])?\s?(만|천)\s?원|(\d{4,})\s?원/)
-  if (!m) return null
-  if (m[3]) return Number(m[3])
-  const n = m[1] ? (KOREAN_MAN[m[1]] ?? Number(m[1])) : 1
-  return n * (m[2] === '만' ? 10_000 : 1_000)
+  const said = message.replace(/,/g, '')
+  const digits = said.match(/(?<![\d.])(\d{4,})\s?원/)
+  if (digits) return Number(digits[1])
+  const m = said.match(/(?:(\d+|[일이삼사오육칠팔구]|십)?\s?만)?\s?(?:(\d|[일이삼사오육칠팔구])?\s?천)?\s?원/)
+  if (!m || !/(만|천)\s?원|만\s?\S{1,3}천\s?원/.test(said)) return null
+  const num = (v, missing) => (v == null ? missing : KOREAN_MAN[v] ?? Number(v))
+  const hasMan = /만/.test(m[0])
+  const hasCheon = /천/.test(m[0])
+  const total = (hasMan ? num(m[1], 1) * 10_000 : 0) + (hasCheon ? num(m[2], 1) * 1_000 : 0)
+  return total > 0 ? total : null
 }
 const CHEAPEST = /(제일|가장|젤|젤로|최고로)\s?(싼|저렴|싸)/
 const UNDER = /(이하|미만|안쪽|아래|밑|이내|안으로|짜리)/
