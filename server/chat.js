@@ -110,7 +110,7 @@ const ROUTES = [
   },
   {
     kind: 'refund',
-    re: /환불|교환|반품|파손|불량|배송.{0,8}(안\s?와|안\s?오|늦|누락|잘못)|(받|온|왔|도착).{0,12}(상했|썩|깨졌|터졌|곰팡이|물러|멍)|(멍들|썩|상해|깨져|터져|곰팡이).{0,8}(왔|왓|도착)|(멍들|썩은|상한|깨진).{0,12}사진/,
+    re: /환불|교환|반품|파손|불량|(깨져|깨졌|터져|터졌|썩어|멍들어|멍이\s?들어|물러져)\s?(있|왔|와)|배송.{0,8}(안\s?와|안\s?오|늦|누락|잘못)|(받|온|왔|도착).{0,12}(상했|썩|깨졌|터졌|곰팡이|물러|멍)|(멍들|썩|상해|깨져|터져|곰팡이).{0,8}(왔|왓|도착)|(멍들|썩은|상한|깨진).{0,12}사진/,
     // 반품 신청 위치만 안내한다. 신청해도 환불 여부는 담당자가 정한다 (환불을 약속하지 않는다). 기간은 교환·환불 정책과 같은 값
     answer: () => '불편을 드려 죄송해요. 환불·교환 여부는 제가 결정할 수 없어서 담당자에게 넘길게요. '
       + `배송 완료된 상품은 [주문 조회](비회원) 또는 마이페이지 주문 내역에서 농가별로 [반품 신청]을 눌러 사유를 남겨 주세요 (${RETURNS.changeMind ? `단순 변심은 받은 날부터 ${RETURNS.changeMindDays}일, ` : ''}상품 하자·파손·오배송은 ${RETURNS.defectMonths}개월 안). `
@@ -749,7 +749,7 @@ function lookAlike(item, message) {
 const TOPICS = [
   { kind: 'safety', word: '먹어도 괜찮은지', re: new RegExp(`(먹어|드셔|마셔|섭취해)도|드실\\s?수|마실\\s?수|상하면|싹(이|\\s?났|\\s?나|\\s?트|\\s?텄)|상했|상한\\s?(것|거)|변했|변색|곰팡|이상한\\s?냄새|냄새가\\s?(나|이상)|(술|발효|시큼한|썩은)\\s?냄새|물렀|물러졌|썩|끈적|미끈|점액|쭈글|초록색으로|${ELAPSED.source}`) },
   { kind: 'compare', word: '차이', re: /차이|비교|뭐가\s?달라|다른\s?점|뭐가\s?나아|어떤\s?게\s?나아/ },
-  { kind: 'recipe', word: '레시피', re: /레시피|만들|만드|요리|활용|데치|데쳐|담그|담가|담궈|어디(에|다)\s?(넣|써|쓰)|먹는\s?(법|방법)|어떻게\s?먹|해\s?먹|비율|음료|에이드|(얼마나|어떻게|몇\s?대\s?몇)\s?(타|섞|희석)|타\s?(먹|마시)|희석/ },
+  { kind: 'recipe', word: '레시피', re: /레시피|만들|만드|요리|활용|데치|데쳐|담그|담가|담궈|어디(에|다)\s?넣어\s?먹|먹는\s?(법|방법)|어떻게\s?먹|해\s?먹|비율|음료|에이드|(얼마나|어떻게|몇\s?대\s?몇)\s?(타|섞|희석)|타\s?(먹|마시)|희석/ },
   { kind: 'ripe', word: '익었는지 보는 법', re: /익었는지|익은\s?(건지|지|거)|다\s?익었|잘\s?익었|숙성\s?(됐|되었)/ },
   { kind: 'storage', word: '보관법', re: /딱딱|후숙|덜\s?익|안\s?익|얼려|얼리|많이\s?남|남았는데|남은\s?(거|것)|다\s?못\s?먹|보관|오래\s?두|둬야|두는\s?법|냉장|냉동|상온|실온|어디에?\s?(둬|두|놔)|(같이|함께)\s?(둬|두|놔|넣)|(둬|두어|놔)도|넣어도|개봉|뜯(은|으면|고)|언제까지|며칠|(몇\s?일)\s?(가|버텨|버티|보관|두)|유통\s?기한|얼마나\s?(가|두|오래)/ },
   { kind: 'taste', word: '맛', re: /맛있|맛이\s?(어때|좋|괜찮)|맛은|무슨\s?맛/ },
@@ -862,7 +862,7 @@ function answerTemplate(message, catalog, ctx) {
       handoff: true, action: 'qna', model: 'rule:danger', blocked: false,
     }
   }
-  const topic = TOPICS.find((t) => t.re.test(message))
+  const topic = (/원산지|국산|국내산|어디서\s?(만들|만든|생산)/.test(message) ? TOPICS.find((t) => t.kind === 'origin') : null) ?? TOPICS.find((t) => t.re.test(message))
   if (!topic) return null
   const mentioned = findItems(message, catalog.items)
   const items = (mentioned.length ? mentioned : ctx.items).slice(0, 2)
@@ -1046,7 +1046,7 @@ const SIZE_HAVE = /있(어|나|냐|음|니|을까|는지)|없(어|나|냐)|팔(�
 function answerSize(message, catalog, ctx) {
   const said = message.replace(/\s?(키로|킬로)/g, 'kg')
   const asked = [...said.matchAll(AMOUNT)][0]
-  if (!asked || !SIZE_HAVE.test(said) || /얼마|가격|값|몇\s*(개|알|과|송이|포기|잔|컵|번)|개수|들어\s?있/.test(said)) return null
+  if (!asked || !SIZE_HAVE.test(said) || /얼마|가격|값|몇\s*(개|알|과|송이|포기|잔|컵|번)|개수|들어\s?있|먹어도|드셔도|마셔도|녹여|녹이/.test(said)) return null
   const { codes } = itemCodesFor(said, catalog, ctx)
   if (!codes.length) return null
   const name = catalog.items.find((i) => i.item_code === codes[0])?.name ?? '이 품목'
@@ -1180,7 +1180,7 @@ function answerFromEvidence(evidence, message, catalog, ctx, fallbackProduct) {
   return {
     answer: `${lead} ${top.text}`,
     sources: product ? [{ code: product.product_code, name: product.name }] : [],
-    askAi: false, // 점수가 높고 다른 글과 충분히 벌어진 글만 여기 온다. 그대로 보여 준 답이라 AI 버튼을 또 붙이지 않는다
+    askAi: keyLoaded() && dailyLimit() > 0,
     handoff: false,
     action: null,
     productCode: product?.product_code ?? fallbackProduct,
@@ -1512,7 +1512,13 @@ async function answerMasked({ message, history, productCode }, { useCache, allow
   }
 
   // 상품을 콕 집었으면 그 상품 설명 글에서 먼저 찾는다 (벡터 검색은 다른 상품 글을 고를 수 있다)
-  if (!allowAi) return answerCompareProducts(message, catalog, ctx) ?? answerFromProductText(message, catalog, ctx) ?? answerFromEvidence(evidence, message, catalog, ctx, fallbackProduct) ?? askFirst(ctx, fallbackProduct, evidence, message, catalog)
+  // 설명 글에서 고른 문장·소개 글 나란히는 질문과 어긋날 수 있어서, 보여 주되 [AI에게 물어보기]를 남긴다
+  // (틀린 답보다 AI 버튼이 낫다. 버튼 없이 답하는 건 가격·소비기한처럼 상품 칸 값을 그대로 옮길 때만)
+  if (!allowAi) {
+    const quoted = answerCompareProducts(message, catalog, ctx) ?? answerFromProductText(message, catalog, ctx)
+    if (quoted) return { ...quoted, askAi: keyLoaded() && dailyLimit() > 0 }
+    return answerFromEvidence(evidence, message, catalog, ctx, fallbackProduct) ?? askFirst(ctx, fallbackProduct, evidence, message, catalog)
+  }
   if (!keyLoaded()) {
     const error = new Error('OPENROUTER_API_KEY 없음')
     error.code = 'NO_KEY'
