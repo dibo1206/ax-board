@@ -590,7 +590,23 @@
 .shop .quick-cart svg { width: 22.5px; height: 22.5px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .shop .quick-cart:hover, .shop .quick-cart:focus-visible { background: var(--accent); color: #fff; transform: scale(1.06); }
 .shop .quick-cart.done { background: var(--accent); color: #fff; }
-@media (hover: hover) { .shop .quick-cart:not(.done) { opacity: 0; } .shop .pcard-wrap:hover .quick-cart, .shop .quick-cart:focus-visible { opacity: 1; } }
+@media (hover: hover) { .shop .quick-cart:not(.done):not(.open) { opacity: 0; } .shop .pcard-wrap:hover .quick-cart, .shop .quick-cart:focus-visible { opacity: 1; } }
+.shop .quick-cart.open { background: var(--accent); color: #fff; }
+/* 옵션 상품의 장바구니 버튼을 누르면 사진 위(버튼 바로 위)에 뜨는 옵션 목록 */
+.shop .quick-options { position: absolute; left: 10px; right: 10px; top: calc(var(--img-h) - 63px); transform: translateY(-100%); z-index: 3; max-height: calc(var(--img-h) - 75px); overflow-y: auto; padding: 10px; background: #fff; border-radius: 10px; box-shadow: 0 6px 20px rgb(0 0 0 / 0.25); }
+.shop .quick-options-title { margin: 0 0 6px; font-size: 14px; font-weight: 700; color: var(--text); }
+.shop .quick-options ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.shop .quick-options button { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--text); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+.shop .quick-options button b { white-space: nowrap; }
+.shop .quick-options button:hover:not(:disabled), .shop .quick-options button:focus-visible { border-color: var(--accent); background: var(--accent); color: #fff; }
+.shop .quick-options button:disabled { color: #8a8a8a; background: #f4f4f4; cursor: not-allowed; }
+.shop .quick-options button span { white-space: nowrap; }
+/* 휴대폰(카드 2열)은 카드가 좁아서 옵션 이름 아래에 가격을 둔다 */
+@media (max-width: 560px) {
+  .shop .quick-options { left: 4px; right: 4px; padding: 8px; max-height: calc(var(--img-h) - 62px); }
+  .shop .quick-options-title { font-size: 13px; }
+  .shop .quick-options button { flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px 10px; font-size: 14px; }
+}
 
 /* 함께 보면 좋은 상품: 카드 아래 담기 버튼 */
 .shop .picks > li { display: flex; flex-direction: column; gap: 7.5px; }
