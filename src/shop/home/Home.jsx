@@ -95,26 +95,77 @@ export function CategoryRows({ groups, onPick }) {
 }
 
 // 사진 오른쪽 아래 장바구니 버튼(마우스를 올리면 나타남): 상세로 들어가기 전에 1개를 바로 담는다 (링크 안에 버튼을 넣을 수 없어 카드 바깥 형제로 둔다)
-// 옵션 상품은 옵션을 골라야 담을 수 있어서, 이 버튼이 상세로 보내 준다
+// 옵션 상품(3kg·5kg …)은 버튼을 누르면 카드 위에 옵션 목록이 떠서, 고른 옵션으로 바로 담는다 (2026-11-26: 전에는 상세로 보내서 "안 담긴다"는 피드백)
+// 옵션 목록이 비어 있으면(옛 데이터) 전처럼 상세로 보낸다
 function QuickCart({ p, onOpen }) {
   const [done, setDone] = useState(false)
+  const [picking, setPicking] = useState(false)
+  const buttonRef = useRef(null)
+  const panelRef = useRef(null)
   useEffect(() => {
     if (!done) return undefined
     const timer = setTimeout(() => setDone(false), 1600)
     return () => clearTimeout(timer)
   }, [done])
+  // 옵션 목록: 열리면 첫 옵션으로 초점, Esc·바깥 누르기로 닫는다
+  useEffect(() => {
+    if (!picking) return undefined
+    panelRef.current?.querySelector('button:not(:disabled)')?.focus()
+    const close = (e) => {
+      if (e.type === 'keydown' && e.key !== 'Escape') return
+      if (e.type === 'pointerdown' && (panelRef.current?.contains(e.target) || buttonRef.current?.contains(e.target))) return
+      setPicking(false)
+      if (e.type === 'keydown') buttonRef.current?.focus()
+    }
+    document.addEventListener('keydown', close)
+    document.addEventListener('pointerdown', close)
+    return () => {
+      document.removeEventListener('keydown', close)
+      document.removeEventListener('pointerdown', close)
+    }
+  }, [picking])
   if (p.sold_out) return null
   const name = p.name.replace(/\[예시\]\s*/g, '')
+  const options = p.has_options ? (p.options ?? []) : []
   const pickOption = p.has_options
+  const add = (option) => {
+    addToCart(p.product_code, 1, option?.id ?? null, option ? `${name} ${option.name}` : name)
+    setPicking(false)
+    setDone(true)
+    buttonRef.current?.focus()
+  }
+  const onClick = () => {
+    if (!pickOption) add(null)
+    else if (options.length) setPicking((now) => !now)
+    else onOpen(p.product_code)
+  }
   return (
-    <button type="button" className={`quick-cart${done ? ' done' : ''}`}
-      aria-label={pickOption ? `${name} 옵션 고르기` : done ? `${name} 장바구니에 담았어요` : `${name} 장바구니 담기`}
-      onClick={() => { if (pickOption) onOpen(p.product_code); else { addToCart(p.product_code, 1, null, name); setDone(true) } }}>
-      {/* 담긴 것은 화면 아래 알림(CartToast)이 글로 알려 준다. 여기서는 아이콘만 잠깐 체크로 */}
-      {done
-        ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
-        : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2.5l2.2 10.5h10.1L20 7H6.3" /><circle cx="9" cy="19" r="1.3" /><circle cx="17" cy="19" r="1.3" /></svg>}
-    </button>
+    <>
+      <button type="button" ref={buttonRef} className={`quick-cart${done ? ' done' : ''}${picking ? ' open' : ''}`}
+        aria-label={pickOption ? (done ? `${name} 장바구니에 담았어요` : `${name} 옵션 골라 장바구니 담기`) : done ? `${name} 장바구니에 담았어요` : `${name} 장바구니 담기`}
+        aria-expanded={pickOption && options.length ? picking : undefined}
+        onClick={onClick}>
+        {/* 담긴 것은 화면 아래 알림(CartToast)이 글로 알려 준다. 여기서는 아이콘만 잠깐 체크로 */}
+        {done
+          ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
+          : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2.5l2.2 10.5h10.1L20 7H6.3" /><circle cx="9" cy="19" r="1.3" /><circle cx="17" cy="19" r="1.3" /></svg>}
+      </button>
+      {picking && (
+        <div className="quick-options" ref={panelRef} role="group" aria-label={`${name} 옵션 고르기`}>
+          <p className="quick-options-title">옵션을 골라 주세요</p>
+          <ul>
+            {options.map((o) => (
+              <li key={o.id}>
+                <button type="button" disabled={o.stock <= 0} onClick={() => add(o)}>
+                  <span>{o.name}</span>
+                  <b>{o.stock > 0 ? won(o.price) : '품절'}</b>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
   )
 }
 
