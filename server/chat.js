@@ -545,7 +545,8 @@ function narrow(products, message, catalog) {
   const said = message.replace(/(이십|십오|십|일|이|삼|사|오|육|칠|팔|구)\s?(키로|킬로)/g, (_, n) => `${KOREAN_NUMBER[n]}kg`).replace(/\s?(키로|킬로)/g, 'kg')
   const words = (p) => [...p.name.replace(/\[예시\]/g, '').split(/[\s·()]+/), ...(p.options ?? []).flatMap((o) => String(o.name).split(/\s+/)),
     ...String(p.seller_name ?? '').replace(/\[예시\]/g, '').split(/\s+/)]
-    .filter((w) => w.length >= 2 && !catalog.items.some((i) => i.name === w))
+    // 품목 이름의 낱말(과일 농축액 '베이스')은 그 품목 상품 모두에 해당하니 좁히는 데 쓰지 않는다
+    .filter((w) => w.length >= 2 && !catalog.items.some((i) => i.name === w || i.name.split(/\s+/).includes(w)))
   const sameMeaning = (p) => SAME_MEANING.some(([re, names]) => re.test(said) && names.some((n) => p.name.includes(n)))
   // 상품 이름을 통째로 말했으면 그 상품만 ("거창 부사 선물 5kg (특대과) 얼마예요?")
   const plainName = (p) => p.name.replace(/\[예시\]\s*/g, '').replace(/\s+/g, '')
@@ -585,7 +586,7 @@ function manyProducts(products, facts, catalog) {
     shown = [...live].sort((a, b) => a.price - b.price).slice(0, 3)
     const prices = live.map((p) => p.price)
     const soldOut = products.length - live.length
-    answer = `${name} 상품은 지금 ${live.length}개를 살 수 있어요${soldOut ? ` (품절 ${soldOut}개 빼고)` : ''}. 가격은 ${won(Math.min(...prices))}~${won(Math.max(...prices))}이고, 싼 순으로 ${shown.map((p) => `${label(p)} ${priceOf(p)}`).join(', ')}이에요.`
+    answer = `${name} 상품은 지금 ${live.length}개를 살 수 있어요${soldOut ? ` (품절 ${soldOut}개 빼고)` : ''}. 가격은 ${Math.min(...prices) === Math.max(...prices) ? `모두 ${won(prices[0])}` : `${won(Math.min(...prices))}~${won(Math.max(...prices))}`}이고, 싼 순으로 ${shown.map((p) => `${label(p)} ${priceOf(p)}`).join(', ')}이에요.`
       + `${ids.includes('where') ? ` 모두 ${BUY_HOW}할 수 있어요.` : ''} 무게나 용도(선물용·가정용 등)를 함께 말씀해 주시면 좁혀 드릴게요.`
   }
   if (!answer) return null
@@ -652,6 +653,10 @@ function answerFact(message, catalog, ctx) {
   if (ATTRIBUTE_WORD.test(message)) return null
   if (NEEDS_EXPLAIN.test(message.replace(/(가격|값|얼마).{0,4}어떻게/, '').replace(/(크기|무게|용량|구성|사이즈).{0,4}어떻게\s?(되|돼)/, '')) || TOPICS.some((t) => t.re.test(message)) || dangerSign(message, catalog.items)) return null
   let facts = FACTS.filter((f) => f.re.test(message))
+  // "과일 농축액 베이스 있어요?"처럼 품목 이름 바로 뒤에 '있어요'만 붙은 말은 파는지 묻는 것이다
+  const have = message.match(/^(.*?)\s*(은|는|이|가|도)?\s*(있어요|있나요|있어|있니|있냐|있습니까)\s*[?？!.~]*\s*$/)
+  // 없는 등급(파지·등외)을 물은 말은 비슷한 상품으로 넘겨짚지 않는다
+  if (!facts.length && have && !GRADE_WORD.test(message) && catalog.items.some((i) => have[1].trim().endsWith(i.name))) facts = FACTS.filter((f) => f.id === 'stock')
   if (!facts.length) return null
   // "당도는 얼마예요?", "몇 개 들어 있어요?"처럼 겹치면 구체적인 쪽(당도·개수)만 답한다
   if (facts.some((f) => f.only)) facts = facts.filter((f) => f.only)
@@ -1116,6 +1121,9 @@ function answerNotSold(message, catalog, ctx) {
   // "선물세트 팔아요?"처럼 상품 이름 조각을 말했으면 파는 상품일 수 있어서 넘어간다
   const nameWords = catalog.products.flatMap((p) => label(p).split(/\s+/)).filter((w) => w.length >= 2 && !/\d/.test(w))
   if (nameWords.some((w) => message.includes(w))) return null
+  // 여러 낱말로 된 품목 이름의 한 조각(농축액·베이스)을 말했어도 파는 품목일 수 있다: '안 팔아요'라고 단정하지 않는다
+  const itemWords = catalog.items.flatMap((i) => i.name.split(/\s+/)).filter((w) => w.length >= 3)
+  if (itemWords.some((w) => message.includes(w))) return null
   const selling = catalog.items.filter((i) => catalog.products.some((p) => p.item_code === i.item_code)).map((i) => i.name)
   if (!selling.length) return null
   return {
@@ -1442,7 +1450,9 @@ export async function answerChat({ message: raw, history = [], productCode = nul
   return { ...result, answer: tidyAnswer(result.answer), question: message, masked }
 }
 
-async function answerMasked({ message, history, productCode }, { useCache, allowAi }) {
+async function answerMasked({ message: said0, history, productCode }, { useCache, allowAi }) {
+  // 상품·품목을 부르는 다른 말(샤인머스켓, 농축액, 음료 베이스)을 상품 이름으로 맞춰 둔다. 모든 규칙이 같은 말을 보게
+  const message = spell(said0)
   const catalog = await loadCatalog()
   const ctx = pickContext(catalog, { message, history, productCode })
   const fallbackProduct = ctx.current?.product_code ?? (ctx.products.length === 1 ? ctx.products[0].product_code : null)

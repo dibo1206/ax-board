@@ -18,9 +18,33 @@ function preloadMascot() {
   mascotImage.src = '/home/mascot-wave2.svg'
 }
 
+// [크게 보기]: 상담 창을 화면 가득(휴대폰은 전체 화면) 키우고 글씨도 키운다. 어르신 손님이 답을 읽기 쉽게 (2026-11-26)
+// 고른 크기는 이 브라우저에 기억한다 (저장소를 못 쓰면 이번 화면에서만)
+const BIG_KEY = 'farm-chat-big'
+const loadBig = () => {
+  try {
+    return window.localStorage.getItem(BIG_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+const saveBig = (big) => {
+  try {
+    if (big) window.localStorage.setItem(BIG_KEY, '1')
+    else window.localStorage.removeItem(BIG_KEY)
+  } catch {
+    // 저장소가 막혀 있으면 기억하지 않는다
+  }
+}
+
 export function Chat({ productCode, onOpenProduct }) {
   const [start] = useState(() => loadChat(HELLO))
   const [open, setOpen] = useState(start.open)
+  const [big, setBig] = useState(loadBig)
+  const toggleBig = () => setBig((now) => {
+    saveBig(!now)
+    return !now
+  })
   const [messages, setMessages] = useState(start.messages)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -90,9 +114,10 @@ export function Chat({ productCode, onOpenProduct }) {
   }
 
   return (
-    <section className="chat" aria-label="상담하기">
+    <section className={`chat${big ? ' big' : ''}`} aria-label="상담하기">
       <header>
         <strong>상담하기</strong>
+        <button type="button" className="link" onClick={toggleBig} aria-pressed={big}>{big ? '작게 보기' : '크게 보기'}</button>
         {messages.length > 1 && <button type="button" className="link" onClick={() => { setMessages([HELLO]); clearChat() }}>대화 지우기</button>}
         <button type="button" className="link" onClick={() => setOpen(false)} aria-label="상담 창 닫기">닫기</button>
       </header>

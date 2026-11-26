@@ -110,6 +110,15 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .chat form { display: flex; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--border); }
 .chat form input { flex: 1; min-width: 0; padding: 8px 10px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
 .chat-note { margin: 0; padding: 0 12px 8px; font-size: 0.75rem; }
+/* [크게 보기]: 창을 화면 가득, 글씨도 크게. 휴대폰(좁은 화면)은 전체 화면 */
+.chat.big { width: min(760px, calc(100vw - 32px)); height: calc(100vh - 32px); height: calc(100dvh - 32px); }
+.chat.big .bubble { max-width: 92%; padding: 12px 16px; font-size: 1.15rem; line-height: 1.6; }
+.chat.big .bubble .button, .chat.big .chips button { font-size: 1rem; padding: 8px 14px; }
+.chat.big form input, .chat.big form .button { font-size: 1.1rem; padding: 12px 14px; }
+.chat.big .chat-note { font-size: 0.9rem; }
+@media (max-width: 600px) {
+  .chat.big, .shop .chat.big { inset: 0; width: 100vw; height: 100vh; height: 100dvh; border-radius: 0; border: none; }
+}
 
 /* ---------- 6단계: 추천 ---------- */
 .picks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
