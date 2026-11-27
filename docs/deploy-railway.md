@@ -24,7 +24,7 @@ Railway 화면 메뉴 이름과 요금은 바뀔 수 있으니 쓰기 직전에 
 
 ## 1. 계정과 비용
 
-- **계정 주인**: 팀원 한 명이 Railway 계정을 만들고 팀 기록에 "누구 계정인지" 적는다. GitHub 저장소 `dibo1206/ax-board`에 접근 권한을 준다.
+- **계정 주인**: 팀원 한 명이 Railway 계정을 만들고 팀 기록에 "누구 계정인지" 적는다. GitHub 저장소 `dibo1206/yjmarket`에 접근 권한을 준다.
 - **비용**: Hobby 플랜(월 $5). 과정 운영팀이 부담하므로 [배포 테스트 보고서](deploy_test_report.md)에 이유를 적는다.
 - **AI 키**: 계정 주인의 OpenRouter 키를 쓰되 OpenRouter 화면에서 **사용 한도(크레딧 상한)** 를 건다. 코드에도 하루 상한(`AI_DAILY_LIMIT`)이 있다.
 
@@ -34,7 +34,7 @@ Railway 화면 메뉴 이름과 요금은 바뀔 수 있으니 쓰기 직전에 
 
 1. **프로젝트와 DB**: New Project → Deploy PostgreSQL (또는 빈 프로젝트에서 New → Database → PostgreSQL).
 2. **DB 옮기기**: 아래 3장.
-3. **앱 서비스**: 같은 프로젝트에서 New → GitHub Repo → `ax-board`.
+3. **앱 서비스**: 같은 프로젝트에서 New → GitHub Repo → `yjmarket`.
    - **반드시 DB가 있는 프로젝트 캔버스에서** 추가한다. 프로젝트가 다르면 `${{Postgres.DATABASE_URL}}`이 빈 값이 되고 내부 주소(`postgres.railway.internal`)도 못 찾는다(ENOTFOUND) — 11/14 시험에서 실제로 겪음. 캔버스에 앱과 Postgres 블록이 같이 보여야 한다.
    - Settings → Source에서 배포할 브랜치를 고른다. 시험은 `feat/railway-deploy`, 병합한 뒤에는 `main`.
    - 빌드는 Railway(Railpack)가 `package.json`을 보고 알아서 한다: Node 22(`engines`) → `npm ci` → `npm run build`(화면 빌드) → `npm start`.
