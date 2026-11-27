@@ -6,7 +6,7 @@
 | | |
 |---|---|
 | **배포 주소** | **https://yjmarket.up.railway.app** (Railway, 누구나 열 수 있음) |
-| **소스코드** | https://github.com/dibo1206/ax-board |
+| **소스코드** | https://github.com/dibo1206/yjmarket |
 | **과제** | 과제 07 · 농산물 추천과 상담이 되는 홈페이지 |
 
 ![첫 화면](docs/images/01-home.webp)
@@ -632,7 +632,7 @@ flowchart LR
 
 ### 내 컴퓨터 (Node.js 22 + PostgreSQL 16)
 ```bash
-git clone https://github.com/dibo1206/ax-board.git && cd ax-board
+git clone https://github.com/dibo1206/yjmarket.git && cd yjmarket
 npm install
 npm run setup        # .env 자동 생성 (DATABASE_URL 을 내 PostgreSQL 에 맞게)
 npm run load-data    # 예시 데이터 넣기 (먼저 CREATE DATABASE farm_mall;)
