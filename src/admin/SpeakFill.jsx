@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 
 // 말로 상품 등록하기 (2026-11-21): 새 상품 등록 맨 위. 말하거나 적으면 품목·이름·가격·무게·당도·수확일·재고 칸을 채운다
 //  - 무엇을 말할지 6가지를 순서대로 보여 주고, 채운 뒤에는 무엇이 빠졌는지 표시한다
-//  - 마이크: 브라우저 음성 입력(크롬·삼성 인터넷·사파리, 추가 비용 없음). 듣는 동안 빨간 표시와 들은 말을 바로 보여 주고,
-//    [■ 다 말했어요]를 누르거나 말을 멈추면 알아들은 말로 바로 칸을 채운다. 안 되는 브라우저면 글로 적게 안내한다
+//  - 마이크 (2026-11-28 바꿈): 마이크 허용을 먼저 받고, 녹음과 브라우저 음성 인식을 함께 돌린다
+//    · 브라우저가 글로 바꿔 주면(휴대폰 크롬·삼성 인터넷 등) 그 글로 바로 칸을 채운다 (추가 비용 없음)
+//    · 못 바꾸면(노트북 엣지·웨일, 학교 와이파이 등) [■ 다 말했어요] 때 녹음을 서버가 받아 적는다 (1분 약 0.5원)
+//    · 듣는 동안 사용 중인 마이크 이름과 소리 막대를 보여 줘서 "듣고 있는지 모르겠다"를 막는다
 //  - 채우기만 하고 저장하지 않는다. 이미 적힌 칸은 바꾸지 않는다. 가격은 꼭 다시 확인하게 한다
 const Recognition = typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null
+const canRecord = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia)
 const EXAMPLE = '부사 사과 5키로 한 상자 3만 원이에요. 10키로는 5만5천 원. 당도는 14, 어제 땄어요. 20상자 있어요'
 // 말해 주실 것: [이름, 예시, 서버가 채웠다고 알려 주는 칸 이름들]
 const GUIDE = [
@@ -16,14 +19,9 @@ const GUIDE = [
   ['언제 땄어요?', '“어제 땄어요” · “11월 18일 수확”', ['수확일']],
   ['몇 개 있어요?', '“20상자 있어요”', ['재고']],
 ]
+const MAX_SECONDS = 60
 const WINDOWS_MIC = '노트북이면 Windows [시작 → 설정 → 개인 정보 및 보안 → 마이크]에서 "마이크 액세스"와 "데스크톱 앱이 마이크에 액세스하도록 허용"을 켜 주세요.'
-const ERRORS = {
-  'not-allowed': '마이크를 쓸 수 없게 막혀 있어요. 주소창 왼쪽 자물쇠(또는 ⓘ)를 눌러 마이크를 "허용"으로 바꾼 뒤 다시 눌러 주세요.',
-  'service-not-allowed': '이 화면에서는 마이크를 쓸 수 없어요. 크롬이나 삼성 인터넷으로 열어 주세요.',
-  'no-speech': '소리가 들리지 않았어요. 입 가까이에서 다시 눌러 말해 주세요. 노트북이면 말할 때 초록 막대가 움직이는지 보세요. 안 움직이면 Windows [설정 → 시스템 → 소리 → 입력]에서 다른 마이크를 골라 주세요.',
-  'audio-capture': `마이크를 찾지 못했어요. 이어폰·마이크가 연결돼 있는지 확인해 주세요. ${WINDOWS_MIC}`,
-  network: '말로 하기는 인터넷이 연결돼 있어야 해요. 학교·회사 와이파이는 음성 인식이 막혀 있을 수 있어요. 휴대폰 데이터로 연결하거나 글로 적어 주세요.',
-}
+const NO_SOUND = '소리가 들리지 않았어요. 입 가까이에서 다시 눌러 말해 주세요. 말할 때 초록 막대가 안 움직이면 Windows [설정 → 시스템 → 소리 → 입력]에서 다른 마이크를 골라 주세요.'
 // 마이크 허용을 받을 때 생기는 오류 (getUserMedia)
 const MEDIA_ERRORS = {
   NotAllowedError: `마이크 허용이 꺼져 있어요. 주소창 왼쪽 자물쇠(또는 ⓘ)를 눌러 마이크를 "허용"으로 바꾼 뒤 다시 눌러 주세요. 허용인데도 이 글이 나오면: ${WINDOWS_MIC}`,
@@ -35,37 +33,86 @@ const MEDIA_ERRORS = {
 
 /** 마이크 허용을 먼저 받는다. 허용 창이 떠 있는 동안은 기다린다 (시간 제한 없음) */
 async function askMic() {
-  if (!navigator.mediaDevices?.getUserMedia) return { stream: null }
   try {
-    return { stream: await navigator.mediaDevices.getUserMedia({ audio: true }) }
+    return { stream: await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }) }
   } catch (e) {
     return { error: MEDIA_ERRORS[e?.name] ?? `마이크를 켜지 못했어요. ${WINDOWS_MIC}` }
   }
 }
 
-/** 소리 크기(0~1)를 0.1초마다 알려 준다. 노트북에서 마이크에 소리가 들어오는지 눈으로 보게 */
-function watchLevel(stream, onLevel) {
+/** 16kHz 모노 16비트 WAV 로 묶는다 (서버 받아쓰기용, 1분에 약 1.9MB) */
+function toWav(chunks, length) {
+  const view = new DataView(new ArrayBuffer(44 + length * 2))
+  const text = (at, s) => { for (let i = 0; i < s.length; i += 1) view.setUint8(at + i, s.charCodeAt(i)) }
+  text(0, 'RIFF'); view.setUint32(4, 36 + length * 2, true); text(8, 'WAVE')
+  text(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true)
+  view.setUint32(24, 16000, true); view.setUint32(28, 32000, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true)
+  text(36, 'data'); view.setUint32(40, length * 2, true)
+  let at = 44
+  for (const chunk of chunks) {
+    for (const v of chunk) {
+      const x = Math.max(-1, Math.min(1, v))
+      view.setInt16(at, x < 0 ? x * 0x8000 : x * 0x7fff, true)
+      at += 2
+    }
+  }
+  return new Blob([view.buffer], { type: 'audio/wav' })
+}
+
+/** 마이크 소리를 16kHz 로 모으면서 소리 크기(0~1)를 알려 준다. stop() → { wav, peak } */
+function startCapture(stream, onLevel) {
   const Ctx = window.AudioContext || window.webkitAudioContext
-  if (!Ctx || !stream) return () => {}
+  if (!Ctx) return { stop: () => ({ wav: null, peak: 0 }) }
   const ctx = new Ctx()
-  const analyser = ctx.createAnalyser()
-  analyser.fftSize = 512
-  ctx.createMediaStreamSource(stream).connect(analyser)
-  const data = new Uint8Array(analyser.fftSize)
-  const timer = setInterval(() => {
-    analyser.getByteTimeDomainData(data)
+  ctx.resume?.().catch(() => {})
+  const source = ctx.createMediaStreamSource(stream)
+  const node = ctx.createScriptProcessor(4096, 1, 1)
+  const mute = ctx.createGain()
+  mute.gain.value = 0 // 스피커로 다시 내보내지 않는다 (울림 방지)
+  const ratio = ctx.sampleRate / 16000
+  const chunks = []
+  let length = 0
+  let peak = 0
+  node.onaudioprocess = (e) => {
+    const input = e.inputBuffer.getChannelData(0)
     let sum = 0
-    for (const v of data) sum += ((v - 128) / 128) ** 2
-    onLevel(Math.min(1, Math.sqrt(sum / data.length) * 4))
-  }, 100)
-  return () => { clearInterval(timer); ctx.close().catch(() => {}) }
+    for (const v of input) sum += v * v
+    const level = Math.min(1, Math.sqrt(sum / input.length) * 4)
+    peak = Math.max(peak, level)
+    onLevel(level)
+    if (length >= 16000 * (MAX_SECONDS + 5)) return
+    // 16kHz 로 줄인다 (구간 평균 = 간단한 저역 필터)
+    const out = new Float32Array(Math.floor(input.length / ratio))
+    for (let i = 0; i < out.length; i += 1) {
+      const from = Math.floor(i * ratio)
+      const to = Math.max(from + 1, Math.floor((i + 1) * ratio))
+      let s = 0
+      for (let j = from; j < to; j += 1) s += input[j] ?? 0
+      out[i] = s / (to - from)
+    }
+    chunks.push(out)
+    length += out.length
+  }
+  source.connect(node)
+  node.connect(mute)
+  mute.connect(ctx.destination)
+  return {
+    stop() {
+      node.onaudioprocess = null
+      source.disconnect()
+      node.disconnect()
+      ctx.close().catch(() => {})
+      return { wav: length > 16000 * 0.5 ? toWav(chunks, length) : null, peak }
+    },
+  }
 }
 
 export function SpeakFill({ api, onFill }) {
   const [said, setSaid] = useState('')
   const [live, setLive] = useState('') // 아직 확정되지 않은 들리는 말 (회색)
   const [busy, setBusy] = useState(false)
-  const [mic, setMic] = useState('off') // off | asking(허용 기다림) | starting | on | hearing
+  const [writing, setWriting] = useState(false) // 녹음을 서버가 받아 적는 중
+  const [mic, setMic] = useState('off') // off | asking(허용 기다림) | on | hearing(소리가 들어옴)
   const [seconds, setSeconds] = useState(0)
   const [level, setLevel] = useState(0)
   const [micName, setMicName] = useState('')
@@ -73,15 +120,17 @@ export function SpeakFill({ api, onFill }) {
   const [error, setError] = useState('')
   const rec = useRef(null)
   const heard = useRef('')
-  const started = useRef(false)
-  const release = useRef(() => {}) // 마이크 스트림·소리 막대 정리
-  useEffect(() => () => { rec.current?.abort(); release.current() }, [])
+  const session = useRef(null) // { stream, capture, before, stopping, done }
+  useEffect(() => () => {
+    rec.current?.abort()
+    const s = session.current
+    if (s) { s.done = true; s.capture.stop(); s.stream.getTracks().forEach((t) => t.stop()) }
+  }, [])
   useEffect(() => {
     if (mic === 'off' || mic === 'asking') return undefined
     const timer = setInterval(() => setSeconds((s) => s + 1), 1000)
     return () => clearInterval(timer)
   }, [mic])
-  useEffect(() => { if (seconds >= 60) rec.current?.stop() }, [seconds]) // 1분이면 저절로 멈춘다
 
   async function fill(text = said) {
     if (text.trim().length < 2) return
@@ -99,70 +148,107 @@ export function SpeakFill({ api, onFill }) {
   }
 
   async function startMic() {
-    if (!Recognition) return
-    if (mic === 'asking') return
-    if (mic !== 'off') { rec.current?.stop(); return } // [■ 다 말했어요]
+    if (mic === 'asking' || !canRecord) return
+    if (mic !== 'off') { finish(); return } // [■ 다 말했어요]
     setError('')
     setResult(null)
-    // 1) 마이크 허용부터 받는다. 예전에는 듣기를 먼저 시작해서, 허용 창을 5초 넘게 두면 허용을 눌러도 이미 멈춰 있었다 (노트북)
+    // 1) 마이크 허용부터 받는다. 허용을 늦게 눌러도 그때부터 듣는다
     setMic('asking')
     const { stream, error: micError } = await askMic()
     if (micError) { setMic('off'); setError(micError); return }
-    setMicName(stream?.getAudioTracks()[0]?.label ?? '')
-    const stopLevel = watchLevel(stream, setLevel)
-    release.current = () => { stopLevel(); stream?.getTracks().forEach((t) => t.stop()); setLevel(0); release.current = () => {} }
+    setMicName(stream.getAudioTracks()[0]?.label ?? '')
 
-    // 2) 허용을 받은 뒤 듣기 시작
-    const r = new Recognition()
-    r.lang = 'ko-KR'
-    r.interimResults = true
-    r.continuous = true // 잠깐 쉬어도 끊지 않고 [다 말했어요]를 누를 때까지 듣는다
+    // 2) 녹음을 시작한다 (브라우저가 글로 못 바꾸면 이 녹음을 서버가 받아 적는다)
     const before = said.trim() ? `${said.trim()} ` : ''
     heard.current = before
-    r.onstart = () => { started.current = true; setMic('on') }
-    r.onspeechstart = () => setMic('hearing')
-    r.onresult = (e) => {
-      let done = ''
-      let pending = ''
-      for (const x of e.results) {
-        if (x.isFinal) done += x[0].transcript
-        else pending += x[0].transcript
-      }
-      heard.current = (before + done).trim()
-      setSaid(heard.current)
-      setLive(pending)
-    }
-    r.onerror = (e) => { if (e.error !== 'aborted') setError(ERRORS[e.error] ?? '잘 못 들었어요. 다시 눌러 말하거나 글로 적어 주세요.') }
-    r.onend = () => {
-      release.current()
-      setMic('off')
-      setLive('')
-      // 들은 말이 있으면 바로 칸을 채운다 (한 번 더 누를 필요 없게)
-      if (heard.current.trim() && heard.current.trim() !== before.trim()) fill(heard.current)
-    }
-    rec.current = r
+    const capture = startCapture(stream, (v) => {
+      setLevel(v)
+      if (v > 0.08) setMic((m) => (m === 'on' ? 'hearing' : m))
+    })
+    const s = { stream, capture, before, stopping: false, done: false }
+    session.current = s
     setSeconds(0)
-    setMic('starting')
-    started.current = false
+    setMic('on')
+    setTimeout(() => { if (session.current === s) finish() }, MAX_SECONDS * 1000) // 1분이면 저절로 멈춘다
+
+    // 3) 브라우저 음성 인식도 함께 돌린다. 되면 들은 말이 바로 보이고, 말을 멈추면 저절로 칸을 채운다
+    if (!Recognition) return
     try {
+      const r = new Recognition()
+      r.lang = 'ko-KR'
+      r.interimResults = true
+      r.continuous = true
+      r.onresult = (e) => {
+        let done = ''
+        let pending = ''
+        for (const x of e.results) {
+          if (x.isFinal) done += x[0].transcript
+          else pending += x[0].transcript
+        }
+        heard.current = (before + done).trim()
+        setSaid(heard.current)
+        setLive(pending)
+      }
+      r.onerror = () => {} // 화면에 띄우지 않는다: 녹음을 서버가 받아 적으면 된다
+      r.onend = () => {
+        if (rec.current === r) rec.current = null
+        const s = session.current
+        if (!s || s.done) return
+        // [다 말했어요]를 눌렀거나, 말을 멈춰 브라우저가 글을 다 줬으면 끝낸다. 글 없이 끝났으면(인식 실패) 녹음은 계속한다
+        if (s.stopping || heard.current.trim() !== before.trim()) { s.stopping = true; complete() }
+      }
+      rec.current = r
       r.start()
-      // 허용은 이미 받았으니 8초 안에 음성 인식이 안 켜지면 브라우저·네트워크 문제다. 멈추고 이유를 알려 준다
-      setTimeout(() => {
-        if (started.current || rec.current !== r) return
-        r.abort()
-        release.current()
-        setMic('off')
-        setError('음성 인식이 켜지지 않았어요. 크롬이나 엣지 최신 버전에서 다시 눌러 주세요. 학교·회사 와이파이라면 휴대폰 데이터로 바꿔 보거나 아래 칸에 글로 적어 주세요.')
-      }, 8000)
     } catch {
-      release.current()
-      setMic('off')
-      setError('마이크를 켜지 못했어요. 잠시 뒤 다시 눌러 주세요.')
+      rec.current = null // 녹음으로 받아 적는다
+    }
+  }
+
+  // [■ 다 말했어요]: 브라우저 인식이 남은 말을 마저 주도록 잠깐 기다린 뒤 끝낸다
+  function finish() {
+    const s = session.current
+    if (!s || s.stopping) return
+    s.stopping = true
+    const r = rec.current
+    if (r) { r.stop(); setTimeout(complete, 1500) } else complete()
+  }
+
+  async function complete() {
+    const s = session.current
+    if (!s || s.done) return
+    s.done = true
+    session.current = null
+    rec.current?.abort()
+    rec.current = null
+    const { wav, peak } = s.capture.stop()
+    s.stream.getTracks().forEach((t) => t.stop())
+    setLevel(0)
+    setLive('')
+    setMic('off')
+    const text = heard.current.trim()
+    if (text && text !== s.before.trim()) { fill(text); return }
+    if (!wav || peak < 0.05) { setError(NO_SOUND); return }
+    // 브라우저가 글로 못 바꿨다 → 녹음을 서버가 받아 적고, 그 글로 칸을 채운다
+    setBusy(true)
+    setWriting(true)
+    try {
+      const reply = await api('/ai/product-transcribe', { method: 'POST', body: wav, timeoutMs: 45_000 })
+      const all = `${s.before}${reply.text ?? ''}`.trim()
+      setWriting(false)
+      if (all.length < 2 || all === s.before.trim()) { setBusy(false); setError(NO_SOUND); return }
+      setSaid(all)
+      heard.current = all
+      await fill(all)
+    } catch (e) {
+      setError(e.message)
+      setBusy(false)
+    } finally {
+      setWriting(false)
     }
   }
 
   const filled = new Set(result?.filled ?? [])
-  const listening = mic !== 'off'
+  const listening = mic === 'on' || mic === 'hearing'
   return (
     <div className="preview speak-fill">
       <strong>말로 상품 등록하기</strong>
@@ -180,37 +266,39 @@ export function SpeakFill({ api, onFill }) {
           )
         })}
       </ol>
-      <p className="speak-example">예: “{EXAMPLE}” <button type="button" className="link" onClick={() => { setSaid(EXAMPLE); setResult(null) }} disabled={listening || busy}>이 예시로 넣어 보기</button></p>
+      <p className="speak-example">예: “{EXAMPLE}” <button type="button" className="link" onClick={() => { setSaid(EXAMPLE); setResult(null) }} disabled={mic !== 'off' || busy}>이 예시로 넣어 보기</button></p>
 
-      {Recognition ? (
+      {canRecord ? (
         <button type="button" className={`button mic-big${listening ? ' on' : ''}`} onClick={startMic} disabled={busy || mic === 'asking'} aria-pressed={listening}>
-          {mic === 'asking' ? '허용을 기다리는 중…' : listening ? '■ 다 말했어요' : '🎤 눌러서 말하기'}
+          {writing ? '녹음을 글로 바꾸는 중…' : mic === 'asking' ? '허용을 기다리는 중…' : listening ? '■ 다 말했어요' : '🎤 눌러서 말하기'}
         </button>
       ) : (
-        <p className="warn">이 브라우저는 말로 하기를 지원하지 않아요. 크롬이나 엣지(노트북), 크롬이나 삼성 인터넷(휴대폰)으로 열거나, 아래 칸에 글로 적어 주세요.</p>
+        <p className="warn">이 브라우저는 마이크를 쓸 수 없어요. 크롬·엣지·삼성 인터넷으로 열거나, 아래 칸에 글로 적어 주세요.</p>
       )}
       {mic === 'asking' && (
         <p className="warn" role="status">화면 위(주소창 근처)에 뜬 <b>“마이크 사용 허용”</b> 창에서 <b>허용</b>을 눌러 주세요. 누르면 바로 듣기 시작해요.</p>
       )}
-      {listening && mic !== 'asking' && (
+      {listening && (
         <div className="listening" role="status" aria-live="polite">
           <span className="dot" aria-hidden="true" />
-          <span>{mic === 'starting' ? '마이크를 켜는 중…' : mic === 'on' ? '듣고 있어요. 지금 말씀하세요' : '잘 들려요. 계속 말씀하세요'} · {seconds}초</span>
+          <span>{mic === 'on' ? '듣고 있어요. 지금 말씀하세요' : '잘 들려요. 계속 말씀하세요'} · {seconds}초</span>
         </div>
       )}
-      {listening && mic !== 'asking' && (
+      {listening && (
         <div className="mic-level">
           <span className="bar" aria-hidden="true"><span style={{ width: `${Math.round(level * 100)}%` }} /></span>
-          <small>{micName ? `사용 중인 마이크: ${micName}` : '말하면 초록 막대가 움직여요'}{level < 0.03 && seconds >= 4 ? ' · 막대가 안 움직이면 다른 마이크를 골라 주세요 (Windows 설정 → 소리 → 입력)' : ''}</small>
+          <small>{micName ? `사용 중인 마이크: ${micName}` : '말하면 초록 막대가 움직여요'}{mic === 'on' && seconds >= 4 ? ' · 막대가 안 움직이면 다른 마이크를 골라 주세요 (Windows 설정 → 소리 → 입력)' : ''}</small>
         </div>
       )}
-      {listening && (said || live) && <p className="heard">알아들은 말: {said} <span className="pending">{live}</span></p>}
+      {listening && (said || live
+        ? <p className="heard">알아들은 말: {said} <span className="pending">{live}</span></p>
+        : seconds >= 3 && <p className="heard">다 말했으면 <b>[■ 다 말했어요]</b>를 눌러 주세요. 그때 글로 바꿔서 칸을 채워 드려요.</p>)}
 
       <label className="speak-text">말로 하기가 어려우면 글로 적어도 돼요
-        <textarea rows={3} value={said} onChange={(e) => setSaid(e.target.value)} maxLength={500} placeholder={`예: ${EXAMPLE}`} disabled={listening} />
+        <textarea rows={3} value={said} onChange={(e) => setSaid(e.target.value)} maxLength={500} placeholder={`예: ${EXAMPLE}`} disabled={mic !== 'off' || writing} />
       </label>
       <div className="actions">
-        <button type="button" className="button" onClick={() => fill()} disabled={busy || listening || said.trim().length < 2}>{busy ? '칸 채우는 중…' : '칸 채우기'}</button>
+        <button type="button" className="button" onClick={() => fill()} disabled={busy || mic !== 'off' || said.trim().length < 2}>{busy && !writing ? '칸 채우는 중…' : '칸 채우기'}</button>
       </div>
       {error && <p className="error">{error}</p>}
       {result && (

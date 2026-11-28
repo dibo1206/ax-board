@@ -7,7 +7,8 @@
 //  - 블록형 상세페이지 초안 (2026-11-14): 패턴의 섹션마다 글 블록을 쓰고, 사이사이에 "이런 사진을 넣어 주세요" 사진 자리를 제안한다.
 //    사진은 AI가 만들지 않는다 (농산물 상세 사진은 실물이어야 해서). 판매자가 자리마다 직접 찍은 사진을 고른다
 import { createHash } from 'node:crypto'
-import { complete, describeAiError, keyLoaded } from './ai.js'
+import express from 'express'
+import { complete, describeAiError, keyLoaded, transcribe } from './ai.js'
 import { findBanned } from './banned.js'
 import { LIMITS, MAX_BLOCKS } from './blocks.js'
 import { pool } from './db.js'
@@ -347,6 +348,27 @@ export const listTemplates = (req, res) => res.json(Object.entries(TEMPLATES).ma
 //  1) 규칙으로 뽑는다 (AI 0회). 2) 품목이나 가격을 못 찾았을 때만 AI 에게 묻고, AI 가 준 숫자는 원래 말에 있는 것만 쓴다
 const tooManyParses = createLimiter({ limit: 40, windowMs: 60 * 60_000, key: (req) => `parse:${(req.admin ?? req.seller)?.loginId}` })
 const koreaToday = () => new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10)
+// POST /ai/product-transcribe (audio/wav, 16kHz 모노, 1분 남짓) → { text }
+// 브라우저 음성 인식이 글로 못 바꿨을 때만 화면이 부른다. 받아 적은 글은 다시 /ai/product-parse 로 칸을 채운다 (규칙이 먼저)
+export const rawAudio = express.raw({ type: ['audio/wav', 'audio/x-wav', 'audio/wave'], limit: '2500kb' })
+export async function productTranscribe(req, res) {
+  const wav = req.body
+  if (!Buffer.isBuffer(wav) || wav.length < 1000 || wav.toString('ascii', 0, 4) !== 'RIFF' || wav.toString('ascii', 8, 12) !== 'WAVE') {
+    return res.status(400).json({ error: '녹음을 받지 못했어요. 다시 눌러 말하거나 글로 적어 주세요.' })
+  }
+  if (tooManyParses(req)) return res.status(429).json({ error: '너무 많이 눌렀어요. 잠시 뒤에 다시 해 주세요.' })
+  if (!keyLoaded()) return res.status(503).json({ error: '지금은 녹음을 글로 바꿀 수 없어요. 아래 칸에 글로 적어 주세요.' })
+  try {
+    const { text } = await transcribe(wav)
+    console.log(`[content] ${(req.admin ?? req.seller).loginId} 말로 등록 받아쓰기 · ${Math.round(wav.length / 32000)}초 · ${text.length}자`)
+    res.json({ text: text.slice(0, 500) })
+  } catch (error) {
+    if (error.code === 'DAILY_LIMIT') return res.status(503).json({ error: '오늘 녹음 받아쓰기를 다 썼어요. 아래 칸에 글로 적어 주세요.' })
+    const { status } = describeAiError(error)
+    res.status(status).json({ error: '녹음을 글로 바꾸지 못했어요. 다시 눌러 말하거나 아래 칸에 글로 적어 주세요.' })
+  }
+}
+
 export async function productParse(req, res) {
   const said = text(req.body?.text, 500)
   if (said.length < 2) return res.status(400).json({ error: '파실 상품을 말하듯 적어 주세요. 예: 부사 사과 5키로 3만 원, 당도 14' })

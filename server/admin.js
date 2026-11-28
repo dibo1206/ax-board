@@ -7,7 +7,7 @@ import sharp from 'sharp'
 import { requireAdmin } from './auth.js'
 import { findBanned } from './banned.js'
 import { blocksSummary, removedBlockImages } from './blocks.js'
-import { fillItem, itemDraft, listTemplates, productDraft, productParse } from './content.js'
+import { fillItem, itemDraft, listTemplates, productDraft, productParse, productTranscribe, rawAudio } from './content.js'
 import { fillDemoBlocks } from './demoBlocks.js'
 import { createLimiter } from './limit.js'
 import { generateRecipePhoto, imageKeyLoaded, imagesLeftToday, saveRecipePhoto } from './imagegen.js'
@@ -157,6 +157,7 @@ export async function updateProduct(code, product) {
 adminRouter.get('/ai/templates', listTemplates)
 adminRouter.post('/ai/product-draft', productDraft)
 adminRouter.post('/ai/product-parse', productParse) // 말로 상품 등록하기 (칸 채우기만)
+adminRouter.post('/ai/product-transcribe', rawAudio, productTranscribe) // 말로 등록: 브라우저가 글로 못 바꾼 녹음을 받아쓰기
 adminRouter.post('/items/:code/fill', fillItem)
 adminRouter.post('/items/:code/draft', itemDraft)
 
