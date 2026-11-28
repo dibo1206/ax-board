@@ -84,6 +84,39 @@ export async function complete(messages, { skip = [], maxTries = MODELS.length, 
   throw lastError
 }
 
+// 녹음 받아쓰기 (말로 상품 등록하기, 2026-11-28): 브라우저 음성 인식이 글로 못 바꿀 때(노트북 엣지·웨일 등) 녹음을 글로 바꾼다
+// 소리를 듣는 모델이 따로 필요하다. 1분 녹음 한 번에 약 0.5원. 하루 AI 호출 상한에 함께 센다. 바꾸려면 .env 에 STT_MODEL=모델ID,모델ID
+export const STT_MODELS = (process.env.STT_MODEL || 'google/gemini-2.5-flash,google/gemini-2.5-flash-lite')
+  .split(',').map((m) => m.trim()).filter(Boolean)
+const STT_PROMPT = '농가가 상품을 소개하는 한국어 녹음이다. 들리는 말을 그대로 받아 적는다. 숫자·단위는 들린 대로 적고 고치거나 보태지 않는다. 받아 적은 글만 출력한다. 말소리가 들리지 않으면 아무것도 출력하지 않는다.'
+
+export async function transcribe(wav, { timeoutMs = 30_000 } = {}) {
+  const data = wav.toString('base64')
+  let lastError
+  for (const model of STT_MODELS) {
+    if (!(await takeCall())) {
+      throw Object.assign(new Error(`오늘 AI 호출 상한(${dailyLimit()}회)에 닿았어요`), { code: 'DAILY_LIMIT' })
+    }
+    try {
+      const completion = await getClient().chat.completions.create({
+        model,
+        temperature: 0,
+        max_tokens: 400,
+        messages: [{ role: 'user', content: [{ type: 'text', text: STT_PROMPT }, { type: 'input_audio', input_audio: { data, format: 'wav' } }] }],
+      }, { timeout: timeoutMs })
+      const text = String(completion.choices?.[0]?.message?.content ?? '').trim()
+      const usage = completion.usage ?? {}
+      console.log(`[ai] 받아쓰기 ${completion.model ?? model} · in ${usage.prompt_tokens ?? '?'} · out ${usage.completion_tokens ?? '?'}`)
+      return { model: completion.model ?? model, text }
+    } catch (error) {
+      if (error.status === 401 || error.status === 402) throw error
+      console.log(`[ai] 받아쓰기 ${model} 실패 ${error.status ?? error.name} → 다음 모델`)
+      lastError = error
+    }
+  }
+  throw lastError
+}
+
 // OpenRouter 오류를 사람이 읽을 메시지로 바꾼다. 상태코드와 메시지만 로그에 남긴다.
 export function describeAiError(error) {
   const status = error.status ?? 500
