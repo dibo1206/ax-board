@@ -1,7 +1,7 @@
 // 말로 상품 등록하기 시험 (DB 없이): npm run test-speak
 //   농가가 실제로 할 법한 말에서 품목 · 가격 · 옵션 · 당도 · 수확일 · 재고를 바르게 뽑는지,
 //   없는 숫자를 만들지 않는지, AI 가 준 숫자도 원래 말에 있을 때만 쓰는지 본다
-import { checkAiFields, findItem, harvestDate, koreanNumber, moneyIn, parseSpoken } from '../server/speakParse.js'
+import { checkAiFields, findItem, harvestDate, koreanNumber, moneyIn, nativeNumber, parseSpoken } from '../server/speakParse.js'
 
 let count = 0
 let failed = 0
@@ -59,6 +59,29 @@ check('수확이라는 말 없이 날짜만 있으면 수확일로 보지 않음
 check('앞으로 올 날짜면 작년 수확으로', harvestDate('12월 3일 수확', TODAY) === '2025-12-03')
 check('"만든"을 만 원으로 읽지 않음', same(moneyIn('직접 만든 잼 8천원').map((m) => m.value), [8000]), JSON.stringify(moneyIn('직접 만든 잼 8천원')))
 check('온도(도)는 당도로 보지 않음', parseSpoken('사과 5키로 3만원 0도 저장', items, TODAY).brix === undefined)
+
+// 어르신 말투 (음 · 어 · 한 · 고유어 숫자 · 한글 숫자 · 말 고치기)
+const more = [...items,
+  { item_code: 'sweet_potato', name: '고구마', category: '채소', brix_standards: [] },
+  { item_code: 'persimmon', name: '단감', category: '과일', brix_standards: [] }]
+const G = (said) => parseSpoken(said, more, TODAY)
+const g1 = G('음... 사과고.. 맛있는 사과랑 키로는 음.. 한 3, 5키로에다가 가격은 어.. 3키로는 2만원 5키로는 3만원 정도 받을라고')
+check('어르신 1: 쉼표 없이 이어 말한 두 크기 → 옵션 2개', same(g1.options?.map((o) => [o.name, o.price]), [['3kg', '20000'], ['5kg', '30000']]) && g1.name === '사과 3kg·5kg', JSON.stringify(g1))
+const g2 = G('어 그러니까 우리 집 사과가 부사인데 5키로 한 박스에 삼만원이요 당도는 한 14도 나와요 어제 땄어')
+check('어르신 2: 품종이 뒤에 · 삼만원 · "당도는 한 14" · 어제', g2.name === '부사 사과 5kg' && g2.price === '30000' && g2.brix === '14' && g2.harvest_date === '2026-11-20', JSON.stringify(g2))
+const g3 = G('배요 배. 신고배 7.5키로 육만원. 서른 상자 있어')
+check('어르신 3: 육만원 · 고유어 "서른 상자" → 재고 30', g3.price === '60000' && g3.stock === '30', JSON.stringify(g3))
+const g4 = G('음 딸기 설향이고 오백 그람에 만 오천원 받을까 해요')
+check('어르신 4: "오백 그람" · "만 오천원"', g4.unit === '500g' && g4.price === '15000' && g4.name === '설향 딸기 500g', JSON.stringify(g4))
+const g5 = G('사과 오키로 삼만원 십키로 오만오천원')
+check('어르신 5: 한글 숫자 무게 "오키로 · 십키로"', same(g5.options?.map((o) => [o.name, o.price]), [['5kg', '30000'], ['10kg', '55000']]), JSON.stringify(g5))
+const g6 = G('어 사과 있잖아 그거 한 상자 오키로짜리 삼만 원에 팔고 싶어 한 스무 상자 돼')
+check('어르신 6: "오키로짜리" · "한 스무 상자 돼" → 재고 20, 이름에 군말 없음', g6.price === '30000' && g6.unit === '5kg 1박스' && g6.stock === '20' && g6.name === '사과 5kg', JSON.stringify(g6))
+const g7 = G('음 그 뭐냐 배추 세 포기 한 망에 만이천원')
+check('어르신 7: "세 포기 한 망" → 1망 (3포기), "뭐냐"는 이름에 안 붙임', g7.unit === '1망 (3포기)' && g7.price === '12000' && !g7.name.includes('뭐냐'), JSON.stringify(g7))
+const g8 = G('사과 5키로 3만 원 아니 3만 5천 원이요 10키로는 6만 원')
+check('어르신 8: 말 고치기 "3만 원 아니 3만 5천 원" → 35,000', same(g8.options?.map((o) => o.price), ['35000', '60000']), JSON.stringify(g8))
+check('고유어 숫자 읽기', nativeNumber('서른') === 30 && nativeNumber('스무') === 20 && nativeNumber('열다섯') === 15 && nativeNumber('세') === 3)
 
 // AI 가 준 값 확인
 const ai = checkAiFields({ item_code: 'apple', name: '사과 5kg', price: 33000, brix: 15, stock: 20, options: [] }, '사과 5키로 3만원 20상자', items, TODAY)
